@@ -5,7 +5,7 @@ Shows web searches, background research tasks, and live browser progress.
 from __future__ import annotations
 
 import customtkinter as ctk
-from gui import theme
+from gui import theme, ui_queue
 from gui.tasks import start_web_task
 from gui.store import store
 
@@ -142,7 +142,7 @@ class WebPage(ctk.CTkScrollableFrame):
 
     def _on_task_progress(self, step):
         """Called from a worker thread, so hop back onto the UI thread."""
-        self.after(0, lambda: self._apply_progress(step))
+        ui_queue.post_to(self, lambda: self._apply_progress(step))
 
     def _apply_progress(self, step):
         steps = store.browser_progress["steps"]

@@ -160,6 +160,11 @@ class Sidebar(ctk.CTkFrame):
             self.nav_buttons[page_id] = btn
 
     def _select_page(self, page_id: str):
+        self.highlight(page_id)
+        self.on_navigate(page_id)
+
+    def highlight(self, page_id: str):
+        """Mark one row as current, without navigating anywhere."""
         for pid, btn in self.nav_buttons.items():
             idle_icon, active_icon = self.nav_icons[pid]
             if pid == page_id:
@@ -176,7 +181,6 @@ class Sidebar(ctk.CTkFrame):
                     text_color=theme.SIDEBAR_TEXT_MUTED,
                     image=idle_icon,
                 )
-        self.on_navigate(page_id)
 
     def _toggle_voice(self):
         self.on_voice_toggle()

@@ -94,14 +94,30 @@ class TopBar(ctk.CTkFrame):
         self.search_btn.pack(fill="x")
 
         # Shortcut hint sits beside the box instead of being padded into it
-        # with spaces, which broke alignment at every window width.
+        # with spaces, which broke alignment at every window width. It is
+        # dropped entirely on a narrow window, where it would otherwise sit on
+        # top of the placeholder.
         self.shortcut_lbl = ctk.CTkLabel(
-            center_frame,
+            self.search_btn,
             text="Ctrl+K",
             font=theme.font(10),
             text_color=theme.TEXT_MUTED,
         )
-        self.shortcut_lbl.place(relx=1.0, rely=0.5, x=-12, anchor="e")
+        self._shortcut_shown = False
+        self.search_btn.bind("<Configure>", self._on_search_resize)
+
+    # Below this the search box has no room for a hint as well as its label.
+    SHORTCUT_MIN_WIDTH = 300
+
+    def _on_search_resize(self, event):
+        should_show = event.width >= self.SHORTCUT_MIN_WIDTH
+        if should_show == self._shortcut_shown:
+            return
+        self._shortcut_shown = should_show
+        if should_show:
+            self.shortcut_lbl.place(relx=1.0, rely=0.5, x=-13, anchor="e")
+        else:
+            self.shortcut_lbl.place_forget()
 
     def set_title(self, title: str):
         self.title_lbl.configure(text=title)

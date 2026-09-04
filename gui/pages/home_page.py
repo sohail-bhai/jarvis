@@ -218,11 +218,11 @@ class HomePage(ctk.CTkScrollableFrame):
 
             if idx:
                 # A hairline between columns, not a gap between cards.
-                rule = ctk.CTkFrame(strip, fg_color=theme.DIVIDER, width=1)
+                rule = ctk.CTkFrame(strip, fg_color=theme.DIVIDER, width=1, height=42)
                 rule.grid(row=0, column=column - 1, sticky="ns", pady=14)
 
             cell = ctk.CTkFrame(strip, fg_color="transparent")
-            cell.grid(row=0, column=column, sticky="nsew", padx=16, pady=15)
+            cell.grid(row=0, column=column, sticky="nsew", padx=13, pady=14)
 
             icon_color = theme.TEXT_PRIMARY if is_live else theme.TEXT_MUTED
             icon = icons.image(glyph, theme.ICON_CARD, icon_color)

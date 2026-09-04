@@ -88,16 +88,13 @@ class SystemLogPanel(ctk.CTkFrame):
             else:
                 dot_color = theme.ACCENT
 
-            rail = ctk.CTkFrame(row, fg_color="transparent", width=18)
-            rail.pack(side="left", fill="y")
-            rail.pack_propagate(False)
-
             ctk.CTkLabel(
-                rail,
+                row,
                 text="\u25cf",
                 font=theme.font(9, "bold"),
                 text_color=dot_color,
-            ).pack(anchor="n", pady=(4, 0))
+                width=16,
+            ).pack(side="left", anchor="n", pady=(5, 0))
 
             body = ctk.CTkFrame(row, fg_color="transparent")
             body.pack(side="left", fill="x", expand=True)

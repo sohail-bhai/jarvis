@@ -16,7 +16,7 @@ import customtkinter as ctk
 
 from assistant.workspace import auth as workspace_auth
 from assistant.workspace.gateway import gateway
-from gui import theme
+from gui import theme, ui_queue
 from gui.store import store
 
 TABS = ["Overview", "Drive", "Gmail", "Calendar", "Docs"]
@@ -168,7 +168,7 @@ class GooglePage(ctk.CTkScrollableFrame):
         """Ask the gateway where we stand, off the main thread."""
         def work():
             status = gateway.get_status()
-            self.after(0, lambda: self._apply_status(status))
+            ui_queue.post_to(self, lambda: self._apply_status(status))
 
         threading.Thread(target=work, daemon=True, name="google-status").start()
 
@@ -219,7 +219,7 @@ class GooglePage(ctk.CTkScrollableFrame):
 
         def work():
             result = workspace_auth.authorize()
-            self.after(0, lambda: self._finish_connect(result))
+            ui_queue.post_to(self, lambda: self._finish_connect(result))
 
         threading.Thread(target=work, daemon=True, name="google-oauth").start()
 
@@ -316,7 +316,7 @@ class GooglePage(ctk.CTkScrollableFrame):
                     return
                 on_ready(items)
 
-            self.after(0, draw)
+            ui_queue.post_to(self, draw)
 
         threading.Thread(target=work, daemon=True, name="google-fetch").start()
 
@@ -562,7 +562,7 @@ class GooglePage(ctk.CTkScrollableFrame):
                 subject=f"Re: {subject}",
                 body="")
             failed = isinstance(result, dict) and result.get("error")
-            self.after(0, lambda: store.add_system_log(
+            ui_queue.post(lambda: store.add_system_log(
                 f"Could not draft a reply: {result['error']}" if failed
                 else f"Drafted a reply to {sender} in Gmail",
                 "failed" if failed else "completed"))
@@ -712,6 +712,6 @@ class GooglePage(ctk.CTkScrollableFrame):
                     else f"Demo mode: did not really create \"{title}\"",
                     "completed")
 
-            self.after(0, done)
+            ui_queue.post_to(self, done)
 
         threading.Thread(target=work, daemon=True, name="google-create").start()
