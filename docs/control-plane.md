@@ -37,6 +37,7 @@ Putting it behind an API means:
 | `assistant/control/models.py` | The data model: `Task`, `TaskStep`, `Helper`, `Device`, `Permission`, `Approval`, `ActivityEvent`, plus their status enums. Plain dataclasses with no framework dependency. |
 | `assistant/control/store.py` | SQLite persistence. The only module that knows SQL, so moving to PostgreSQL later means rewriting this file alone. |
 | `assistant/control/service.py` | `ControlPlane` — the coordination logic and the only thing clients need. |
+| `assistant/control/notifier.py` | Decides which events are worth interrupting a person for, and delivers them. |
 | `assistant/control/planner.py` | Turns a goal into steps, with a model call that can be injected. |
 | `assistant/control/adapters.py` | How the control plane talks to an agent: in-process, over HTTP, or something added later. |
 | `assistant/control/capabilities.py` | The catalog of namespaced capabilities and the risk each one carries. |
@@ -140,6 +141,11 @@ failure.
 **ActivityEvent** — one line of the timeline, in plain English. This is what
 the System Log renders. It records observable actions only, never model
 reasoning.
+
+The message is for a person; the fields beside it are what a client filters
+and groups on - `type`, `task_id`, `agent_id`, `capability`, `risk`,
+`approval_id` and `result`. An approval's request and its answer carry the same
+`approval_id`, so a client can join them without guessing.
 
 ## Using it from Python
 
@@ -411,10 +417,38 @@ carries `fields`, naming what was wrong.
 | `POST` | `/api/approvals/{id}` | Approve or decline. |
 | `GET`/`POST` | `/api/permissions` | List or grant temporary access. |
 | `DELETE` | `/api/permissions/{id}` | Revoke a grant. |
-| `GET` | `/api/activity` | Timeline, newest first. |
+| `GET` | `/api/activity` | Timeline, newest first. `?types=` filters, comma separated. |
+| `GET` | `/api/event-types` | Every event type a client can filter or subscribe to. |
+| `GET` | `/api/notifications` | Recent notifications, newest first. |
 | `POST` | `/api/emergency-stop` | Stop work and revoke all access. |
 | `POST` | `/api/resume` | Accept work again. |
 | `WS` | `/ws/activity` | Live activity stream. |
+| `WS` | `/ws/events` | Live events, filterable by type and task. |
+| `WS` | `/ws/notifications` | Only what needs a person. |
+
+### Events and notifications
+
+Three sockets, all authenticated the same way:
+
+| Socket | Carries |
+| --- | --- |
+| `/ws/activity` | Every event, with the last 25 on connect. The original stream. |
+| `/ws/events` | Every event, filterable: `?types=task_failed,approval_requested&task_id=...` |
+| `/ws/notifications` | Only what is worth interrupting a person for. |
+
+The timeline records everything. A notification is different: it goes to a
+phone that may be in someone's pocket, so the bar is higher. `notifier.py`
+sends approvals waiting on you, work that finished or failed, an agent that
+went wrong, and security events - and nothing else. Each one carries an
+urgency (`action`, `problem`, `security`, `done`) and says whether it needs an
+answer.
+
+Channels are injectable. A phone on `/ws/notifications` is one; Telegram is
+another, off unless `notify_telegram` is set in `config.json`. A channel that
+throws is logged and skipped: a phone that is off must never stop the work.
+
+`GET /api/notifications` returns the recent ones, so a client that reconnects
+catches up. `GET /api/event-types` lists every type a client can filter on.
 
 ### Live activity
 
@@ -466,6 +500,11 @@ These are known gaps, not oversights:
 - **Tokens do not expire.** A paired device stays paired until it is revoked.
   There is no refresh or rotation yet.
 - **Rate limiting is per process.** Restarting the API resets every bucket.
+- **Notifications are not delivered while nothing is connected.** There is no
+  push service; a phone with no socket open sees them only when it asks for
+  recent notifications, or through Telegram if that is switched on.
+- **Notification history is in memory.** It does not survive a restart, unlike
+  the timeline, which does.
 - **Enforcement covers the tools JARVIS knows.** A tool missing from
   `TOOL_CAPABILITIES` is treated as needing no capability, so new tools must be
   added there as they are written.
@@ -497,7 +536,7 @@ These are known gaps, not oversights:
 python -m unittest discover -s tests
 ```
 
-265 tests cover the task lifecycle, capability matching, permission expiry and
+295 tests cover the task lifecycle, capability matching, permission expiry and
 revocation, the approval flow, emergency stop, step execution, failure and
 cancellation paths, pairing and token authentication, rate limiting, schema
 migrations, the capability catalog, policy precedence, the broker's grant,
@@ -505,6 +544,7 @@ hold and refuse paths, agent registration, heartbeats and staleness, the kill
 switch, the HTTP and native adapters, planning and its fallbacks, the step
 graph and its parallelism, cancellation part-way through a step, capability
 enforcement at the call site, retries and their cap, resuming interrupted work
-without redoing it, delegation between agents, and the HTTP and WebSocket
-surface. The executor tests use an
+without redoing it, delegation between agents, typed lifecycle events and their
+audit fields, notification routing including a channel that throws, and the
+HTTP and WebSocket surface. The executor tests use an
 injected runner, so none of them need Ollama.

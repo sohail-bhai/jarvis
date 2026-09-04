@@ -98,6 +98,7 @@ class HelperStatus(str, Enum):
 class EventType(str, Enum):
     """Observable actions only. Never model reasoning."""
     TASK_CREATED = "task_created"
+    TASK_STARTED = "task_started"
     TASK_COMPLETED = "task_completed"
     TASK_FAILED = "task_failed"
     TASK_CANCELLED = "task_cancelled"
@@ -418,7 +419,11 @@ def matches_pattern(pattern, capability):
 
 @dataclass
 class ActivityEvent:
-    """One line of the unified timeline, written in plain English."""
+    """One line of the unified timeline, written in plain English.
+
+    The message is what a person reads; the fields beside it are what a client
+    filters and groups on. Observable actions only - never model reasoning.
+    """
     id: str = field(default_factory=new_id)
     task_id: str = ""
     type: EventType = EventType.NOTE
@@ -427,6 +432,11 @@ class ActivityEvent:
     device_id: str = ""
     timestamp: float = field(default_factory=now)
     metadata: dict = field(default_factory=dict)
+    agent_id: str = ""              # which agent did it
+    capability: str = ""            # what access was involved
+    risk: str = ""                  # how consequential it was
+    approval_id: str = ""           # the decision this belongs to
+    result: str = ""                # ok, failed, denied, cancelled
 
     def to_dict(self):
         return _serialise(self)

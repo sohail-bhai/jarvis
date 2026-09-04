@@ -32,6 +32,9 @@ from assistant.api.auth import (
 )
 from assistant.api.errors import error_body, install_error_handlers
 from assistant.control.capabilities import catalog
+from assistant.control.models import EventType
+from assistant.control.notifier import Notifier, TelegramChannel
+from assistant.config import get_setting
 from assistant.control.executor import get_executor
 from assistant.control.service import get_control_plane
 
@@ -151,11 +154,12 @@ OPEN_PATHS = ("/", "/health", "/docs", "/redoc", "/openapi.json",
               "/api/pair", "/api/pair/code")
 
 
-def create_app(control=None, executor=None, security=None):
+def create_app(control=None, executor=None, security=None, notifier=None):
     """Build the API.
 
-    Accepts a control plane, an executor and a security policy so tests, and
-    any embedding app, can inject their own instead of driving the shared ones.
+    Accepts a control plane, an executor, a security policy and a notifier so
+    tests, and any embedding app, can inject their own instead of driving the
+    shared ones.
     """
     app = FastAPI(
         title="JARVIS Control Plane",
@@ -175,9 +179,13 @@ def create_app(control=None, executor=None, security=None):
     plane = control or get_control_plane()
     runner = executor or get_executor(plane=plane)
     guard = security if security is not None else ApiSecurity(plane.store)
+    alerts = notifier if notifier is not None else Notifier(
+        plane, channels=[TelegramChannel()]
+        if get_setting("notify_telegram", False) else [])
     app.state.control = plane
     app.state.executor = runner
     app.state.security = guard
+    app.state.notifier = alerts
 
     install_error_handlers(app)
 
@@ -550,9 +558,27 @@ def create_app(control=None, executor=None, security=None):
     # -- activity ----------------------------------------------------------
 
     @app.get("/api/activity", tags=["activity"])
-    def list_activity(limit: int = 100, task_id: str = ""):
+    def list_activity(limit: int = 100, task_id: str = "", types: str = ""):
+        """The timeline, newest first. `types` filters, comma separated."""
+        wanted = [item.strip() for item in types.split(",") if item.strip()]
+        for item in wanted:
+            if item not in {event.value for event in EventType}:
+                raise HTTPException(status_code=422,
+                                    detail=f"There is no event type called '{item}'.")
+
         return [event.to_dict()
-                for event in plane.list_events(limit=limit, task_id=task_id or None)]
+                for event in plane.list_events(limit=limit, task_id=task_id or None,
+                                               types=wanted or None)]
+
+    @app.get("/api/event-types", tags=["activity"])
+    def list_event_types():
+        """Every event a client can filter or subscribe to."""
+        return sorted(event.value for event in EventType)
+
+    @app.get("/api/notifications", tags=["activity"])
+    def list_notifications(limit: int = 20):
+        """What JARVIS would have sent to your phone, newest first."""
+        return alerts.recent(limit=limit)
 
     # -- emergency stop ----------------------------------------------------
 
@@ -565,6 +591,59 @@ def create_app(control=None, executor=None, security=None):
         return plane.resume()
 
     # -- live activity stream ----------------------------------------------
+
+    @app.websocket("/ws/events")
+    async def event_stream(websocket: WebSocket, token: str = "", types: str = "",
+                           task_id: str = ""):
+        """Every event as it happens, optionally filtered.
+
+        /ws/activity carries the same events for older clients; this one adds
+        filtering and the fields a client groups on.
+        """
+        wanted = {item.strip() for item in types.split(",") if item.strip()}
+        await _stream(websocket, token,
+                      keep=lambda event: ((not wanted or event.type.value in wanted)
+                                          and (not task_id or event.task_id == task_id)))
+
+    @app.websocket("/ws/notifications")
+    async def notification_stream(websocket: WebSocket, token: str = ""):
+        """Only what is worth interrupting a person for."""
+        try:
+            guard.authenticate(
+                token or bearer_token(websocket.headers.get("authorization")),
+                websocket.client.host if websocket.client else "")
+        except PermissionError:
+            await websocket.close(code=1008)
+            return
+
+        await websocket.accept()
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+
+        class SocketChannel:
+            name = "websocket"
+
+            def deliver(self, notification):
+                loop.call_soon_threadsafe(_offer, notification.to_dict())
+
+        def _offer(payload):
+            try:
+                queue.put_nowait(payload)
+            except asyncio.QueueFull:
+                pass        # a slow phone must not stall the control plane
+
+        channel = alerts.add_channel(SocketChannel())
+        try:
+            for item in reversed(alerts.recent(limit=10)):
+                await websocket.send_json(item)
+            while True:
+                await websocket.send_json(await queue.get())
+        except WebSocketDisconnect:
+            pass
+        except Exception:
+            logger.exception("Notification stream failed")
+        finally:
+            alerts.remove_channel(channel)
 
     @app.websocket("/ws/activity")
     async def activity_stream(websocket: WebSocket, token: str = ""):
@@ -609,6 +688,41 @@ def create_app(control=None, executor=None, security=None):
             pass
         except Exception:
             logger.exception("Activity stream failed")
+        finally:
+            unsubscribe()
+
+    async def _stream(websocket, token, keep):
+        """Shared plumbing for the event sockets."""
+        try:
+            guard.authenticate(
+                token or bearer_token(websocket.headers.get("authorization")),
+                websocket.client.host if websocket.client else "")
+        except PermissionError:
+            await websocket.close(code=1008)
+            return
+
+        await websocket.accept()
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue = asyncio.Queue(maxsize=200)
+
+        def on_event(event):
+            if keep(event):
+                loop.call_soon_threadsafe(_offer, event.to_dict())
+
+        def _offer(payload):
+            try:
+                queue.put_nowait(payload)
+            except asyncio.QueueFull:
+                pass
+
+        unsubscribe = plane.subscribe(on_event)
+        try:
+            while True:
+                await websocket.send_json(await queue.get())
+        except WebSocketDisconnect:
+            pass
+        except Exception:
+            logger.exception("Event stream failed")
         finally:
             unsubscribe()
 

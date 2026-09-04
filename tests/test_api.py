@@ -238,11 +238,14 @@ class ActivityApiTests(ApiTestCase):
             self.assertEqual("Live thing", websocket.receive_json()["message"])
 
     def test_websocket_unsubscribes_on_disconnect(self):
+        before = len(self.plane._subscribers)
+
         with self.client.websocket_connect("/ws/activity") as websocket:
             websocket.receive_json  # connection established
 
         # The subscriber list must not grow once the client has gone away.
-        self.assertEqual([], self.plane._subscribers)
+        # The notifier's own subscription is permanent and stays put.
+        self.assertEqual(before, len(self.plane._subscribers))
 
 
 class TaskExecutionTests(ApiTestCase):
@@ -553,6 +556,76 @@ class RecoveryTests(ApiTestCase):
 
         self.assertEqual([created["id"]], [task["id"] for task in resumed])
         self.assertEqual(["Second"], self.executed)
+
+
+class EventStreamTests(ApiTestCase):
+    def test_activity_can_be_filtered_by_type(self):
+        self.client.post("/api/tasks", json={"goal": "Tidy my notes"})
+
+        body = self.client.get("/api/activity",
+                               params={"types": "task_created"}).json()
+
+        self.assertEqual(["task_created"], [event["type"] for event in body])
+
+    def test_an_unknown_event_type_is_rejected(self):
+        response = self.client.get("/api/activity", params={"types": "made_up"})
+
+        self.assertEqual(422, response.status_code)
+
+    def test_the_event_types_are_listed_for_clients(self):
+        body = self.client.get("/api/event-types").json()
+
+        self.assertIn("approval_requested", body)
+        self.assertIn("task_started", body)
+
+    def test_the_event_socket_carries_the_audit_fields(self):
+        with self.client.websocket_connect("/ws/events") as socket:
+            self.plane.request_capability("google.gmail.send", agent_id="mail-agent")
+
+            event = socket.receive_json()
+            while event["type"] != "capability_requested":
+                event = socket.receive_json()
+
+        self.assertEqual("google.gmail.send", event["capability"])
+        self.assertEqual("high", event["risk"])
+
+    def test_the_event_socket_can_filter(self):
+        with self.client.websocket_connect("/ws/events?types=task_completed") as socket:
+            created = self.client.post("/api/tasks", json={"goal": "Tidy my notes"}).json()
+            self.client.post(f"/api/tasks/{created['id']}/complete")
+
+            event = socket.receive_json()
+
+        self.assertEqual("task_completed", event["type"])
+
+    def test_notifications_reach_a_connected_phone(self):
+        with self.client.websocket_connect("/ws/notifications") as socket:
+            created = self.client.post("/api/tasks", json={"goal": "Tidy my notes"}).json()
+            self.client.post(f"/api/tasks/{created['id']}/complete",
+                             params={"summary": "Tidied 12 notes."})
+
+            notification = socket.receive_json()
+
+        self.assertEqual("Tidied 12 notes.", notification["message"])
+        self.assertEqual("done", notification["urgency"])
+
+    def test_recent_notifications_can_be_read_back(self):
+        created = self.client.post("/api/tasks", json={"goal": "Tidy my notes"}).json()
+        self.client.post(f"/api/tasks/{created['id']}/complete",
+                         params={"summary": "Tidied 12 notes."})
+
+        body = self.client.get("/api/notifications").json()
+
+        self.assertEqual("Tidied 12 notes.", body[0]["message"])
+
+    def test_an_approval_notification_says_it_needs_an_answer(self):
+        self.client.post("/api/capabilities/request",
+                         json={"capability": "google.gmail.send"})
+
+        body = self.client.get("/api/notifications").json()
+
+        self.assertTrue(body[0]["needs_answer"])
+        self.assertEqual("action", body[0]["urgency"])
 
 
 if __name__ == "__main__":

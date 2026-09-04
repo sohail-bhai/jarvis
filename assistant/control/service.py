@@ -214,7 +214,7 @@ class ControlPlane:
                 helper.current_task_id = ""
                 self.store.save_helper(helper)
                 self.record(f"{helper.name} stopped responding.",
-                            EventType.AGENT_OFFLINE, metadata={"agent_id": helper.id})
+                            EventType.AGENT_OFFLINE, agent_id=helper.id)
                 gone.append(helper)
 
         for device in self.store.list_devices():
@@ -395,8 +395,12 @@ class ControlPlane:
         task = self.store.get_task(task_id)
         if task and task.status == TaskStatus.PENDING:
             self._set_task_status(task, TaskStatus.RUNNING)
+            self.record(f"Started: {task.goal}", EventType.TASK_STARTED,
+                        task_id=task_id, agent_id=task.helper_id)
 
-        self.record(target.label, EventType.STEP_STARTED, task_id=task_id)
+        self.record(target.label, EventType.STEP_STARTED, task_id=task_id,
+                    agent_id=target.agent_id, capability=target.capability,
+                    metadata={"position": target.position})
         return target
 
     def delegate(self, task_id, label, capability="", agent_id="", after=None):
@@ -458,7 +462,11 @@ class ControlPlane:
         self.store.save_step(target)
 
         self.record(detail or f"Finished: {target.label}",
-                    EventType.STEP_FINISHED, task_id=task_id)
+                    EventType.STEP_FINISHED, task_id=task_id,
+                    agent_id=target.agent_id, capability=target.capability,
+                    result="failed" if failed else "ok",
+                    metadata={"position": target.position,
+                              "attempts": target.attempts})
         return target
 
     def complete_task(self, task_id, summary=""):
@@ -474,7 +482,8 @@ class ControlPlane:
         task.summary = summary
         self._set_task_status(task, TaskStatus.COMPLETED)
         self._release_task_permissions(task_id, "the task finished")
-        self.record(summary or "Done.", EventType.TASK_COMPLETED, task_id=task_id)
+        self.record(summary or "Done.", EventType.TASK_COMPLETED, task_id=task_id,
+                    agent_id=task.helper_id, result="ok")
         return task
 
     def fail_task(self, task_id, reason=""):
@@ -487,7 +496,8 @@ class ControlPlane:
         self._set_task_status(task, TaskStatus.FAILED)
         self._release_task_permissions(task_id, "the task stopped")
         self.record(reason or "Couldn't finish this step.",
-                    EventType.TASK_FAILED, task_id=task_id)
+                    EventType.TASK_FAILED, task_id=task_id,
+                    agent_id=task.helper_id, result="failed")
         return task
 
     def cancel_task(self, task_id, reason="You stopped this."):
@@ -497,7 +507,8 @@ class ControlPlane:
 
         self._set_task_status(task, TaskStatus.CANCELLED)
         self._release_task_permissions(task_id, "the task was stopped")
-        self.record(reason, EventType.TASK_CANCELLED, task_id=task_id)
+        self.record(reason, EventType.TASK_CANCELLED, task_id=task_id,
+                    agent_id=task.helper_id, result="cancelled")
         return task
 
     def interrupted_tasks(self):
@@ -538,7 +549,8 @@ class ControlPlane:
         minutes = max(1, int(seconds // 60))
         self.record(
             f"Allowed {' and '.join(actions)} access to {resource} for {minutes} minutes.",
-            EventType.PERMISSION_GRANTED, task_id=task_id)
+            EventType.PERMISSION_GRANTED, task_id=task_id, agent_id=agent_id,
+            capability=actions[0] if actions else "", result="granted")
         return permission
 
     def check(self, resource, action, task_id=""):
@@ -605,13 +617,15 @@ class ControlPlane:
 
         self.record(f"Asked to {describe(capability).lower()}.",
                     EventType.CAPABILITY_REQUESTED, task_id=task_id,
-                    metadata={"capability": capability, "risk": judgement.risk.value,
-                              "agent_id": agent_id})
+                    agent_id=agent_id, capability=capability,
+                    risk=judgement.risk.value,
+                    metadata={"decision": judgement.decision.value})
 
         if judgement.denied:
             self.record(f"Refused: {describe(capability).lower()}. {judgement.reason}",
                         EventType.CAPABILITY_DENIED, task_id=task_id,
-                        metadata={"capability": capability, "agent_id": agent_id})
+                        agent_id=agent_id, capability=capability,
+                        risk=judgement.risk.value, result="denied")
             return {"status": "denied", "judgement": judgement.to_dict(),
                     "permission": None, "approval": None}
 
@@ -681,7 +695,8 @@ class ControlPlane:
 
         self.record(f"Waiting for your approval: {question}",
                     EventType.APPROVAL_REQUESTED, task_id=task_id,
-                    metadata={"approval_id": approval.id})
+                    agent_id=agent_id, capability=capability, risk=risk.value,
+                    approval_id=approval.id)
         return approval
 
     def resolve_approval(self, approval_id, approved):
@@ -710,7 +725,10 @@ class ControlPlane:
             f"You approved: {approval.action}" if approved
             else f"You declined: {approval.action}",
             EventType.APPROVAL_RESOLVED, task_id=approval.task_id,
-            metadata={"approval_id": approval.id, "approved": approved})
+            agent_id=approval.agent_id, capability=approval.capability,
+            risk=approval.risk.value, approval_id=approval.id,
+            result="approved" if approved else "declined",
+            metadata={"approved": approved})
         return approval
 
     def list_approvals(self, pending_only=True):
@@ -719,17 +737,25 @@ class ControlPlane:
     # -- activity -----------------------------------------------------------
 
     def record(self, message, event_type=EventType.NOTE, task_id="",
-               actor="JARVIS", metadata=None):
-        """Write one plain-English line to the timeline and notify listeners."""
+               actor="JARVIS", metadata=None, agent_id="", capability="",
+               risk="", approval_id="", result=""):
+        """Write one plain-English line to the timeline and notify listeners.
+
+        The message is for a person; the fields beside it are what a client
+        filters on - which agent, which capability, how risky, which decision,
+        and how it turned out.
+        """
         event = ActivityEvent(task_id=task_id, type=event_type, message=message,
                               actor=actor, device_id=self.local_device.id,
-                              metadata=metadata or {})
+                              metadata=metadata or {}, agent_id=agent_id,
+                              capability=capability, risk=risk,
+                              approval_id=approval_id, result=result)
         self.store.save_event(event)
         self._publish(event)
         return event
 
-    def list_events(self, limit=100, task_id=None):
-        return self.store.list_events(limit=limit, task_id=task_id)
+    def list_events(self, limit=100, task_id=None, types=None):
+        return self.store.list_events(limit=limit, task_id=task_id, types=types)
 
     # -- emergency stop -----------------------------------------------------
 

@@ -173,6 +173,13 @@ MIGRATIONS = [
         ("task_steps", "attempts", "ALTER TABLE task_steps ADD COLUMN attempts INTEGER DEFAULT 0"),
         ("task_steps", "artifacts", "ALTER TABLE task_steps ADD COLUMN artifacts TEXT"),
     ]),
+    ("0010_event_details", [
+        ("activity_events", "agent_id", "ALTER TABLE activity_events ADD COLUMN agent_id TEXT"),
+        ("activity_events", "capability", "ALTER TABLE activity_events ADD COLUMN capability TEXT"),
+        ("activity_events", "risk", "ALTER TABLE activity_events ADD COLUMN risk TEXT"),
+        ("activity_events", "approval_id", "ALTER TABLE activity_events ADD COLUMN approval_id TEXT"),
+        ("activity_events", "result", "ALTER TABLE activity_events ADD COLUMN result TEXT"),
+    ]),
 ]
 
 DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "control.db"
@@ -477,18 +484,29 @@ class ControlStore:
     def save_event(self, event):
         self._write(
             "INSERT INTO activity_events (id, task_id, type, message, actor, "
-            "device_id, timestamp, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "device_id, timestamp, metadata, agent_id, capability, risk, "
+            "approval_id, result) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (event.id, event.task_id, event.type.value, event.message, event.actor,
-             event.device_id, event.timestamp, dumps(event.metadata)),
+             event.device_id, event.timestamp, dumps(event.metadata),
+             event.agent_id, event.capability, event.risk, event.approval_id,
+             event.result),
         )
         return event
 
-    def list_events(self, limit=100, task_id=None):
+    def list_events(self, limit=100, task_id=None, types=None):
         sql = "SELECT * FROM activity_events"
         params = []
+        clauses = []
         if task_id:
-            sql += " WHERE task_id = ?"
+            clauses.append("task_id = ?")
             params.append(task_id)
+        if types:
+            placeholders = ", ".join("?" for _ in types)
+            clauses.append(f"type IN ({placeholders})")
+            params.extend(types)
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
         sql += " ORDER BY timestamp DESC LIMIT ?"
         params.append(limit)
         return [_to_event(row) for row in self._rows(sql, tuple(params))]
@@ -596,9 +614,17 @@ def _to_policy_rule(row):
 def _to_event(row):
     if row is None:
         return None
+    keys = row.keys()
+
+    def value(name):
+        return (row[name] or "") if name in keys else ""
+
     return ActivityEvent(id=row["id"], task_id=row["task_id"] or "",
                          type=EventType(row["type"]), message=row["message"],
                          actor=row["actor"] or "JARVIS",
                          device_id=row["device_id"] or "",
                          timestamp=row["timestamp"],
-                         metadata=loads(row["metadata"], {}))
+                         metadata=loads(row["metadata"], {}),
+                         agent_id=value("agent_id"), capability=value("capability"),
+                         risk=value("risk"), approval_id=value("approval_id"),
+                         result=value("result"))
