@@ -1,6 +1,6 @@
 """
 System Log component for the right panel.
-Displays transparent, human-friendly timeline of what JARVIS is doing behind the scenes.
+Displays transparent, human-friendly timeline of what VAVE is doing behind the scenes.
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ class SystemLogPanel(ctk.CTkFrame):
             parent,
             width=290,
             fg_color=theme.CARD_BG,
-            corner_radius=14,
+            corner_radius=theme.RADIUS_CARD,
             border_width=1,
             border_color=theme.CARD_BORDER,
         )
@@ -39,11 +39,10 @@ class SystemLogPanel(ctk.CTkFrame):
         live_badge = ctk.CTkLabel(
             header,
             text="● Live",
-            font=theme.font(10, "bold"),
+            font=theme.font(10),
             text_color=theme.SUCCESS,
-            fg_color=theme.SUCCESS_LIGHT,
-            corner_radius=10,
-            width=52,
+            fg_color="transparent",
+            width=44,
             height=20,
         )
         live_badge.pack(side="right")
@@ -56,43 +55,6 @@ class SystemLogPanel(ctk.CTkFrame):
             scrollbar_button_hover_color=theme.TEXT_MUTED,
         )
         self.scroll_area.pack(fill="both", expand=True, padx=12, pady=4)
-
-        # 3. Bottom note card
-        note_card = ctk.CTkFrame(
-            self,
-            fg_color=theme.MAIN_BG,
-            corner_radius=10,
-            border_width=1,
-            border_color=theme.CARD_BORDER,
-        )
-        note_card.pack(side="bottom", fill="x", padx=14, pady=14)
-
-        note_header = ctk.CTkFrame(note_card, fg_color="transparent")
-        note_header.pack(fill="x", padx=10, pady=(8, 2))
-
-        bulb_lbl = ctk.CTkLabel(
-            note_header,
-            text="💡",
-            font=theme.font(12),
-        )
-        bulb_lbl.pack(side="left")
-
-        note_title = ctk.CTkLabel(
-            note_header,
-            text=" JARVIS is working in the background.",
-            font=theme.font(10, "bold"),
-            text_color=theme.TEXT_PRIMARY,
-        )
-        note_title.pack(side="left")
-
-        note_sub = ctk.CTkLabel(
-            note_card,
-            text="You can continue using your computer.",
-            font=theme.font(10),
-            text_color=theme.TEXT_SECONDARY,
-            anchor="w",
-        )
-        note_sub.pack(fill="x", padx=12, pady=(0, 8))
 
         # Initial render of log entries
         self._render_logs()

@@ -10,30 +10,28 @@ from gui import theme
 from gui.store import store
 
 
-class NotificationsModal(ctk.CTkFrame):
+class NotificationsModal(ctk.CTkToplevel):
     def __init__(self, parent, on_navigate: Callable[[str], None]):
-        # Call super with parent, using the card background and a nice border
-        super().__init__(
-            parent,
-            fg_color=theme.CARD_BG,
-            border_width=1,
-            border_color=theme.CARD_BORDER,
-            corner_radius=12,
-            width=360,
-            height=400
-        )
+        super().__init__(parent)
         self.on_navigate = on_navigate
-        
-        # Don't let it shrink to its contents
-        self.grid_propagate(False)
-        self.pack_propagate(False)
 
-        # Place at top right of the application window
-        # anchor="ne" means x,y coordinates are for the Top-Right corner of the widget
-        self.place(relx=1.0, rely=0.0, x=-20, y=65, anchor="ne")
-        self.lift()
+        self.title("Notifications")
+        self.geometry("400x340")
+        self.resizable(False, False)
+        self.configure(fg_color=theme.CARD_BG)
 
-        container = ctk.CTkFrame(self, fg_color="transparent")
+        self.transient(parent)
+        self.grab_set()
+
+        # Position near top right of parent
+        parent_x = parent.winfo_rootx()
+        parent_y = parent.winfo_rooty()
+        parent_w = parent.winfo_width()
+        x = parent_x + parent_w - 430
+        y = parent_y + 60
+        self.geometry(f"+{max(10, x)}+{max(10, y)}")
+
+        container = ctk.CTkFrame(self, fg_color=theme.CARD_BG, corner_radius=14)
         container.pack(fill="both", expand=True, padx=16, pady=16)
 
         # Header

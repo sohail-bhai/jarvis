@@ -1,5 +1,5 @@
 """
-JARVIS Desktop Assistant Frontend Application.
+VAVE Desktop Assistant Frontend Application.
 Production-quality CustomTkinter desktop interface designed for normal, non-technical users.
 """
 from __future__ import annotations
@@ -48,7 +48,7 @@ class JarvisDashboardApp(ctk.CTk):
         theme.configure_theme(ctk)
         super().__init__()
 
-        self.title("JARVIS — Your AI, Everywhere")
+        self.title("VAVE — Your AI, Everywhere")
         self.geometry("1240x740")
         self.minsize(1050, 640)
         self.configure(fg_color=theme.MAIN_BG)
@@ -176,7 +176,7 @@ class JarvisDashboardApp(ctk.CTk):
             "activity": "Activity History",
             "settings": "Settings",
         }
-        self.topbar.set_title(title_map.get(page_id, "JARVIS"))
+        self.topbar.set_title(title_map.get(page_id, "VAVE"))
         store.set_page(page_id)
 
     def open_drawer(self, drawer_type: str, data: any):
@@ -190,16 +190,10 @@ class JarvisDashboardApp(ctk.CTk):
         store.close_drawer()
 
     def open_command_palette(self):
-        if hasattr(self, '_active_cmd_palette') and self._active_cmd_palette.winfo_exists():
-            self._active_cmd_palette.destroy()
-            return
-        self._active_cmd_palette = CommandPalette(self, on_execute=self.handle_user_command)
+        CommandPalette(self, on_execute=self.handle_user_command)
 
     def open_notifications(self):
-        if hasattr(self, '_active_notif_modal') and self._active_notif_modal.winfo_exists():
-            self._active_notif_modal.destroy()
-            return
-        self._active_notif_modal = NotificationsModal(self, on_navigate=self.navigate_to)
+        NotificationsModal(self, on_navigate=self.navigate_to)
 
     def handle_user_command(self, command_text: str):
         cmd_clean = command_text.strip()
@@ -275,9 +269,7 @@ class JarvisDashboardApp(ctk.CTk):
         elif event == "drawer_closed":
             self.close_drawer()
         elif event == "approval_requested":
-            if hasattr(self, '_active_approval_modal') and self._active_approval_modal.winfo_exists():
-                self._active_approval_modal.destroy()
-            self._active_approval_modal = ApprovalModal(self, data)
+            ApprovalModal(self, data)
 
     def _poll_events(self):
         """Poll the event bus from the main UI thread."""
@@ -291,13 +283,11 @@ class JarvisDashboardApp(ctk.CTk):
                     text = evt.payload.get("text", "")
                     if text:
                         store.add_system_log(f"Heard: \"{text}\"", "info")
-                        store.add_chat_message("user", text)
 
                 elif evt.event_type == EVENT_ASSISTANT_RESPONSE:
                     resp = evt.payload.get("text", "")
                     if resp:
                         store.add_system_log(resp, "completed")
-                        store.add_chat_message("assistant", resp)
 
                 elif evt.event_type == EVENT_ERROR:
                     err = evt.payload.get("error", "An unexpected error occurred.")

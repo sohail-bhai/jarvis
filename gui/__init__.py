@@ -1,1 +1,1 @@
-"""CustomTkinter dashboard package for JARVIS."""
+"""CustomTkinter dashboard package for VAVE."""

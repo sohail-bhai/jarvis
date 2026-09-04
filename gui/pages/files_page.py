@@ -52,12 +52,6 @@ class FilesPage(ctk.CTkScrollableFrame):
         search_row = ctk.CTkFrame(search_card, fg_color="transparent")
         search_row.pack(fill="x", padx=14, pady=8)
 
-        ctk.CTkLabel(
-            search_row,
-            text="🔍",
-            font=theme.font(13),
-        ).pack(side="left", padx=(0, 8))
-
         self.search_entry = ctk.CTkEntry(
             search_row,
             placeholder_text="Search your files...",
@@ -137,7 +131,7 @@ class FilesPage(ctk.CTkScrollableFrame):
             empty_box.pack(fill="x", pady=20, padx=4)
             ctk.CTkLabel(
                 empty_box,
-                text="No matching files found.\nAsk JARVIS to search for something else.",
+                text="No matching files found.\nAsk VAVE to search for something else.",
                 font=theme.font(12),
                 text_color=theme.TEXT_MUTED,
                 pady=30,

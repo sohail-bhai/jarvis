@@ -1,5 +1,5 @@
 """
-TopBar component for the JARVIS desktop interface.
+TopBar component for the VAVE desktop interface.
 Contains global search trigger (Ctrl+K), notification bell, and user avatar.
 """
 from __future__ import annotations
@@ -44,8 +44,8 @@ class TopBar(ctk.CTkFrame):
             right_frame,
             text="R",
             font=theme.font(12, "bold"),
-            text_color=theme.TEXT_PRIMARY,
-            fg_color=theme.SIDEBAR_ACTIVE,
+            text_color=theme.TEXT_SECONDARY,
+            fg_color=theme.CARD_HOVER,
             corner_radius=14,
             width=28,
             height=28,
@@ -96,19 +96,29 @@ class TopBar(ctk.CTkFrame):
 
         self.search_btn = ctk.CTkButton(
             center_frame,
-            text=" ✦  Ask JARVIS anything...                                            ⌘K / Ctrl+K",
+            text="Ask VAVE anything...",
             font=theme.font(12),
             fg_color=theme.CARD_BG,
             hover_color=theme.CARD_HOVER,
             text_color=theme.TEXT_MUTED,
             border_width=1,
             border_color=theme.CARD_BORDER,
-            corner_radius=16,
-            height=34,
+            corner_radius=theme.RADIUS_CONTROL,
+            height=32,
             anchor="w",
             command=self.on_open_command_palette,
         )
         self.search_btn.pack(fill="x")
+
+        # Shortcut hint sits beside the box instead of being padded into it
+        # with spaces, which broke alignment at every window width.
+        self.shortcut_lbl = ctk.CTkLabel(
+            center_frame,
+            text="Ctrl+K",
+            font=theme.font(10),
+            text_color=theme.TEXT_MUTED,
+        )
+        self.shortcut_lbl.place(relx=1.0, rely=0.5, x=-12, anchor="e")
 
     def set_title(self, title: str):
         self.title_lbl.configure(text=title)

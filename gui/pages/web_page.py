@@ -32,7 +32,7 @@ class WebPage(ctk.CTkScrollableFrame):
 
         ctk.CTkLabel(
             header,
-            text="Ask JARVIS to find answers, research topics, or perform web actions for you.",
+            text="Ask VAVE to find answers, research topics, or perform web actions for you.",
             font=theme.font(12),
             text_color=theme.TEXT_SECONDARY,
             anchor="w",
@@ -50,12 +50,6 @@ class WebPage(ctk.CTkScrollableFrame):
 
         row = ctk.CTkFrame(input_card, fg_color="transparent")
         row.pack(fill="x", padx=14, pady=10)
-
-        ctk.CTkLabel(
-            row,
-            text="🌐",
-            font=theme.font(16),
-        ).pack(side="left", padx=(0, 8))
 
         self.web_entry = ctk.CTkEntry(
             row,
@@ -77,8 +71,8 @@ class WebPage(ctk.CTkScrollableFrame):
             height=32,
             corner_radius=16,
             fg_color=theme.TEXT_PRIMARY,
-            hover_color=theme.TEXT_SECONDARY,
-            text_color="#000000",
+            hover_color=theme.SIDEBAR_BG,
+            text_color="#FFFFFF",
             command=self._submit_web_task,
         )
         arrow_btn.pack(side="right")
@@ -138,7 +132,7 @@ class WebPage(ctk.CTkScrollableFrame):
 
         task = start_web_task(text, on_progress=self._on_task_progress)
         if task is None:
-            store.add_system_log("JARVIS is stopped, so that task did not start.",
+            store.add_system_log("VAVE is stopped, so that task did not start.",
                                  "waiting")
             new_task["status"] = "Stopped"
             self._render_recent_tasks()

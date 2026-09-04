@@ -1,36 +1,65 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { colors, typography, spacing, borderRadius, shadows } from '../src/theme';
 import { googleService } from '../src/services/google';
+import { useGoogleStatus } from '../src/services/useGoogleStatus';
 
 export default function GoogleWorkspaceScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
-  // Google is not wired to the control plane yet, so every answer below is an
-  // example. Each one says so, because a made-up email that looks real is
-  // worse than no email at all.
-  const demo = googleService.isDemo;
+  // The computer holds the Google token and says whether it works. Until it
+  // does, every answer below is an example and is labelled as one, because a
+  // made-up email that looks real is worse than no email at all.
+  const google = useGoogleStatus();
+  const demo = google.demo;
 
   const handleQuickQuery = async (query: string) => {
     setLoading(true);
-    const prefix = demo ? 'Example only - Google is not connected.\n\n' : '';
-
-    if (query.includes('emails')) {
-      const emails = await googleService.getImportantEmails();
-      Alert.alert('Gmail', prefix + emails.map(e => `• ${e.from}: ${e.subject}`).join('\n'));
-    } else if (query.includes('meetings') || query.includes('Calendar')) {
-      const events = await googleService.getTodayEvents();
-      Alert.alert('Calendar', prefix + events.map(e =>
-        `• ${e.title} (${new Date(e.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`).join('\n'));
-    } else {
-      const files = await googleService.searchDrive('Hackwave');
-      Alert.alert('Drive', prefix + files.map(f => `• ${f.name} (${f.size})`).join('\n'));
+    try {
+      if (query.includes('emails')) {
+        const answer = await googleService.getImportantEmails();
+        Alert.alert('Gmail', describe(answer.live, answer.notice,
+          answer.items.map(e => `• ${e.from}: ${e.subject}`),
+          'No unread mail.'));
+      } else if (query.includes('meetings') || query.includes('Calendar')) {
+        const answer = await googleService.getTodayEvents();
+        Alert.alert('Calendar', describe(answer.live, answer.notice,
+          answer.items.map(e => `• ${e.title} (${formatTime(e.startTime)})`),
+          'Nothing on your calendar today.'));
+      } else {
+        const answer = await googleService.searchDrive('Hackwave');
+        Alert.alert('Drive', describe(answer.live, answer.notice,
+          answer.items.map(f => `• ${f.name}${f.size ? ` (${f.size})` : ''}`),
+          'No matching files.'));
+      }
+    } catch (error) {
+      Alert.alert('Google', error instanceof Error ? error.message
+        : 'JARVIS could not reach your computer.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
+  };
+
+  const handleConnect = async () => {
+    if (google.connected) {
+      Alert.alert('Google', `Connected as ${google.status?.account || 'your account'}.`);
+      return;
+    }
+    setLoading(true);
+    try {
+      const started = await googleService.connect();
+      Alert.alert('Connect Google', started.detail);
+      await google.refresh();
+    } catch (error) {
+      Alert.alert('Connect Google', error instanceof Error ? error.message
+        : 'JARVIS could not start the Google sign-in.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   // No counts here: JARVIS has not looked at any of these accounts, so it has
@@ -65,11 +94,35 @@ export default function GoogleWorkspaceScreen() {
           <View style={styles.demoNotice}>
             <Ionicons name="information-circle-outline" size={18} color={colors.warning} />
             <Text style={styles.demoNoticeText}>
-              Demo mode. Google isn't connected yet, so everything on this page is an
-              example rather than your own mail, files or calendar.
+              Demo mode. Everything on this page is an example rather than your own
+              mail, files or calendar. {google.detail}
             </Text>
           </View>
         ) : null}
+
+        {/* Connect, or say who is connected */}
+        <Pressable
+          style={({ pressed }) => [styles.connectCard, pressed && styles.pressed]}
+          onPress={handleConnect}
+          disabled={loading}
+        >
+          <Ionicons
+            name={google.connected ? 'checkmark-circle' : 'log-in-outline'}
+            size={22}
+            color={google.connected ? colors.success : colors.primary}
+          />
+          <View style={styles.bannerText}>
+            <Text style={styles.bannerTitle}>
+              {google.connected ? 'Google is connected' : 'Connect your Google account'}
+            </Text>
+            <Text style={styles.bannerSub}>
+              {google.connected
+                ? google.status?.account || 'Signed in on your computer.'
+                : 'Sign in once on your computer. The phone never holds the token.'}
+            </Text>
+          </View>
+          {loading ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+        </Pressable>
 
         {/* Banner */}
         <View style={styles.bannerCard}>
@@ -131,7 +184,32 @@ export default function GoogleWorkspaceScreen() {
   );
 }
 
+/** Say plainly whether a list came from Google or is an example. */
+function describe(live: boolean, notice: string | undefined,
+                  lines: string[], empty: string): string {
+  const prefix = live ? '' : `${notice ?? 'Example only - Google is not connected.'}\n\n`;
+  return prefix + (lines.length ? lines.join('\n') : empty);
+}
+
+function formatTime(value: string): string {
+  if (!value) return 'time unknown';
+  const when = new Date(value);
+  return Number.isNaN(when.getTime())
+    ? 'time unknown'
+    : when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
 const styles = StyleSheet.create({
+  connectCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.base,
+    gap: spacing.md,
+  },
   demoBadge: { backgroundColor: colors.surface },
   demoDot: { backgroundColor: colors.textTertiary },
   demoText: { color: colors.textSecondary },

@@ -1,77 +1,90 @@
 """
-Theme definitions for the JARVIS Desktop UI.
-Designed to feel like a calm, modern, minimal personal assistant.
+Theme definitions for the VAVE Desktop UI.
+
+One neutral base, one accent, and muted semantic colors that are only used
+to say something the user needs to know (success, attention, danger).
+Nothing here exists to decorate the interface.
 """
 import sys
 
 # Overall Appearance
-APPEARANCE_MODE = "dark"
+APPEARANCE_MODE = "light"
 DEFAULT_COLOR_THEME = "blue"
 
-# True Dark Mode Surfaces (Linear / Vercel style)
-MAIN_BG = "#000000"           # Pure black background for depth
-CARD_BG = "#09090B"           # Zinc 950 (very deep, slightly warm black)
-CARD_BORDER = "#27272A"       # Zinc 800 (subtle border)
-CARD_HOVER = "#18181B"        # Zinc 900 (slight lift)
+# Primary Surfaces
+MAIN_BG = "#F6F6F7"
+CARD_BG = "#FFFFFF"
+CARD_BORDER = "#E6E7EA"
+CARD_HOVER = "#F4F4F6"
 
-# Sidebar Surfaces (Blends with main background)
-SIDEBAR_BG = "#000000"
-SIDEBAR_HOVER = "#18181B"
-SIDEBAR_ACTIVE = "#27272A"
-SIDEBAR_BORDER = "#27272A"
-SIDEBAR_TEXT = "#FAFAFA"
-SIDEBAR_TEXT_MUTED = "#A1A1AA"
+# Dark Sidebar Surfaces (neutral graphite, not blue)
+SIDEBAR_BG = "#191A1D"
+SIDEBAR_HOVER = "#232427"
+SIDEBAR_ACTIVE = "#2B2D31"
+SIDEBAR_BORDER = "#26282C"
+SIDEBAR_TEXT = "#F4F4F5"
+SIDEBAR_TEXT_MUTED = "#8E9198"
 
 # Text Colors
-TEXT_PRIMARY = "#FFFFFF"      # Pure white for high contrast
-TEXT_SECONDARY = "#A1A1AA"    # Zinc 400 (legible but soft)
-TEXT_MUTED = "#71717A"        # Zinc 500
+TEXT_PRIMARY = "#1A1B1E"      # Near-black charcoal
+TEXT_SECONDARY = "#5A5E68"    # Balanced gray
+TEXT_MUTED = "#8E9198"        # Soft muted gray
 TEXT_LIGHT = "#FFFFFF"
 
-# Refined Accents (Less saturated, more elegant)
-ACCENT = "#818CF8"            # Indigo 400
-ACCENT_HOVER = "#6366F1"      # Indigo 500
-ACCENT_LIGHT = "#1E1B4B"      # Indigo 950 (dark glow)
-ACCENT_BORDER = "#3730A3"     # Indigo 800
+# Single restrained accent. Used for the one primary action on a screen.
+ACCENT = "#3F5AA6"            # Muted indigo
+ACCENT_HOVER = "#354C8C"
+ACCENT_LIGHT = "#EEF1F8"
+ACCENT_BORDER = "#D3DAEB"
 
-SUCCESS = "#34D399"           # Emerald 400
-SUCCESS_HOVER = "#10B981"
-SUCCESS_LIGHT = "#064E3B"
-SUCCESS_BORDER = "#065F46"
+# Semantic colors. Muted on purpose: they carry meaning, not emphasis.
+SUCCESS = "#3F8F6B"           # Muted green
+SUCCESS_HOVER = "#347759"
+SUCCESS_LIGHT = "#EFF5F2"
+SUCCESS_BORDER = "#CFE2D8"
 
-WARNING = "#FBBF24"           # Amber 400
-WARNING_HOVER = "#F59E0B"
-WARNING_LIGHT = "#78350F"
-WARNING_BORDER = "#92400E"
+WARNING = "#A9762B"           # Muted amber
+WARNING_HOVER = "#8E6222"
+WARNING_LIGHT = "#F7F3EB"
+WARNING_BORDER = "#E7DCC5"
 
-DANGER = "#F87171"            # Red 400
-DANGER_HOVER = "#EF4444"
-DANGER_LIGHT = "#7F1D1D"
-DANGER_BORDER = "#991B1B"
+DANGER = "#B04A45"            # Muted red, destructive actions only
+DANGER_HOVER = "#953D39"
+DANGER_LIGHT = "#F8F0EF"
+DANGER_BORDER = "#E8CFCD"
 
-INFO = "#60A5FA"              # Blue 400
-INFO_LIGHT = "#1E3A8A"
-INFO_BORDER = "#1E40AF"
+# INFO is the accent under another name so neutral states stay in one family.
+INFO = ACCENT
+INFO_LIGHT = ACCENT_LIGHT
+INFO_BORDER = ACCENT_BORDER
 
-PURPLE = "#A78BFA"            # Violet 400
-PURPLE_LIGHT = "#4C1D95"
-PURPLE_BORDER = "#5B21B6"
+# Kept so older imports keep working; new UI should not introduce a
+# fifth color family.
+PURPLE = ACCENT
+PURPLE_LIGHT = ACCENT_LIGHT
+PURPLE_BORDER = ACCENT_BORDER
+
+# Shape
+RADIUS_CARD = 12
+RADIUS_CONTROL = 10
+RADIUS_PILL = 999
 
 # Platform-tuned typography
 if sys.platform == "darwin":
     FONT_FAMILY = "SF Pro Display"
 elif sys.platform == "win32":
-    FONT_FAMILY = "Segoe UI Variable Display"  # Modern Windows 11 font if available
+    FONT_FAMILY = "Segoe UI"
 else:
-    FONT_FAMILY = "Inter"
+    FONT_FAMILY = "DejaVu Sans"
 
-FALLBACK_FONT = "Segoe UI"
+FALLBACK_FONT = "Helvetica"
 
 
 def configure_theme(ctk):
     """Sets CustomTkinter appearance mode."""
-    ctk.set_appearance_mode("dark")
+    ctk.set_appearance_mode("light")
     ctk.set_default_color_theme("blue")
+
 
 def font(size=14, weight="normal"):
     """Convenience font helper."""

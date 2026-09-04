@@ -701,10 +701,17 @@ class FileApiTests(ApiTestCase):
         self.assertEqual([str(self.share)], [item["path"] for item in body])
 
     def test_a_folder_can_be_browsed(self):
-        body = self.client.get("/api/files").json()
+        body = self.client.get("/api/files",
+                               params={"path": "Shared"}).json()
 
         self.assertEqual(["reports", "invoice.pdf"],
                          [item["name"] for item in body["entries"]])
+
+    def test_browsing_starts_at_the_shared_folders(self):
+        """With no path, a phone that knows nothing still gets somewhere."""
+        body = self.client.get("/api/files").json()
+
+        self.assertEqual(["Shared"], [item["name"] for item in body["entries"]])
 
     def test_a_file_can_be_downloaded(self):
         response = self.client.get("/api/files/download",

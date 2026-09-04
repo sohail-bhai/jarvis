@@ -1,5 +1,5 @@
 """
-Central state and mock data store for JARVIS desktop interface.
+Central state and mock data store for VAVE desktop interface.
 Maintains data for pages, system log, drawer details, and the core demo flow.
 """
 from __future__ import annotations
@@ -20,14 +20,10 @@ class AppStore:
         self.current_page = "home"
         self.active_drawer: Optional[Dict[str, Any]] = None  # {"type": "device"|"file"|"task"|"activity"|"approval", "data": ...}
         
-        # JARVIS Status
+        # VAVE Status
         self.jarvis_online = True
         self.jarvis_status_text = "All systems running"
         self.voice_listening = False
-        
-        # Chat History for Main Screen
-        # Each: {"role": "user" | "assistant", "text": "..."}
-        self.chat_history: List[Dict[str, str]] = []
         
         # System Log Entries
         # Each: {"time": "3:24 PM", "text": "...", "status": "working"|"completed"|"waiting"|"approval"|"info"}
@@ -46,7 +42,7 @@ class AppStore:
         self.current_task: Dict[str, Any] = {
             "id": "task-project",
             "title": "Preparing your project",
-            "subtitle": "JARVIS is researching, organizing files and writing a draft for you.",
+            "subtitle": "VAVE is researching, organizing files and writing a draft for you.",
             "status": "working",
             "steps": [
                 {"id": 1, "text": "Finding relevant files", "status": "done"},
@@ -54,7 +50,7 @@ class AppStore:
                 {"id": 3, "text": "Writing draft", "status": "pending"},
                 {"id": 4, "text": "Finalizing", "status": "pending"},
             ],
-            "helper": "Handled by JARVIS (Research & Writing Helper)",
+            "helper": "Handled by VAVE (Research & Writing Helper)",
             "details": "Searched local drive for project presentation, scraped web for 3 references, compiling summary into Google Slides."
         }
         
@@ -63,7 +59,7 @@ class AppStore:
             {
                 "id": "notif-1",
                 "title": "Needs your approval",
-                "message": "JARVIS is ready to submit your project changes.",
+                "message": "VAVE is ready to submit your project changes.",
                 "time": "5m ago",
                 "type": "approval",
                 "unread": True,
@@ -103,7 +99,7 @@ class AppStore:
                 "status": "Online",
                 "icon": "💻",
                 "capabilities": ["Access your files", "Run local tasks", "Use your browser"],
-                "connected_helpers": ["JARVIS Core", "Coding Assistant"],
+                "connected_helpers": ["VAVE Core", "Coding Assistant"],
                 "recent_activity": "Completed project tests & file indexing",
                 "ip": "192.168.1.104",
                 "os": "macOS / Windows 11",
@@ -272,10 +268,10 @@ class AppStore:
                 "time": "12:42 PM",
                 "category": "Tasks",
                 "title": "Finished checking your project",
-                "detail": "JARVIS searched your computer for your Hackwave presentation, verified dependencies, and passed all tests.",
+                "detail": "VAVE searched your computer for your Hackwave presentation, verified dependencies, and passed all tests.",
                 "used": "Your Computer · Google Drive",
                 "found": "3 files verified",
-                "reason": "You asked JARVIS to continue the project.",
+                "reason": "You asked VAVE to continue the project.",
             },
             {
                 "id": "act-2",
@@ -319,7 +315,7 @@ class AppStore:
             },
         ]
         
-        # Memory / What JARVIS Remembers
+        # Memory / What VAVE Remembers
         self.memories: List[Dict[str, str]] = [
             {"id": "m-1", "fact": "You are working on the Hackwave project.", "source": "Your previous task"},
             {"id": "m-2", "fact": "You prefer concise bullet points and non-technical language.", "source": "Preference setting"},
@@ -334,7 +330,7 @@ class AppStore:
         self.ai_helpers = [
             {"name": "Coding Assistant", "status": "Working", "description": "Handles local code updates and project verification."},
             {"name": "Research Assistant", "status": "Ready", "description": "Gathers information from documents and web articles."},
-            {"name": "JARVIS Web Assistant", "status": "Ready", "description": "Navigates websites and reviews online data safely."},
+            {"name": "VAVE Web Assistant", "status": "Ready", "description": "Navigates websites and reviews online data safely."},
         ]
 
     def subscribe(self, callback: Callable[[str, Any], None]):
@@ -372,11 +368,6 @@ class AppStore:
         entry = {"time": now_str, "text": redact(text), "status": status}
         self.system_logs.append(entry)
         self._notify("system_log_added", entry)
-
-    def add_chat_message(self, role: str, text: str):
-        entry = {"role": role, "text": redact(text)}
-        self.chat_history.append(entry)
-        self._notify("chat_message_added", entry)
 
     def trigger_approval(self, title: str, description: str, on_approve: Callable[[], None], on_reject: Optional[Callable[[], None]] = None):
         self.pending_approval = {
@@ -419,7 +410,7 @@ class AppStore:
         def _worker():
             # Step 1
             self.current_task["title"] = "Preparing your project"
-            self.current_task["subtitle"] = "JARVIS is researching your files and the web and preparing everything for you."
+            self.current_task["subtitle"] = "VAVE is researching your files and the web and preparing everything for you."
             self.current_task["steps"] = [
                 {"id": 1, "text": "Finding relevant files", "status": "active"},
                 {"id": 2, "text": "Researching on the web", "status": "pending"},
@@ -462,7 +453,7 @@ class AppStore:
                     on_complete()
 
             self.trigger_approval(
-                title="JARVIS needs your approval",
+                title="VAVE needs your approval",
                 description="I'm ready to merge your project changes.\n\n14 files were changed.\nAll tests passed.\nThis will make the changes live.",
                 on_approve=_on_approved
             )

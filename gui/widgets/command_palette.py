@@ -10,32 +10,31 @@ from gui import theme
 from gui.store import store
 
 
-class CommandPalette(ctk.CTkFrame):
+class CommandPalette(ctk.CTkToplevel):
     def __init__(self, parent, on_execute: Callable[[str], None]):
-        super().__init__(
-            parent,
-            fg_color=theme.CARD_BG,
-            border_width=1,
-            border_color=theme.CARD_BORDER,
-            corner_radius=12,
-            width=540,
-            height=380
-        )
+        super().__init__(parent)
         self.on_execute = on_execute
-        
-        self.grid_propagate(False)
-        self.pack_propagate(False)
 
-        # Place centered in the application window
-        self.place(relx=0.5, rely=0.35, anchor="center")
-        self.lift()
+        self.title("Ask VAVE")
+        self.geometry("540x380")
+        self.resizable(False, False)
+        self.configure(fg_color=theme.CARD_BG)
 
-        # Wrap everything in a transparent container
-        container = ctk.CTkFrame(self, fg_color="transparent")
-        container.pack(fill="both", expand=True, padx=2, pady=2)
+        # Center over parent
+        self.transient(parent)
+        self.grab_set()
+
+        # Center calculation
+        parent_x = parent.winfo_rootx()
+        parent_y = parent.winfo_rooty()
+        parent_w = parent.winfo_width()
+        parent_h = parent.winfo_height()
+        x = parent_x + (parent_w // 2) - 270
+        y = parent_y + (parent_h // 2) - 190
+        self.geometry(f"+{max(10, x)}+{max(10, y)}")
 
         # Container
-        main_frame = ctk.CTkFrame(container, fg_color=theme.CARD_BG, corner_radius=16)
+        main_frame = ctk.CTkFrame(self, fg_color=theme.CARD_BG, corner_radius=16)
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
 
         # Header
@@ -44,7 +43,7 @@ class CommandPalette(ctk.CTkFrame):
 
         sparkle = ctk.CTkLabel(
             header,
-            text="✦",
+            text="›",
             font=theme.font(16, "bold"),
             text_color=theme.ACCENT,
         )
@@ -99,8 +98,8 @@ class CommandPalette(ctk.CTkFrame):
             height=32,
             corner_radius=16,
             fg_color=theme.TEXT_PRIMARY,
-            hover_color=theme.TEXT_SECONDARY,
-            text_color="#000000",
+            hover_color=theme.SIDEBAR_BG,
+            text_color="#FFFFFF",
             command=self._submit,
         )
         submit_btn.pack(side="right", padx=6, pady=5)
