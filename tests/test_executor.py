@@ -31,9 +31,12 @@ class ExecutorTestCase(unittest.TestCase):
             return result
         return runner
 
-    def executor(self, runner=None, approval_timeout=5):
+    def executor(self, runner=None, approval_timeout=5, max_attempts=1):
+        # max_attempts=1 keeps these tests about the step lifecycle; retries
+        # have their own tests in test_recovery.py.
         return TaskExecutor(plane=self.plane, runner=runner or self.recording_runner(),
-                            approval_timeout=approval_timeout)
+                            approval_timeout=approval_timeout,
+                            max_attempts=max_attempts)
 
 
 class StepExecutionTests(ExecutorTestCase):

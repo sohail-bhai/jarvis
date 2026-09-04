@@ -131,6 +131,14 @@ class PolicyRuleRequest(BaseModel):
     reason: str = ""
 
 
+class DelegateRequest(BaseModel):
+    label: str = Field(..., min_length=1, description="What the other agent should do.")
+    capability: str = Field("", description="Capability the work needs.")
+    agent_id: str = Field("", description="A specific agent, if it matters.")
+    after: list[int] | None = Field(
+        None, description="Positions this must wait for. Defaults to the unfinished ones.")
+
+
 class PairRequest(BaseModel):
     code: str = Field(..., min_length=4, description="The pairing code shown on the computer.")
     name: str = Field("", description="What to call this device, e.g. 'Rav's phone'.")
@@ -350,6 +358,25 @@ def create_app(control=None, executor=None, security=None):
             raise HTTPException(status_code=404, detail="No such task.")
         runner.stop(task_id)
         return plane.task_detail(task_id)
+
+    @app.post("/api/tasks/{task_id}/delegate", status_code=201, tags=["tasks"])
+    def delegate_step(task_id: str, request: DelegateRequest):
+        """Hand part of this task to another agent, under the same task."""
+        if plane.get_task(task_id) is None:
+            raise HTTPException(status_code=404, detail="No such task.")
+
+        step = plane.delegate(task_id, request.label, capability=request.capability,
+                              agent_id=request.agent_id, after=request.after)
+        if step is None:
+            raise HTTPException(
+                status_code=409,
+                detail="No agent is available with that capability.")
+        return step.to_dict()
+
+    @app.post("/api/tasks/resume", tags=["tasks"])
+    def resume_interrupted():
+        """Pick up tasks that were running when JARVIS last stopped."""
+        return [task.to_dict() for task in runner.resume_interrupted()]
 
     @app.post("/api/tasks/plan", tags=["tasks"])
     def plan_goal(request: CreateTaskRequest):

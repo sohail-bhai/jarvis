@@ -131,6 +131,12 @@ steps are told what earlier ones produced. The runner is injectable, so the
 coordination logic is testable without a local model and a remote helper can
 be substituted later.
 
+**StepResult** — what a step produced: `ok`, `output`, `artifacts` and
+`error`. Adapters may answer with plain text, which is normalised into one of
+these, so the orchestrator handles one shape whether the work ran here or on
+another machine. An agent that answers `ok: false` is retried like any other
+failure.
+
 **ActivityEvent** — one line of the timeline, in plain English. This is what
 the System Log renders. It records observable actions only, never model
 reasoning.
@@ -258,6 +264,38 @@ emergency stop interrupt a running step rather than waiting for it: the step
 carries a cancel token that the agent loop checks between tool calls, and the
 step is then recorded as stopped part-way.
 
+### When something goes wrong
+
+A failed step is tried again - three attempts by default, backing off between
+them - because most failures here are a busy model or a flaky network rather
+than a wrong plan. Attempts are counted on the step and the retry is announced
+("That didn't work. Trying 'Searching' again."), so a retry is visible rather
+than hidden. Cancellation is never retried.
+
+If a task was still running when the process stopped, nothing marks it failed
+on the way down - the process may have been killed - so it is found on the way
+back up instead:
+
+```python
+executor.resume_interrupted()      # or POST /api/tasks/resume
+```
+
+Finished steps are never redone. The graph already records what was done, so
+resuming starts at the first step that is not finished.
+
+### Handing work to another agent
+
+A step can pass part of its work to an agent better suited to it, without
+starting a second task:
+
+```python
+plane.delegate(task.id, "Extracting the payment date", capability="documents")
+```
+
+The new step joins the same graph, waits for whatever is still unfinished
+unless told otherwise, and runs through its own agent's adapter. One goal keeps
+one timeline, one set of approvals and one summary.
+
 ### Capabilities are enforced, not just brokered
 
 While a step runs, every tool it calls is checked against the catalog. A tool
@@ -347,6 +385,8 @@ carries `fields`, naming what was wrong.
 | `GET` | `/api/tasks` | List tasks. `?active_only=true` hides finished ones. |
 | `POST` | `/api/tasks` | Create a task. Takes `steps` (a sequence), `plan` (a graph), or `autoplan`. |
 | `POST` | `/api/tasks/plan` | Break a goal into steps without running them. |
+| `POST` | `/api/tasks/{id}/delegate` | Hand part of a task to another agent. |
+| `POST` | `/api/tasks/resume` | Pick up tasks interrupted by a restart. |
 | `GET` | `/api/tasks/{id}` | One task with steps, progress and current step. |
 | `POST` | `/api/tasks/{id}/run` | Work the task's steps through the AI brain. Returns `202` as soon as work starts. |
 | `POST` | `/api/tasks/{id}/steps/start` | Mark a step as being worked on. |
@@ -438,12 +478,15 @@ These are known gaps, not oversights:
 - **A running step is interrupted between tool calls, not inside one.** A tool
   that has already started - a long shell command - finishes before the step
   notices it was stopped.
-- **Failure fails the whole task.** There is no per-step retry and no
-  alternative branch yet; that is task recovery work.
+- **A failed step fails the task once its retries are used up.** There is no
+  alternative branch and no replanning around the failure.
+- **Resuming is not automatic.** `POST /api/tasks/resume` or
+  `executor.resume_interrupted()` has to be called on startup; nothing runs it
+  for you yet.
 - **Agents are selected but not marked busy.** Execution does not yet set an
   agent to `working` or release it afterwards.
-- **Checkpoints are stored but not yet replayed.** `save_checkpoint` persists
-  state; automatic recovery onto another helper is not implemented.
+- **A resumed task stays with its own agent.** Recovery restarts the unfinished
+  steps; it does not move them to a different agent.
 - **Permission expiry is checked on read**, not by a background timer. A grant
   stops authorising the moment it lapses, but its stored status only flips to
   `expired` the next time permissions are listed or checked.
@@ -454,12 +497,14 @@ These are known gaps, not oversights:
 python -m unittest discover -s tests
 ```
 
-236 tests cover the task lifecycle, capability matching, permission expiry and
+265 tests cover the task lifecycle, capability matching, permission expiry and
 revocation, the approval flow, emergency stop, step execution, failure and
 cancellation paths, pairing and token authentication, rate limiting, schema
 migrations, the capability catalog, policy precedence, the broker's grant,
 hold and refuse paths, agent registration, heartbeats and staleness, the kill
 switch, the HTTP and native adapters, planning and its fallbacks, the step
 graph and its parallelism, cancellation part-way through a step, capability
-enforcement at the call site, and the HTTP and WebSocket surface. The executor tests use an
+enforcement at the call site, retries and their cap, resuming interrupted work
+without redoing it, delegation between agents, and the HTTP and WebSocket
+surface. The executor tests use an
 injected runner, so none of them need Ollama.

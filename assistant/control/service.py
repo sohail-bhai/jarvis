@@ -399,7 +399,53 @@ class ControlPlane:
         self.record(target.label, EventType.STEP_STARTED, task_id=task_id)
         return target
 
-    def finish_step(self, task_id, position, detail="", failed=False):
+    def delegate(self, task_id, label, capability="", agent_id="", after=None):
+        """Hand part of a task to another agent, under the same task.
+
+        The new step joins the graph rather than starting a second task, so
+        one goal keeps one timeline, one set of approvals and one summary.
+        """
+        task = self.store.get_task(task_id)
+        if task is None:
+            return None
+
+        steps = self.store.list_steps(task_id)
+        position = max((step.position for step in steps), default=-1) + 1
+
+        if not agent_id and capability:
+            helper = self.find_helper_for(capability)
+            if helper is None:
+                self.record(f"Nobody available to {label.lower()}.", EventType.NOTE,
+                            task_id=task_id)
+                return None
+            agent_id = helper.id
+
+        depends_on = ([int(value) for value in after] if after is not None
+                      else [step.position for step in steps if not step.is_finished])
+
+        step = TaskStep(task_id=task_id, position=position, label=label,
+                        depends_on=depends_on, agent_id=agent_id,
+                        capability=capability)
+        self.store.save_step(step)
+
+        helper = self.store.get_helper(agent_id) if agent_id else None
+        self.record(f"Asked {helper.name if helper else 'another agent'} to {label.lower()}.",
+                    EventType.HELPER_SELECTED, task_id=task_id,
+                    metadata={"agent_id": agent_id, "position": position})
+        return step
+
+    def record_attempt(self, task_id, position):
+        """Count one try at a step, so retries are visible rather than hidden."""
+        steps = self.store.list_steps(task_id)
+        target = next((step for step in steps if step.position == position), None)
+        if target is None:
+            return None
+        target.attempts += 1
+        self.store.save_step(target)
+        return target
+
+    def finish_step(self, task_id, position, detail="", failed=False,
+                    artifacts=None):
         steps = self.store.list_steps(task_id)
         target = next((step for step in steps if step.position == position), None)
         if target is None:
@@ -407,6 +453,8 @@ class ControlPlane:
 
         target.status = StepStatus.FAILED if failed else StepStatus.DONE
         target.detail = detail
+        if artifacts:
+            target.artifacts = list(artifacts)
         self.store.save_step(target)
 
         self.record(detail or f"Finished: {target.label}",
@@ -451,6 +499,15 @@ class ControlPlane:
         self._release_task_permissions(task_id, "the task was stopped")
         self.record(reason, EventType.TASK_CANCELLED, task_id=task_id)
         return task
+
+    def interrupted_tasks(self):
+        """Tasks that were still running when the process last stopped.
+
+        Nothing marks these as failed on the way down - the process may have
+        been killed - so they are found on the way back up instead.
+        """
+        return [task for task in self.store.list_tasks(limit=500, active_only=True)
+                if task.status in (TaskStatus.RUNNING, TaskStatus.PENDING)]
 
     def save_checkpoint(self, task_id, checkpoint):
         """Persist enough state to resume this task after an interruption."""

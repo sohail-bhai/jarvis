@@ -281,7 +281,8 @@ class AdapterTests(unittest.TestCase):
 
         result = adapter.run_step("Search the web", context="none", agent=agent)
 
-        self.assertEqual("Found 3 results.", result)
+        self.assertEqual("Found 3 results.", result.output)
+        self.assertTrue(result.ok)
         self.assertEqual("http://localhost:9000/run", sent["url"])
         self.assertEqual("Search the web", sent["payload"]["instruction"])
 
@@ -348,7 +349,7 @@ class ExecutorHealthTests(AgentTestCase):
         def runner(instruction, context):
             raise RuntimeError("no model")
 
-        TaskExecutor(plane=self.plane, runner=runner).run(task.id)
+        TaskExecutor(plane=self.plane, runner=runner, max_attempts=1).run(task.id)
 
         self.assertEqual(1, self.plane.get_helper(agent.id).error_count)
 

@@ -169,6 +169,10 @@ MIGRATIONS = [
         ("task_steps", "agent_id", "ALTER TABLE task_steps ADD COLUMN agent_id TEXT"),
         ("task_steps", "capability", "ALTER TABLE task_steps ADD COLUMN capability TEXT"),
     ]),
+    ("0009_step_attempts", [
+        ("task_steps", "attempts", "ALTER TABLE task_steps ADD COLUMN attempts INTEGER DEFAULT 0"),
+        ("task_steps", "artifacts", "ALTER TABLE task_steps ADD COLUMN artifacts TEXT"),
+    ]),
 ]
 
 DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "control.db"
@@ -351,14 +355,17 @@ class ControlStore:
     def save_step(self, step):
         self._write(
             "INSERT INTO task_steps (id, task_id, position, label, status, detail, "
-            "depends_on, agent_id, capability) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "depends_on, agent_id, capability, attempts, artifacts) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(id) DO UPDATE SET label=excluded.label, "
             "status=excluded.status, detail=excluded.detail, "
             "depends_on=excluded.depends_on, agent_id=excluded.agent_id, "
-            "capability=excluded.capability",
+            "capability=excluded.capability, attempts=excluded.attempts, "
+            "artifacts=excluded.artifacts",
             (step.id, step.task_id, step.position, step.label,
              step.status.value, step.detail, dumps(step.depends_on),
-             step.agent_id, step.capability),
+             step.agent_id, step.capability, step.attempts,
+             dumps(step.artifacts)),
         )
         return step
 
@@ -542,7 +549,9 @@ def _to_step(row):
                     detail=row["detail"] or "",
                     depends_on=loads(row["depends_on"] if "depends_on" in keys else None, []),
                     agent_id=(row["agent_id"] or "") if "agent_id" in keys else "",
-                    capability=(row["capability"] or "") if "capability" in keys else "")
+                    capability=(row["capability"] or "") if "capability" in keys else "",
+                    attempts=(row["attempts"] or 0) if "attempts" in keys else 0,
+                    artifacts=loads(row["artifacts"] if "artifacts" in keys else None, []))
 
 
 def _to_permission(row):

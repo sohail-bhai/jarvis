@@ -91,6 +91,7 @@ class OrchestratorTestCase(unittest.TestCase):
         return run
 
     def executor(self, runner=None, **kwargs):
+        kwargs.setdefault("max_attempts", 1)
         return TaskExecutor(plane=self.plane, runner=runner or self.runner(),
                             approval_timeout=5, **kwargs)
 

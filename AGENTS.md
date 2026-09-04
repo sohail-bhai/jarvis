@@ -234,13 +234,15 @@ Known limits in Version 1.2:
   command already running finishes first.
 - A new tool must be added to `TOOL_CAPABILITIES` in `capabilities.py`, or it
   is treated as needing no capability.
-- Failure fails the whole task: no per-step retry yet.
+- A step is retried three times by default; after that the task fails.
+- Resuming after a restart is not automatic: call `POST /api/tasks/resume` or
+  `executor.resume_interrupted()`.
 - Agent and device health is swept on read, not by a background timer, and
   agents have no credential of their own - they call through a paired device.
 
 Likely future work:
 
-- Add per-step retry and checkpoint replay so an interrupted task resumes.
+- Resume interrupted tasks automatically on startup instead of on request.
 - Give `system_tasks.py` real cross-platform implementations.
 - Add token expiry and rotation to the API.
 - Make command routing more structured to reduce accidental matches.

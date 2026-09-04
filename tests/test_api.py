@@ -511,5 +511,49 @@ class _FixedPlanner:
         return list(self.steps)
 
 
+class RecoveryTests(ApiTestCase):
+    def test_a_step_can_be_delegated_to_another_agent(self):
+        self.client.post("/api/agents", json={"name": "Document agent",
+                                              "capabilities": ["documents"]})
+        created = self.client.post("/api/tasks", json={"goal": "Read the report",
+                                                       "steps": ["Finding it"]}).json()
+
+        step = self.client.post(f"/api/tasks/{created['id']}/delegate",
+                                json={"label": "Extracting the date",
+                                      "capability": "documents"}).json()
+
+        self.assertEqual("Extracting the date", step["label"])
+        self.assertEqual([0], step["depends_on"])
+
+    def test_delegating_with_nobody_available_is_refused(self):
+        created = self.client.post("/api/tasks", json={"goal": "Read the report",
+                                                       "steps": ["Finding it"]}).json()
+
+        response = self.client.post(f"/api/tasks/{created['id']}/delegate",
+                                    json={"label": "Extracting the date",
+                                          "capability": "documents"})
+
+        self.assertEqual(409, response.status_code)
+
+    def test_delegating_on_an_unknown_task_is_a_404(self):
+        response = self.client.post("/api/tasks/nope/delegate",
+                                    json={"label": "Something"})
+
+        self.assertEqual(404, response.status_code)
+
+    def test_interrupted_tasks_can_be_picked_back_up(self):
+        created = self.client.post("/api/tasks", json={"goal": "Two parts",
+                                                       "steps": ["First", "Second"]}).json()
+        self.client.post(f"/api/tasks/{created['id']}/steps/start", json={"position": 0})
+        self.client.post(f"/api/tasks/{created['id']}/steps/finish",
+                         json={"position": 0, "detail": "Already done."})
+
+        resumed = self.client.post("/api/tasks/resume").json()
+        self.executor.wait(created["id"], timeout=5)
+
+        self.assertEqual([created["id"]], [task["id"] for task in resumed])
+        self.assertEqual(["Second"], self.executed)
+
+
 if __name__ == "__main__":
     unittest.main()

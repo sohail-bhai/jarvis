@@ -13,6 +13,8 @@ import logging
 import urllib.error
 import urllib.request
 
+from assistant.control.models import StepResult
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 180
@@ -78,10 +80,18 @@ class HttpAdapter:
 
         if not isinstance(response, dict):
             raise AgentUnavailable("The agent replied with something unreadable.")
-        if response.get("error"):
+        if response.get("error") and response.get("ok") is not False:
+            # An error with no `ok: false` means the call itself failed.
             raise AgentUnavailable(str(response["error"]))
 
-        return str(response.get("output", "")).strip() or "Done."
+        # A remote agent may answer with artifacts, or say it could not do the
+        # work; both come back as a StepResult rather than bare text.
+        return StepResult.of({
+            "ok": response.get("ok", True),
+            "output": response.get("output", ""),
+            "artifacts": response.get("artifacts", []),
+            "error": response.get("error", ""),
+        })
 
 
 def _post_json(url, payload, timeout):

@@ -17,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from assistant.control.adapters import AdapterRegistry, NativeAdapter
 from assistant.control.capabilities import capability_for_tool
-from assistant.control.models import StepStatus, TaskStatus
+from assistant.control.models import StepResult, StepStatus, TaskStatus
 from assistant.control.planner import Planner
 from assistant.control.service import get_control_plane
 
@@ -35,6 +35,11 @@ MAX_CONTEXT_CHARS = 2000
 # How many independent steps may run at once. Small on purpose: these steps
 # drive one computer, and a local model is the bottleneck anyway.
 MAX_PARALLEL_STEPS = 3
+
+# A step that fails is tried again: most failures here are a busy model or a
+# flaky network, not a wrong plan.
+MAX_ATTEMPTS = 3
+RETRY_BACKOFF_SECONDS = 0.5
 
 
 class Cancelled(Exception):
@@ -67,13 +72,16 @@ class TaskExecutor:
 
     def __init__(self, plane=None, runner=None,
                  approval_timeout=DEFAULT_APPROVAL_TIMEOUT, adapters=None,
-                 planner=None, max_parallel=MAX_PARALLEL_STEPS):
+                 planner=None, max_parallel=MAX_PARALLEL_STEPS,
+                 max_attempts=MAX_ATTEMPTS, backoff=RETRY_BACKOFF_SECONDS):
         self.plane = plane or get_control_plane()
         self._runner = runner
         self.adapters = adapters or AdapterRegistry(
             default=NativeAdapter(runner=runner))
         self.planner = planner or Planner()
         self.max_parallel = max(1, max_parallel)
+        self.max_attempts = max(1, max_attempts)
+        self.backoff = backoff
         self.approval_timeout = approval_timeout
         self._threads = {}
         self._tokens = {}
@@ -111,6 +119,23 @@ class TaskExecutor:
         task = self.plane.create_task(goal, steps=steps, capability=capability)
         self.submit(task.id)
         return task
+
+    def resume_interrupted(self):
+        """Pick up tasks that were running when the process last stopped.
+
+        Finished steps are never redone: the graph already records what was
+        done, so resuming starts at the first step that is not.
+        """
+        resumed = []
+        for task in self.plane.interrupted_tasks():
+            steps = self.plane.store.list_steps(task.id)
+            if not steps or all(step.is_finished for step in steps):
+                continue
+            self.plane.record("Picking this back up where it stopped.",
+                              task_id=task.id)
+            self.submit(task.id)
+            resumed.append(task)
+        return resumed
 
     def stop(self, task_id, reason="You stopped this."):
         """Stop a running task now, without waiting for the current step."""
@@ -209,7 +234,9 @@ class TaskExecutor:
                     done.add(step.position)
                     outcomes.append((step.label, outcome))
 
-                remaining = [step for step in remaining if step.position not in done]
+                # Re-read the graph: a step may have delegated work into it.
+                remaining = [step for step in self.plane.store.list_steps(task_id)
+                             if not step.is_finished and step.position not in done]
                 self.plane.save_checkpoint(task_id, {
                     "completed": sorted(done),
                     "outcomes": [{"step": label, "outcome": text}
@@ -219,29 +246,58 @@ class TaskExecutor:
         return self.plane.complete_task(task_id, outcomes[-1][1] if outcomes else "Done.")
 
     def _run_step(self, task_id, step, outcomes, token):
-        """Run one step. Returns (ok, outcome) rather than raising into a pool."""
+        """Run one step, retrying a failure. Returns (ok, outcome or error).
+
+        Exceptions are returned rather than raised so one failing step cannot
+        take the thread pool, or the rest of the task's bookkeeping, with it.
+        """
         agent = self._agent_for(task_id, step)
         self.plane.start_step(task_id, step.position)
-        started = time.monotonic()
+        last_error = None
 
-        try:
-            token.check()
-            outcome = self._call_runner(step.label, self._context(outcomes),
-                                        agent=agent, token=token, task_id=task_id)
-        except Cancelled as stopped:
-            self.plane.finish_step(task_id, step.position,
-                                   detail="Stopped part-way.", failed=True)
-            return False, stopped
-        except Exception as error:
-            logger.exception("Step %s of task %s failed", step.position, task_id)
-            self._report_health(agent, started, ok=False)
-            self.plane.finish_step(task_id, step.position,
-                                   detail=f"Couldn't do this: {error}", failed=True)
-            return False, error
+        for attempt in range(1, self.max_attempts + 1):
+            started = time.monotonic()
+            self.plane.record_attempt(task_id, step.position)
 
-        self._report_health(agent, started, ok=True)
-        self.plane.finish_step(task_id, step.position, detail=outcome)
-        return True, outcome
+            try:
+                token.check()
+                result = StepResult.of(self._call_runner(
+                    step.label, self._context(outcomes), agent=agent,
+                    token=token, task_id=task_id))
+            except Cancelled as stopped:
+                self.plane.finish_step(task_id, step.position,
+                                       detail="Stopped part-way.", failed=True)
+                return False, stopped
+            except Exception as error:
+                logger.warning("Step %s of task %s failed on attempt %s: %s",
+                               step.position, task_id, attempt, error)
+                self._report_health(agent, started, ok=False)
+                last_error = error
+                if attempt < self.max_attempts and not token.cancelled:
+                    self.plane.record(
+                        f"That didn't work. Trying '{step.label}' again.",
+                        task_id=task_id)
+                    time.sleep(self.backoff * (2 ** (attempt - 1)))
+                    continue
+                break
+
+            if not result.ok:
+                # The agent answered, but said it could not do the work.
+                last_error = RuntimeError(result.error or "The agent could not do this.")
+                self._report_health(agent, started, ok=False)
+                if attempt < self.max_attempts and not token.cancelled:
+                    time.sleep(self.backoff * (2 ** (attempt - 1)))
+                    continue
+                break
+
+            self._report_health(agent, started, ok=True)
+            self.plane.finish_step(task_id, step.position, detail=result.output,
+                                   artifacts=result.artifacts)
+            return True, result.output
+
+        self.plane.finish_step(task_id, step.position,
+                               detail=f"Couldn't do this: {last_error}", failed=True)
+        return False, last_error
 
     def _agent_for(self, task_id, step):
         """The agent that should do this step: the step's own, or the task's."""

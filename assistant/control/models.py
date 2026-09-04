@@ -254,10 +254,41 @@ class TaskStep:
     depends_on: list = field(default_factory=list)   # positions, not ids
     agent_id: str = ""              # who should do it, when it matters
     capability: str = ""            # what access it needs, if any
+    attempts: int = 0               # how many times this has been tried
+    artifacts: list = field(default_factory=list)    # files or links it produced
 
     @property
     def is_finished(self):
         return self.status in (StepStatus.DONE, StepStatus.SKIPPED)
+
+    def to_dict(self):
+        return _serialise(self)
+
+
+@dataclass
+class StepResult:
+    """What a step produced.
+
+    Adapters may answer with plain text, which is normalised into one of
+    these, so the orchestrator has one shape to handle whether the work ran in
+    this process or on another machine.
+    """
+    ok: bool = True
+    output: str = ""
+    artifacts: list = field(default_factory=list)     # paths, URLs, ids
+    error: str = ""
+
+    @classmethod
+    def of(cls, value):
+        """Accept a StepResult, a dict, or plain text from any adapter."""
+        if isinstance(value, cls):
+            return value
+        if isinstance(value, dict):
+            return cls(ok=bool(value.get("ok", True)),
+                       output=str(value.get("output", "")),
+                       artifacts=list(value.get("artifacts", []) or []),
+                       error=str(value.get("error", "")))
+        return cls(output=str(value or "").strip() or "Done.")
 
     def to_dict(self):
         return _serialise(self)
