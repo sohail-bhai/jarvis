@@ -1,68 +1,79 @@
-"""Shared design tokens for the JARVIS desktop UI.
-
-The palette is deliberately light, calm and neutral. Colour is used to carry
-meaning (success, attention, destructive) rather than for decoration, so the
-app reads like a productivity tool instead of a control panel.
-
-Token names are kept stable so widgets can be restyled from one place.
 """
+Theme definitions for the JARVIS Desktop UI.
+Designed to feel like a calm, modern, minimal personal assistant.
+"""
+import sys
 
-import platform
+# Overall Appearance
+APPEARANCE_MODE = "light"
+DEFAULT_COLOR_THEME = "blue"
 
-# Surfaces ------------------------------------------------------------------
-BACKGROUND = "#F6F7F9"      # app canvas
-SURFACE = "#FFFFFF"         # cards and panels
-SURFACE_ALT = "#F1F3F6"     # insets, hovered rows, input wells
-BORDER = "#E4E7EC"          # hairline separators
-BORDER_STRONG = "#D3D8E0"   # emphasised separators
+# Primary Surfaces
+MAIN_BG = "#F3F4F8"
+CARD_BG = "#FFFFFF"
+CARD_BORDER = "#E5E7EB"
+CARD_HOVER = "#F9FAFB"
 
-# Text ----------------------------------------------------------------------
-TEXT = "#1F2430"            # primary charcoal
-TEXT_MUTED = "#6B7280"      # secondary
-TEXT_FAINT = "#9AA1AC"      # timestamps, meta
+# Dark Sidebar Surfaces (matching reference image)
+SIDEBAR_BG = "#161922"
+SIDEBAR_HOVER = "#232836"
+SIDEBAR_ACTIVE = "#2C3244"
+SIDEBAR_BORDER = "#252B3B"
+SIDEBAR_TEXT = "#F9FAFB"
+SIDEBAR_TEXT_MUTED = "#9CA3AF"
 
-# Meaning -------------------------------------------------------------------
-ACCENT = "#4F5BD5"          # restrained indigo
-ACCENT_HOVER = "#4450C0"
-ACCENT_SOFT = "#ECEEFB"     # tinted background for selected nav
-SUCCESS = "#3E8E5A"
-SUCCESS_SOFT = "#EAF3ED"
-WARNING = "#B07813"
-WARNING_SOFT = "#FBF3E4"
-ERROR = "#C0483F"           # destructive only
-ERROR_SOFT = "#FAECEB"
+# Text Colors
+TEXT_PRIMARY = "#111827"      # Deep charcoal
+TEXT_SECONDARY = "#4B5563"    # Balanced gray
+TEXT_MUTED = "#9CA3AF"        # Soft muted gray
+TEXT_LIGHT = "#FFFFFF"
 
-# Legacy alias: older widgets referenced a muted accent for button fills.
-ACCENT_MUTED = ACCENT_SOFT
+# Restrained Accents & Semantics
+ACCENT = "#4F46E5"            # Indigo
+ACCENT_HOVER = "#4338CA"
+ACCENT_LIGHT = "#EEF2FF"
+ACCENT_BORDER = "#C7D2FE"
 
-# Geometry ------------------------------------------------------------------
-RADIUS_SM = 10
-RADIUS = 14
-RADIUS_LG = 16
+SUCCESS = "#10B981"           # Emerald green
+SUCCESS_HOVER = "#059669"
+SUCCESS_LIGHT = "#ECFDF5"
+SUCCESS_BORDER = "#A7F3D0"
 
-PAD_XS = 4
-PAD_SM = 8
-PAD = 16
-PAD_LG = 24
+WARNING = "#F59E0B"           # Amber
+WARNING_HOVER = "#D97706"
+WARNING_LIGHT = "#FFFBEB"
+WARNING_BORDER = "#FDE68A"
 
+DANGER = "#EF4444"            # Rose / Red
+DANGER_HOVER = "#DC2626"
+DANGER_LIGHT = "#FEF2F2"
+DANGER_BORDER = "#FECACA"
 
-def _default_font_family():
-    """Pick a clean system sans-serif that actually exists on this platform."""
-    system = platform.system()
-    if system == "Windows":
-        return "Segoe UI"
-    if system == "Darwin":
-        return "Helvetica Neue"
-    return "DejaVu Sans"
+INFO = "#3B82F6"              # Sky / Blue
+INFO_LIGHT = "#EFF6FF"
+INFO_BORDER = "#BFDBFE"
 
+PURPLE = "#8B5CF6"
+PURPLE_LIGHT = "#FAF5FF"
+PURPLE_BORDER = "#DDD6FE"
 
-FONT_FAMILY = _default_font_family()
+# Platform-tuned typography
+if sys.platform == "darwin":
+    FONT_FAMILY = "SF Pro Display"
+elif sys.platform == "win32":
+    FONT_FAMILY = "Segoe UI"
+else:
+    FONT_FAMILY = "DejaVu Sans"
+
+FALLBACK_FONT = "Helvetica"
 
 
 def configure_theme(ctk):
+    """Sets CustomTkinter appearance mode."""
     ctk.set_appearance_mode("light")
     ctk.set_default_color_theme("blue")
 
 
 def font(size=14, weight="normal"):
+    """Convenience font helper."""
     return (FONT_FAMILY, size, weight)

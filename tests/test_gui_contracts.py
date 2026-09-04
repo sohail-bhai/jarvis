@@ -78,7 +78,7 @@ class RedactionTests(unittest.TestCase):
     """The System Log must never render a credential."""
 
     def test_secrets_are_removed(self):
-        from gui.widgets.system_log import redact
+        from gui.redaction import redact
 
         secrets = [
             "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig12345678",
@@ -91,7 +91,7 @@ class RedactionTests(unittest.TestCase):
                 self.assertNotIn(secret, redact(secret))
 
     def test_ordinary_messages_are_untouched(self):
-        from gui.widgets.system_log import redact
+        from gui.redaction import redact
 
         message = "Found 3 matching documents"
         self.assertEqual(message, redact(message))

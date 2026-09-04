@@ -3,11 +3,20 @@ logger = logging.getLogger(__name__)
 
 import os
 import datetime
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
+try:
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+    from google_auth_oauthlib.flow import InstalledAppFlow
+    from googleapiclient.discovery import build
+    from googleapiclient.errors import HttpError
+    GOOGLE_CALENDAR_AVAILABLE = True
+except ImportError:
+    GOOGLE_CALENDAR_AVAILABLE = False
+    Request = None
+    Credentials = None
+    InstalledAppFlow = None
+    build = None
+    HttpError = Exception
 from assistant.speech import speak
 
 # If modifying these scopes, delete the file token.json.

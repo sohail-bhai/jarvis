@@ -1,5 +1,9 @@
 import time
 import threading
+try:
+    import uiautomation as auto
+except (ImportError, Exception):
+    auto = None
 import logging
 
 from assistant.config import get_setting
@@ -50,10 +54,9 @@ class OverwatchEngine:
             self._bus.emit(events.EVENT_OVERWATCH_STATE, "Overwatch stopped.")
             
     def _run_loop(self):
-        import uiautomation as auto
-
-        auto.UIAutomationInitializerInThread()
-
+        if auto:
+            auto.UIAutomationInitializerInThread()
+        
         while self._active:
             try:
                 elements = scan_windows(max_z_order=get_setting("overwatch", {}).get("max_z_order", 3))
@@ -71,7 +74,8 @@ class OverwatchEngine:
                 
             time.sleep(get_setting("overwatch", {}).get("scan_interval", 1.0))
             
-        auto.UIAutomationUninitializerInThread()
+        if auto:
+            auto.UIAutomationUninitializerInThread()
         
     def _handle_match(self, element, rule):
         rid = tuple(element["runtime_id"])
