@@ -267,17 +267,22 @@ def open_app(app_name):
                     cmd = f"start {cmd}"
                 os.system(cmd)
 
-                # Wait for the launched window to appear and bring it to foreground
+                # Wait for the launched window AND its document control to be fully ready
                 if target_cls:
-                    for _ in range(30):
+                    for _ in range(80):  # up to 8 seconds total
                         time.sleep(0.1)
                         try:
                             new_win = auto.WindowControl(searchDepth=1, ClassName=target_cls)
-                            if new_win.Exists(0.1):
-                                new_win.SetActive()
-                                if new_win.NativeWindowHandle:
-                                    activate_window(new_win.NativeWindowHandle)
-                                break
+                            if not new_win.Exists(0.1):
+                                continue
+                            # Bring window to foreground
+                            new_win.SetActive()
+                            if new_win.NativeWindowHandle:
+                                activate_window(new_win.NativeWindowHandle)
+                            # Wait until DocumentControl inside is also ready
+                            doc = new_win.DocumentControl(ClassName="RichEditD2DPT")
+                            if doc.Exists(0.1):
+                                break  # App is fully ready
                         except Exception:
                             pass
                 return True
