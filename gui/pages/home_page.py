@@ -149,7 +149,7 @@ class HomePage(ctk.CTkFrame):
 
         ctk.CTkLabel(
             row,
-            text="?",
+            text="✦",
             font=theme.font(16, "bold"),
             text_color=theme.TEXT_MUTED,
         ).pack(side="left", padx=(4, 10))
@@ -185,7 +185,7 @@ class HomePage(ctk.CTkFrame):
         else:
             mic_btn = ctk.CTkButton(
                 row,
-                text="??",
+                text="🎙",
                 font=theme.font(16),
                 width=36,
                 height=36,
@@ -199,7 +199,7 @@ class HomePage(ctk.CTkFrame):
 
         arrow_btn = ctk.CTkButton(
             row,
-            text="?",
+            text="↑",
             font=theme.font(18, "bold"),
             width=36,
             height=36,
