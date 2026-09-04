@@ -1142,6 +1142,7 @@ def get_system_prompt():
         "`auth_secret` (for example 'github_token') and JARVIS resolves it; you "
         "never see or send the value itself. If the credential is missing, say "
         "which one to store rather than trying the browser instead.\n\n"
+        "GOOGLE WORKSPACE: If the user asks you to create a Google Doc, Google Calendar event, or draft an email, you MUST use the provided workspace tools (`create_google_doc`, `create_google_calendar_event`, `draft_gmail_message`). NEVER pretend you did it. NEVER output a fake URL. You must emit the JSON tool call.\n\n"
 
         "SIGNING IN: you never type a password and never read one. If a page "
         "asks for a sign-in, call `browser_wait_for_login` and let the user do "
