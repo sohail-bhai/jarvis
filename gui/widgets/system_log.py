@@ -30,9 +30,9 @@ class SystemLogPanel(ctk.CTkFrame):
 
         title = ctk.CTkLabel(
             header,
-            text="System Log",
-            font=theme.font(15, "bold"),
-            text_color=theme.TEXT_PRIMARY,
+            text="SYSTEM LOG",
+            font=theme.label_font(),
+            text_color=theme.TEXT_MUTED,
         )
         title.pack(side="left")
 
@@ -74,47 +74,48 @@ class SystemLogPanel(ctk.CTkFrame):
         logs = store.system_logs
         for item in logs:
             row = ctk.CTkFrame(self.scroll_area, fg_color="transparent")
-            row.pack(fill="x", pady=6)
+            row.pack(fill="x", pady=(0, 2))
 
-            # Time column
-            time_lbl = ctk.CTkLabel(
-                row,
-                text=item.get("time", ""),
-                font=theme.font(10),
-                text_color=theme.TEXT_MUTED,
-                width=48,
-                anchor="w",
-            )
-            time_lbl.pack(side="left", anchor="n", pady=2)
-
-            # Dot indicator
             status = item.get("status", "working")
             if status == "completed":
                 dot_color = theme.SUCCESS
-            elif status == "waiting" or status == "approval":
+            elif status in ("waiting", "approval"):
                 dot_color = theme.WARNING
+            elif status == "failed":
+                dot_color = theme.DANGER
             elif status == "info":
                 dot_color = theme.TEXT_MUTED
             else:
-                dot_color = theme.INFO
+                dot_color = theme.ACCENT
 
-            dot_lbl = ctk.CTkLabel(
-                row,
-                text="●",
-                font=theme.font(10, "bold"),
+            rail = ctk.CTkFrame(row, fg_color="transparent", width=18)
+            rail.pack(side="left", fill="y")
+            rail.pack_propagate(False)
+
+            ctk.CTkLabel(
+                rail,
+                text="\u25cf",
+                font=theme.font(9, "bold"),
                 text_color=dot_color,
-                width=16,
-            )
-            dot_lbl.pack(side="left", anchor="n", pady=1)
+            ).pack(anchor="n", pady=(4, 0))
 
-            # Description text
-            desc_lbl = ctk.CTkLabel(
-                row,
+            body = ctk.CTkFrame(row, fg_color="transparent")
+            body.pack(side="left", fill="x", expand=True)
+
+            ctk.CTkLabel(
+                body,
+                text=item.get("time", ""),
+                font=theme.font(9),
+                text_color=theme.TEXT_MUTED,
+                anchor="w",
+            ).pack(fill="x")
+
+            ctk.CTkLabel(
+                body,
                 text=item.get("text", ""),
-                font=theme.font(11),
+                font=theme.font(theme.SIZE_SMALL),
                 text_color=theme.TEXT_PRIMARY,
-                wraplength=170,
+                wraplength=200,
                 justify="left",
                 anchor="w",
-            )
-            desc_lbl.pack(side="left", fill="x", expand=True, padx=(4, 0))
+            ).pack(fill="x", pady=(1, 8))

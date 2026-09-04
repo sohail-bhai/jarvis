@@ -44,7 +44,7 @@ class TopBar(ctk.CTkFrame):
             font=theme.font(12, "bold"),
             text_color=theme.TEXT_SECONDARY,
             fg_color=theme.CARD_HOVER,
-            corner_radius=14,
+            corner_radius=theme.RADIUS_CARD,
             width=28,
             height=28,
         )

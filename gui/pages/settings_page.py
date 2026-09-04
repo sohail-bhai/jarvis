@@ -62,7 +62,7 @@ class SettingsPage(ctk.CTkScrollableFrame):
                 text_color="#FFFFFF" if sec_name == "General" else theme.TEXT_SECONDARY,
                 border_width=0 if sec_name == "General" else 1,
                 border_color=theme.CARD_BORDER,
-                corner_radius=12,
+                corner_radius=theme.RADIUS_CARD,
                 height=28,
                 command=lambda name=sec_name: self._switch_section(name),
             )
@@ -110,7 +110,7 @@ class SettingsPage(ctk.CTkScrollableFrame):
             self._render_helpers()
 
     def _render_general(self):
-        card = ctk.CTkFrame(self.content_container, fg_color=theme.CARD_BG, corner_radius=14, border_width=1, border_color=theme.CARD_BORDER)
+        card = ctk.CTkFrame(self.content_container, fg_color=theme.CARD_BG, corner_radius=theme.RADIUS_CARD, border_width=1, border_color=theme.CARD_BORDER)
         card.pack(fill="x", pady=4)
 
         ctk.CTkLabel(card, text="General Preferences", font=theme.font(14, "bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=16, pady=(14, 12))
@@ -150,7 +150,7 @@ class SettingsPage(ctk.CTkScrollableFrame):
 
     def _render_security(self):
         # 1. Protection Overview Card
-        overview = ctk.CTkFrame(self.content_container, fg_color=theme.SUCCESS_LIGHT, border_width=1, border_color=theme.SUCCESS_BORDER, corner_radius=14)
+        overview = ctk.CTkFrame(self.content_container, fg_color=theme.SUCCESS_LIGHT, border_width=1, border_color=theme.SUCCESS_BORDER, corner_radius=theme.RADIUS_CARD)
         overview.pack(fill="x", pady=4)
 
         inner = ctk.CTkFrame(overview, fg_color="transparent")
@@ -168,12 +168,12 @@ class SettingsPage(ctk.CTkScrollableFrame):
             ctk.CTkLabel(col, text=label, font=theme.font(10), text_color=theme.TEXT_MUTED, anchor="w").pack(anchor="w")
 
         # 2. Temporary Permissions Card
-        perm_card = ctk.CTkFrame(self.content_container, fg_color=theme.CARD_BG, corner_radius=14, border_width=1, border_color=theme.CARD_BORDER)
+        perm_card = ctk.CTkFrame(self.content_container, fg_color=theme.CARD_BG, corner_radius=theme.RADIUS_CARD, border_width=1, border_color=theme.CARD_BORDER)
         perm_card.pack(fill="x", pady=12)
 
         ctk.CTkLabel(perm_card, text="Temporary Access", font=theme.font(13, "bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=16, pady=(14, 6))
 
-        p_row = ctk.CTkFrame(perm_card, fg_color=theme.MAIN_BG, corner_radius=10)
+        p_row = ctk.CTkFrame(perm_card, fg_color=theme.MAIN_BG, corner_radius=theme.RADIUS_CONTROL)
         p_row.pack(fill="x", padx=14, pady=(4, 14))
         p_inner = ctk.CTkFrame(p_row, fg_color="transparent")
         p_inner.pack(fill="x", padx=12, pady=10)
@@ -192,12 +192,12 @@ class SettingsPage(ctk.CTkScrollableFrame):
             text_color=theme.DANGER,
             border_width=1,
             border_color=theme.CARD_BORDER,
-            corner_radius=8,
+            corner_radius=theme.RADIUS_CONTROL,
             command=lambda: store.add_system_log("Removed temporary project access", "completed"),
         ).pack(side="right")
 
         # 3. Emergency Stop Card
-        stop_card = ctk.CTkFrame(self.content_container, fg_color=theme.CARD_BG, corner_radius=14, border_width=1, border_color=theme.DANGER_BORDER)
+        stop_card = ctk.CTkFrame(self.content_container, fg_color=theme.CARD_BG, corner_radius=theme.RADIUS_CARD, border_width=1, border_color=theme.DANGER_BORDER)
         stop_card.pack(fill="x", pady=4)
 
         stop_inner = ctk.CTkFrame(stop_card, fg_color="transparent")
@@ -219,7 +219,7 @@ class SettingsPage(ctk.CTkScrollableFrame):
             fg_color=theme.DANGER,
             hover_color=theme.DANGER_HOVER,
             text_color="#FFFFFF",
-            corner_radius=8,
+            corner_radius=theme.RADIUS_CONTROL,
             height=34,
             command=self._confirm_emergency_stop,
         ).pack(anchor="w")
@@ -257,7 +257,7 @@ class SettingsPage(ctk.CTkScrollableFrame):
             fg_color=theme.MAIN_BG,
             text_color=theme.TEXT_PRIMARY,
             hover_color=theme.CARD_BORDER,
-            corner_radius=8,
+            corner_radius=theme.RADIUS_CONTROL,
             command=modal.destroy,
         ).pack(side="left", expand=True, fill="x", padx=(0, 6))
 
@@ -272,19 +272,19 @@ class SettingsPage(ctk.CTkScrollableFrame):
             fg_color=theme.DANGER,
             hover_color=theme.DANGER_HOVER,
             text_color="#FFFFFF",
-            corner_radius=8,
+            corner_radius=theme.RADIUS_CONTROL,
             command=_do_stop,
         ).pack(side="left", expand=True, fill="x", padx=(6, 0))
 
     def _render_memory(self):
-        card = ctk.CTkFrame(self.content_container, fg_color=theme.CARD_BG, corner_radius=14, border_width=1, border_color=theme.CARD_BORDER)
+        card = ctk.CTkFrame(self.content_container, fg_color=theme.CARD_BG, corner_radius=theme.RADIUS_CARD, border_width=1, border_color=theme.CARD_BORDER)
         card.pack(fill="x", pady=4)
 
         ctk.CTkLabel(card, text="What VAVE Remembers", font=theme.font(14, "bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=16, pady=(14, 4))
         ctk.CTkLabel(card, text="VAVE learns your preferences so you don't have to repeat yourself.", font=theme.font(11), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=16, pady=(0, 12))
 
         for mem in store.memories:
-            row = ctk.CTkFrame(card, fg_color=theme.MAIN_BG, corner_radius=10)
+            row = ctk.CTkFrame(card, fg_color=theme.MAIN_BG, corner_radius=theme.RADIUS_CONTROL)
             row.pack(fill="x", padx=14, pady=4)
 
             inner = ctk.CTkFrame(row, fg_color="transparent")
@@ -305,7 +305,7 @@ class SettingsPage(ctk.CTkScrollableFrame):
                 text_color=theme.TEXT_MUTED,
                 border_width=1,
                 border_color=theme.CARD_BORDER,
-                corner_radius=8,
+                corner_radius=theme.RADIUS_CONTROL,
                 width=80,
                 height=26,
                 command=lambda mid=mem["id"]: (store.forget_memory(mid), self._render_content()),
@@ -314,7 +314,7 @@ class SettingsPage(ctk.CTkScrollableFrame):
         ctk.CTkFrame(card, height=10, fg_color="transparent").pack()
 
     def _render_services(self):
-        card = ctk.CTkFrame(self.content_container, fg_color=theme.CARD_BG, corner_radius=14, border_width=1, border_color=theme.CARD_BORDER)
+        card = ctk.CTkFrame(self.content_container, fg_color=theme.CARD_BG, corner_radius=theme.RADIUS_CARD, border_width=1, border_color=theme.CARD_BORDER)
         card.pack(fill="x", pady=4)
 
         ctk.CTkLabel(card, text="Connected Services", font=theme.font(14, "bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=16, pady=(14, 4))
@@ -341,7 +341,7 @@ class SettingsPage(ctk.CTkScrollableFrame):
         ]
 
         for title, desc, st, col in services:
-            row = ctk.CTkFrame(card, fg_color=theme.MAIN_BG, corner_radius=10)
+            row = ctk.CTkFrame(card, fg_color=theme.MAIN_BG, corner_radius=theme.RADIUS_CONTROL)
             row.pack(fill="x", padx=14, pady=4)
 
             inner = ctk.CTkFrame(row, fg_color="transparent")
@@ -358,14 +358,14 @@ class SettingsPage(ctk.CTkScrollableFrame):
         ctk.CTkFrame(card, height=10, fg_color="transparent").pack()
 
     def _render_helpers(self):
-        card = ctk.CTkFrame(self.content_container, fg_color=theme.CARD_BG, corner_radius=14, border_width=1, border_color=theme.CARD_BORDER)
+        card = ctk.CTkFrame(self.content_container, fg_color=theme.CARD_BG, corner_radius=theme.RADIUS_CARD, border_width=1, border_color=theme.CARD_BORDER)
         card.pack(fill="x", pady=4)
 
         ctk.CTkLabel(card, text="Your AI Helpers", font=theme.font(14, "bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=16, pady=(14, 4))
         ctk.CTkLabel(card, text="VAVE coordinates specialized internal helpers for you behind the scenes.", font=theme.font(11), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=16, pady=(0, 12))
 
         for helper in store.ai_helpers:
-            row = ctk.CTkFrame(card, fg_color=theme.MAIN_BG, corner_radius=10)
+            row = ctk.CTkFrame(card, fg_color=theme.MAIN_BG, corner_radius=theme.RADIUS_CONTROL)
             row.pack(fill="x", padx=14, pady=4)
 
             inner = ctk.CTkFrame(row, fg_color="transparent")

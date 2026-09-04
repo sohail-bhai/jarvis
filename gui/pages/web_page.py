@@ -44,7 +44,7 @@ class WebPage(ctk.CTkScrollableFrame):
             fg_color=theme.CARD_BG,
             border_width=1,
             border_color=theme.CARD_BORDER,
-            corner_radius=14,
+            corner_radius=theme.RADIUS_CARD,
         )
         input_card.pack(fill="x", padx=16, pady=(0, 12))
 
@@ -69,7 +69,7 @@ class WebPage(ctk.CTkScrollableFrame):
             font=theme.font(14, "bold"),
             width=32,
             height=32,
-            corner_radius=16,
+            corner_radius=theme.RADIUS_CARD,
             fg_color=theme.TEXT_PRIMARY,
             hover_color=theme.SIDEBAR_BG,
             text_color="#FFFFFF",
@@ -97,7 +97,7 @@ class WebPage(ctk.CTkScrollableFrame):
                 text_color=theme.TEXT_SECONDARY,
                 border_width=1,
                 border_color=theme.CARD_BORDER,
-                corner_radius=10,
+                corner_radius=theme.RADIUS_CONTROL,
                 height=26,
                 command=lambda text=p: self._trigger_prompt(text),
             ).pack(side="left", padx=3)
@@ -175,7 +175,7 @@ class WebPage(ctk.CTkScrollableFrame):
             fg_color=theme.CARD_BG,
             border_width=1,
             border_color=theme.CARD_BORDER,
-            corner_radius=14,
+            corner_radius=theme.RADIUS_CARD,
         )
         card.pack(fill="x", padx=16, pady=(0, 16))
         self.progress_card = card
@@ -201,7 +201,7 @@ class WebPage(ctk.CTkScrollableFrame):
         ).pack(anchor="w", pady=(2, 0))
 
         # Steps
-        steps_row = ctk.CTkFrame(inner, fg_color=theme.MAIN_BG, corner_radius=10)
+        steps_row = ctk.CTkFrame(inner, fg_color=theme.MAIN_BG, corner_radius=theme.RADIUS_CONTROL)
         steps_row.pack(fill="x", pady=4)
 
         for step in store.browser_progress["steps"]:
@@ -242,7 +242,7 @@ class WebPage(ctk.CTkScrollableFrame):
                 fg_color=theme.CARD_BG,
                 border_width=1,
                 border_color=theme.CARD_BORDER,
-                corner_radius=12,
+                corner_radius=theme.RADIUS_CARD,
             )
             card.pack(fill="x", pady=4)
 
@@ -263,7 +263,7 @@ class WebPage(ctk.CTkScrollableFrame):
                 font=theme.font(10, "bold"),
                 text_color=theme.INFO if is_work else theme.SUCCESS,
                 fg_color=theme.INFO_LIGHT if is_work else theme.SUCCESS_LIGHT,
-                corner_radius=8,
+                corner_radius=theme.RADIUS_CONTROL,
                 padx=10,
                 pady=4,
             )
