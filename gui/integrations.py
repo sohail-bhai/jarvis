@@ -15,9 +15,23 @@ from assistant.config import get_setting
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
+# config.json ships with placeholders so the repo carries no real credentials.
+# A placeholder is not a connection, so it must not read as one.
+_PLACEHOLDER_PREFIXES = ("DEMO_", "YOUR_", "CHANGE_ME", "REPLACE_", "<")
+_PLACEHOLDER_VALUES = {"demo@example.com", "you@example.com", "none", "null", "todo"}
+
+
+def _is_placeholder(value):
+    text = str(value).strip()
+    return (text.upper().startswith(_PLACEHOLDER_PREFIXES)
+            or text.lower() in _PLACEHOLDER_VALUES)
+
+
 def _has_setting(key):
     value = get_setting(key, "")
-    return bool(value and str(value).strip())
+    if not value or not str(value).strip():
+        return False
+    return not _is_placeholder(value)
 
 
 def google_status():
