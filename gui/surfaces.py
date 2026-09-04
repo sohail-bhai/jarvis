@@ -72,8 +72,8 @@ def card_image(width: int, height: int, *, fill: str, page: str,
                 [pad, pad + shadow_offset * s, w - pad, h - pad + shadow_offset * s],
                 radius=r, fill=int(255 * shadow))
             layer = layer.filter(ImageFilter.GaussianBlur(shadow_blur * s / 2))
-            # Black, so the shadow deepens the ground instead of tinting it.
-            canvas.paste(Image.new("RGB", (w, h), (0, 0, 0)), (0, 0), layer)
+            # Shadows in a warm palette should be warm, not grey.
+            canvas.paste(Image.new("RGB", (w, h), _hex_to_rgb("#2A241C")), (0, 0), layer)
 
         body = Image.new("RGB", (w, h), _hex_to_rgb(fill))
         mask = Image.new("L", (w, h), 0)
