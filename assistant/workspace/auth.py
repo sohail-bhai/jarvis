@@ -28,7 +28,16 @@ def get_project_root() -> str:
     return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
+def get_token_paths() -> list:
+    root = get_project_root()
+    return [os.path.join(root, "token_workspace.json"), os.path.join(root, "token.json")]
+
+
 def get_token_path() -> str:
+    # Prefer existing token file if present, else default to token_workspace.json
+    for p in get_token_paths():
+        if os.path.exists(p):
+            return p
     return os.path.join(get_project_root(), "token_workspace.json")
 
 
@@ -38,9 +47,9 @@ def get_credentials_path() -> str:
 
 def is_workspace_connected() -> bool:
     """Returns True if valid workspace credentials or token exist."""
-    token_p = get_token_path()
     creds_p = get_credentials_path()
-    return os.path.exists(token_p) or os.path.exists(creds_p)
+    has_token = any(os.path.exists(p) for p in get_token_paths())
+    return has_token or os.path.exists(creds_p)
 
 
 def get_oauth_credentials():

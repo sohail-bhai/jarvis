@@ -81,7 +81,8 @@ def create_calendar_event(
         except Exception:
             start_dt = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)
 
-    end_dt = start_dt + datetime.timedelta(minutes=duration_minutes)
+    duration_int = int(duration_minutes) if duration_minutes is not None else 60
+    end_dt = start_dt + datetime.timedelta(minutes=duration_int)
 
     event_body = {
         "summary": summary,
@@ -119,6 +120,10 @@ def detect_scheduling_conflicts(start_iso: str, end_iso: str) -> List[Dict[str, 
     try:
         req_start = datetime.datetime.fromisoformat(start_iso.replace("Z", "+00:00"))
         req_end = datetime.datetime.fromisoformat(end_iso.replace("Z", "+00:00"))
+        if req_start.tzinfo is None:
+            req_start = req_start.replace(tzinfo=datetime.timezone.utc)
+        if req_end.tzinfo is None:
+            req_end = req_end.replace(tzinfo=datetime.timezone.utc)
     except Exception as e:
         logger.error(f"Invalid timestamp format: {e}")
         return []
@@ -133,6 +138,10 @@ def detect_scheduling_conflicts(start_iso: str, end_iso: str) -> List[Dict[str, 
         try:
             ev_start = datetime.datetime.fromisoformat(s_raw.replace("Z", "+00:00"))
             ev_end = datetime.datetime.fromisoformat(e_raw.replace("Z", "+00:00"))
+            if ev_start.tzinfo is None:
+                ev_start = ev_start.replace(tzinfo=datetime.timezone.utc)
+            if ev_end.tzinfo is None:
+                ev_end = ev_end.replace(tzinfo=datetime.timezone.utc)
             # Overlap condition: req_start < ev_end and req_end > ev_start
             if req_start < ev_end and req_end > ev_start:
                 conflicts.append(ev)

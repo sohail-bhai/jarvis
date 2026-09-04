@@ -18,15 +18,45 @@ import assistant.workspace as workspace
 import webbrowser
 import urllib.parse
 
+def search_google_drive(query: str, limit: int = 5) -> str:
+    return str(workspace.search_drive(query, limit=int(limit)))
+
+def read_google_drive_file(file_id: str) -> str:
+    return str(workspace.read_drive_file(file_id))
+
+def upload_google_drive_file(name: str, content: str) -> str:
+    return str(workspace.upload_drive_file(name, content))
+
+def summarize_gmail_inbox(limit: int = 5) -> str:
+    return workspace.summarize_emails(limit=int(limit))
+
+def draft_gmail_message(to: str, subject: str, body: str) -> str:
+    return str(workspace.draft_email(to, subject, body))
+
+def create_google_calendar_event(summary: str, start_time_iso: str = None, duration_minutes: int = 60, description: str = None) -> str:
+    return str(workspace.create_calendar_event(summary, start_time_iso, int(duration_minutes), description))
+
+def create_google_doc(title: str, content: str = "") -> str:
+    return str(workspace.create_google_doc(title, content))
+
+def open_website(url: str):
+    return webbrowser.open(url)
+
+def search_google(query: str):
+    return webbrowser.open(f"https://www.google.com/search?q={urllib.parse.quote_plus(query)}")
+
+def search_youtube(query: str):
+    return webbrowser.open(f"https://www.youtube.com/results?search_query={urllib.parse.quote_plus(query)}")
+
 # Mapping of tool names to actual Python functions
 AVAILABLE_FUNCTIONS = {
-    "search_google_drive": lambda query, limit=5: str(workspace.search_drive(query, limit=int(limit))),
-    "read_google_drive_file": lambda file_id: str(workspace.read_drive_file(file_id)),
-    "upload_google_drive_file": lambda name, content: str(workspace.upload_drive_file(name, content)),
-    "summarize_gmail_inbox": lambda limit=5: workspace.summarize_emails(limit=int(limit)),
-    "draft_gmail_message": lambda to, subject, body: str(workspace.draft_email(to, subject, body)),
-    "create_google_calendar_event": lambda summary, start_time_iso=None, duration_minutes=60, description=None: str(workspace.create_calendar_event(summary, start_time_iso, int(duration_minutes), description)),
-    "create_google_doc": lambda title, content="": str(workspace.create_google_doc(title, content)),
+    "search_google_drive": search_google_drive,
+    "read_google_drive_file": read_google_drive_file,
+    "upload_google_drive_file": upload_google_drive_file,
+    "summarize_gmail_inbox": summarize_gmail_inbox,
+    "draft_gmail_message": draft_gmail_message,
+    "create_google_calendar_event": create_google_calendar_event,
+    "create_google_doc": create_google_doc,
     "open_app": system_tasks.open_app,
     "tell_time": system_tasks.tell_time,
     "tell_date": system_tasks.tell_date,
@@ -40,9 +70,9 @@ AVAILABLE_FUNCTIONS = {
     "add_note": notes.add_note,
     "read_notes": notes.read_notes,
     "clear_notes": notes.clear_notes,
-    "open_website": lambda url: webbrowser.open(url),
-    "search_google": lambda query: webbrowser.open(f"https://www.google.com/search?q={urllib.parse.quote_plus(query)}"),
-    "search_youtube": lambda query: webbrowser.open(f"https://www.youtube.com/results?search_query={urllib.parse.quote_plus(query)}"),
+    "open_website": open_website,
+    "search_google": search_google,
+    "search_youtube": search_youtube,
     "click_at": system_tasks.click_at,
     "type_text": system_tasks.type_text,
     "press_key": system_tasks.press_key,

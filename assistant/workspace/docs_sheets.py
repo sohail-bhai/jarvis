@@ -103,8 +103,13 @@ def read_google_sheet(spreadsheet_id: str, range_name: str = "Sheet1!A1:Z100") -
     return _mock_sheets.get(spreadsheet_id, [["Header 1", "Header 2"], ["Data A", "Data B"]])
 
 
-def append_to_google_sheet(spreadsheet_id: str, rows: List[List[Any]], range_name: str = "Sheet1!A1") -> bool:
+def append_to_google_sheet(spreadsheet_id: str, rows: Any, range_name: str = "Sheet1!A1") -> bool:
     """Appends one or more rows to a Google Sheet."""
+    if not isinstance(rows, list):
+        rows = [[rows]]
+    elif rows and not isinstance(rows[0], (list, tuple)):
+        rows = [rows]
+
     service_sheets = get_google_service("sheets", "v4")
     if service_sheets is not None:
         try:
