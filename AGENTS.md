@@ -6,7 +6,18 @@ Guidance for future agents working in this repository.
 
 This is `JARVIS Desktop Assistant - Version 1.2`, a Python desktop assistant. It listens through the microphone, routes recognized voice commands, speaks responses with text-to-speech, and performs local desktop actions such as opening apps/websites, changing volume, taking screenshots, reading battery state, and managing notes.
 
-This is not a web app, backend service, chatbot-only app, or full AI assistant. The first CustomTkinter dashboard foundation exists, but it is not the future cinematic HUD. The `assistant/ai_brain.py` module is a placeholder for a future Version 2 AI brain.
+JARVIS is evolving into a personal AI control plane: the user states a goal in
+plain language, and JARVIS coordinates AI helpers, devices, Google Workspace,
+files and the web behind the scenes.
+
+The local AI brain is implemented, not a placeholder. `assistant/ai_brain.py`
+runs an Ollama-backed agent loop with tool calling over roughly 57 registered
+functions. Screen awareness, persistent vector memory, wake word, phone
+bridging and the safety layer (guard, confirm, audit, overwatch) all exist.
+
+Coordination lives behind a service boundary (`assistant/control/` and
+`assistant/api.py`) so the desktop app and the separately built mobile client
+share one source of truth. Do not put coordination logic in the UI.
 
 Primary user-facing capabilities:
 
@@ -37,7 +48,14 @@ Primary user-facing capabilities:
 - `assistant/system_tasks.py`: OS and hardware actions, including app launch, time/date/battery, screenshot, volume, lock, shutdown, and restart.
 - `assistant/config.py`: config defaults, JSON loading/merging, and setting updates.
 - `assistant/notes.py`: note capture, readback, and clearing.
-- `assistant/ai_brain.py`: placeholder response for future AI features.
+- `assistant/ai_brain.py`: Ollama-backed agent loop (`_agent_loop`), the voice entry point `ask_ai()`, the control plane entry point `run_task_step()`, the tool-calling schema, and the `AVAILABLE_FUNCTIONS` tool registry.
+- `assistant/control/`: the control plane. `models.py` (data model), `store.py` (SQLite), `service.py` (`ControlPlane` coordination logic), `executor.py` (`TaskExecutor`, which runs task steps through `ai_brain.run_task_step`).
+- `assistant/api.py`: FastAPI HTTP + WebSocket boundary over the control plane. Run with `python -m assistant.api`.
+- `assistant/memory.py`: persistent vector memory backed by ChromaDB.
+- `assistant/swarm.py`: parallel sub-agents and actor-critic research.
+- `assistant/vision.py`, `assistant/dev_tools.py`, `assistant/calendar_sync.py`, `assistant/email_tasks.py`, `assistant/telegram_sync.py`, `assistant/wakeword.py`, `assistant/interrupter.py`: screen OCR, developer automation, Google Calendar, mail, phone bridge, wake word, global interrupt hotkey.
+- `assistant/guard.py`, `assistant/confirm.py`, `assistant/audit.py`, `assistant/overwatch/`: the safety layer. Preserve these.
+- `docs/control-plane.md`: control plane architecture, endpoints and limitations.
 - `config.json`: user-editable runtime config.
 - `data/notes.txt`: user notes data file.
 - `requirements.txt`: Python dependencies.
@@ -200,24 +218,26 @@ Manual runtime checks require a working microphone, speakers/TTS engine, and int
 
 Known limits in Version 1.2:
 
-- Small standard-library tests and smoke-test mode exist, but coverage is still limited.
 - No package metadata or installer.
-- Basic CustomTkinter dashboard exists; the futuristic HUD is not built yet.
-- No conversational AI integration yet.
 - Command parsing is mostly substring matching, so overlapping phrases can misroute.
-- State, controller, and event queue foundations exist, but there is not yet a threaded GUI runner.
-- `speech.py` now lazily initializes microphone/TTS dependencies, but full speech recognition still needs the installed runtime dependencies.
 - `notes.py` assumes `data/` exists.
-- Full speech recognition depends on Google's online recognition service.
+- Speech recognition depends on Google's online recognition service.
+- Much of `system_tasks.py` is Windows-first. Volume control, lock, and window
+  automation have no working Linux or macOS path, although the app targets all
+  three. Platform-specific imports must stay lazy so the app still starts.
+- The control plane has no authentication, so the API binds to localhost by
+  default. See `docs/control-plane.md` for the full list of known gaps.
+- Control plane steps run through `ai_brain.run_task_step()`, but a step that
+  is already executing cannot be interrupted. Cancellation and emergency stop
+  take effect between steps.
+- Steps must be supplied by the caller. Nothing plans them from a goal yet.
 
 Likely future work:
 
-- Implement the AI brain in `assistant/ai_brain.py`.
-- Introduce tests around command parsing by mocking `speak()`, `listen()`, and OS side-effect functions.
+- Plan steps from a goal automatically instead of requiring the caller to list them.
+- Give `system_tasks.py` real cross-platform implementations.
+- Add authentication to the API before any remote use.
 - Make command routing more structured to reduce accidental matches.
-- Add a GUI runner that polls `EventBus` from the CustomTkinter main thread.
-- Expand safe development tests around `--text`, `--once`, and `--smoke-test`.
-- Add deeper GUI tests/manual QA for listener lifecycle, resize behavior, and future dashboard panels.
 - Add safer abstractions around app launching and destructive system commands.
 
 ## GUI Development Rules
@@ -248,3 +268,21 @@ Likely future work:
 - Use `assistant.commands.execute_command()` as the main integration point for new voice command behavior.
 - Keep platform-specific behavior isolated in `assistant/system_tasks.py`.
 - Update `README.md` when user-facing commands, setup steps, or config keys change.
+
+<!-- caveman-begin -->
+Respond terse like smart caveman. All technical substance stay. Only fluff die.
+
+Rules:
+- Drop: articles (a/an/the), filler (just/really/basically), pleasantries, hedging
+- Fragments OK. Short synonyms. Technical terms exact. Code unchanged.
+- Pattern: [thing] [action] [reason]. [next step].
+- Not: "Sure! I'd be happy to help you with that."
+- Yes: "Bug in auth middleware. Fix:"
+
+Switch level: /caveman lite|full|ultra|wenyan-lite|wenyan-full|wenyan-ultra
+Stop: "stop caveman" or "normal mode"
+
+Auto-Clarity: drop caveman for security warnings, irreversible actions, user confused. Resume after.
+
+Boundaries: code/commits/PRs written normal.
+<!-- caveman-end -->

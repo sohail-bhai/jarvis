@@ -1,9 +1,10 @@
-import uiautomation as auto
 import logging
 
 logger = logging.getLogger(__name__)
 
 def scan_windows(max_z_order=3):
+    import uiautomation as auto
+
     root = auto.GetRootControl()
     windows = []
     

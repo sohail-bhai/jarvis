@@ -11,3 +11,8 @@ assets/screenshots/*.png
 logs/
 temp_speech_*.mp3
 .freebuff/
+
+# Control plane runtime database
+data/control.db
+data/control.db-wal
+data/control.db-shm

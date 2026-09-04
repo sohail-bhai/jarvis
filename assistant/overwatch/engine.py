@@ -1,6 +1,5 @@
 import time
 import threading
-import uiautomation as auto
 import logging
 
 from assistant.config import get_setting
@@ -51,8 +50,10 @@ class OverwatchEngine:
             self._bus.emit(events.EVENT_OVERWATCH_STATE, "Overwatch stopped.")
             
     def _run_loop(self):
+        import uiautomation as auto
+
         auto.UIAutomationInitializerInThread()
-        
+
         while self._active:
             try:
                 elements = scan_windows(max_z_order=get_setting("overwatch", {}).get("max_z_order", 3))
@@ -108,7 +109,18 @@ _engine = OverwatchEngine()
 def configure(event_bus: events.EventBus):
     _engine.configure(event_bus)
     
+def is_available():
+    """Overwatch drives the Windows UI Automation API, which has no equivalent here."""
+    try:
+        import uiautomation  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
 def start_overwatch(rules: list = None):
+    if not is_available():
+        return "Overwatch is not available on this computer. It needs Windows UI Automation."
+
     if rules:
         config = get_setting("overwatch", {})
         config["rules"] = rules

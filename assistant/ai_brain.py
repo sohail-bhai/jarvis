@@ -662,61 +662,51 @@ def query_local_llm_chat(messages, model="qwen2.5:3b", tools=None):
         logger.info(f"[AI Brain Error] {e}")
         return None
 
-def ask_ai(command, auto_confirm=False):
+# The task-execution loop tells the model it is working a single control plane
+# step, so it finishes the step instead of chatting about it.
+STEP_SYSTEM_NOTE = (
+    "You are executing one step of a task the user already approved. "
+    "Use your tools to actually carry the step out, then reply with one short "
+    "sentence describing what you did and what you found. "
+    "Do not ask questions and do not ask for permission."
+)
+
+
+def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps=5):
+    """Run the tool-calling loop over `conversation`, which is mutated in place.
+
+    `extra_messages` are injected into the payload just before the latest user
+    message without being stored in the caller's history, so retrieved memories
+    never accumulate in short-term memory.
+
+    Returns the model's final text, or None if the local brain is unreachable.
     """
-    Handles conversational requests by routing them to the local LLM.
-    Supports tool calling and short-term memory.
-    """
-    global conversation_history
-    init_history()
-    
-    clean_command = command.strip()
-    
-    if not clean_command:
-        return
-
-    # 1. Append user command to history
-    conversation_history.append({"role": "user", "content": clean_command})
-    
-    # 2. Keep history from growing indefinitely (keep last 10 messages + system prompt)
-    if len(conversation_history) > 11:
-        conversation_history = [conversation_history[0]] + conversation_history[-10:]
-
-    # 3. Retrieve relevant permanent memories based on current query (RAG)
-    relevant_memories = memory.get_relevant_memories_text(clean_command)
-    rag_system_message = {
-        "role": "system", 
-        "content": f"Here are relevant permanent memories related to the user's current request:\n{relevant_memories}"
-    }
-
     previous_tool_calls_repr = None
 
-    # 4. Agent Loop (max 5 steps to prevent infinite loops)
-    for step in range(5):
+    for step in range(max_steps):
         model_name = get_setting("llm_model", "qwen2.5:3b")
-        
-        # Inject RAG memory dynamically into the payload without mutating global history
-        current_messages = list(conversation_history)
-        current_messages.insert(-1, rag_system_message)
+
+        # Inject dynamic context into the payload without mutating history
+        current_messages = list(conversation)
+        for extra in (extra_messages or []):
+            current_messages.insert(-1, extra)
         if auto_confirm:
             current_messages.insert(-1, {"role": "system", "content": "CRITICAL EXCEPTION: You are executing a Routine. IGNORE the rule about asking for permission. DO NOT ask 'Shall I proceed?'. Execute the tool immediately."})
-            
+
         message = query_local_llm_chat(current_messages, model=model_name)
-        
+
         if not message:
-            speak("I'm sorry, I couldn't reach my local brain. Please ensure Ollama is running.")
-            conversation_history.pop() # Remove failed prompt
-            return
+            return None
 
         # Append Assistant's response to history
-        conversation_history.append(message)
+        conversation.append(message)
 
         # Check if the LLM decided to call a tool
         if "tool_calls" in message and message["tool_calls"]:
             current_tool_calls_repr = str(message["tool_calls"])
             if current_tool_calls_repr == previous_tool_calls_repr:
                 logger.info("[JARVIS] Caught LLM in an infinite loop! Breaking out.")
-                conversation_history.append({
+                conversation.append({
                     "role": "system",
                     "content": "You are repeating the same tool call. It failed or wasn't helpful. Give up and tell the user."
                 })
@@ -726,54 +716,131 @@ def ask_ai(command, auto_confirm=False):
             for tool_call in message["tool_calls"]:
                 func_name = tool_call["function"]["name"]
                 args_dict = tool_call["function"].get("arguments", {})
-                
+
                 if func_name in AVAILABLE_FUNCTIONS:
                     func_to_call = AVAILABLE_FUNCTIONS[func_name]
                     logger.info(f"[JARVIS Executing] {func_name}({args_dict})")
-                    
+
                     try:
                         args_dict = guard.coerce_args(func_to_call, args_dict)
                         result = guard.call(func_to_call, **args_dict)
                         result_str = str(result) if result is not None else "Success"
-                        
+
                         if len(result_str) > 2000:
                             result_str = result_str[:2000] + "... [TRUNCATED DUE TO LENGTH]"
-                        
-                        conversation_history.append({
+
+                        conversation.append({
                             "role": "tool",
                             "content": result_str,
                             "name": func_name
                         })
-                        
+
                     except guard.ToolDenied as e:
                         logger.info(f"Tool {func_name} denied: {e}")
-                        conversation_history.append({
+                        conversation.append({
                             "role": "tool",
                             "content": f"Denied by safety guard: {e}",
                             "name": func_name
                         })
                     except Exception as e:
                         logger.info(f"Error executing tool {func_name}: {e}")
-                        conversation_history.append({
+                        conversation.append({
                             "role": "tool",
                             "content": f"Failed: {e}",
                             "name": func_name
                         })
                 else:
                     logger.info(f"LLM tried to call unknown tool: {func_name}")
-                    conversation_history.append({
+                    conversation.append({
                         "role": "tool",
                         "content": f"Tool {func_name} does not exist.",
                         "name": func_name
                     })
             # After executing all tools in this step, loop continues to ask LLM what's next
             continue
-            
-        else:
-            # If the LLM did not call any tools, it just responded with text. Speak it and finish.
-            if message.get("content"):
-                speak(message["content"])
-            break
+
+        # No tool calls means the model answered in words. That ends the turn.
+        return message.get("content", "")
+
+    # The loop ran out of steps. Report what was said last rather than nothing.
+    return ""
+
+
+def _memory_message(query):
+    """Relevant permanent memories, as a system message for one turn."""
+    relevant_memories = memory.get_relevant_memories_text(query)
+    return {
+        "role": "system",
+        "content": f"Here are relevant permanent memories related to the user's current request:\n{relevant_memories}"
+    }
+
+
+def ask_ai(command, auto_confirm=False):
+    """
+    Handles conversational requests by routing them to the local LLM.
+    Supports tool calling and short-term memory.
+    """
+    global conversation_history
+    init_history()
+
+    clean_command = command.strip()
+
+    if not clean_command:
+        return
+
+    # 1. Append user command to history
+    conversation_history.append({"role": "user", "content": clean_command})
+
+    # 2. Keep history from growing indefinitely (keep last 10 messages + system prompt)
+    if len(conversation_history) > 11:
+        conversation_history = [conversation_history[0]] + conversation_history[-10:]
+
+    # 3. Retrieve relevant permanent memories based on current query (RAG)
+    reply = _agent_loop(conversation_history,
+                        extra_messages=[_memory_message(clean_command)],
+                        auto_confirm=auto_confirm)
+
+    if reply is None:
+        speak("I'm sorry, I couldn't reach my local brain. Please ensure Ollama is running.")
+        conversation_history.pop()  # Remove failed prompt
+        return None
+
+    if reply:
+        speak(reply)
+    return reply
+
+
+def run_task_step(instruction, context="", auto_confirm=True):
+    """Carry out one control plane step with the same tools as the voice loop.
+
+    The control plane calls this. It runs in its own short conversation so a
+    background task never disturbs what the user is talking about, and it
+    returns the outcome as text instead of speaking it - the timeline and the
+    mobile client are the audience here, not the speakers.
+
+    Raises RuntimeError if the local model cannot be reached, so the control
+    plane can record an honest failure instead of a silent success.
+    """
+    conversation = [
+        {"role": "system", "content": get_system_prompt()},
+        {"role": "system", "content": STEP_SYSTEM_NOTE},
+    ]
+    if context:
+        conversation.append({
+            "role": "system",
+            "content": f"Earlier steps of this task:\n{context}",
+        })
+    conversation.append({"role": "user", "content": instruction})
+
+    reply = _agent_loop(conversation,
+                        extra_messages=[_memory_message(instruction)],
+                        auto_confirm=auto_confirm)
+
+    if reply is None:
+        raise RuntimeError("Could not reach the local model. Is Ollama running?")
+
+    return reply.strip() or "Done."
+
 
 # Register guards
 for t in ["run_terminal_command", "shutdown_laptop", "restart_laptop", "clear_notes", "write_file", "disable_voice_input", "disable_speech_output"]:

@@ -228,6 +228,23 @@ python jarvis_gui.py
 python main.py
 ```
 
+#### 🌐 Launch the Control Plane API & WebSocket Server
+Exposes the control plane over HTTP and WebSockets for multi-device sync (desktop, mobile, cloud):
+```bash
+python -m assistant.api                 # Localhost only
+python -m assistant.api --host 0.0.0.0  # Reachable from mobile/network
+```
+- **Interactive Swagger Documentation**: `http://127.0.0.1:8765/docs`
+- **Real-Time Activity Stream**: `ws://127.0.0.1:8765/ws/activity`
+- **Execute Goals via API**:
+  ```bash
+  curl -X POST http://localhost:8765/api/tasks \
+       -H 'Content-Type: application/json' \
+       -d '{"goal": "Summarize my notes and check battery", "run": true}'
+  ```
+- Full API data model and endpoint reference: [`docs/control-plane.md`](docs/control-plane.md).
+
+
 #### 🛡️ Safe Verification Modes
 ```bash
 # Run isolated smoke test (stubs desktop side effects)
