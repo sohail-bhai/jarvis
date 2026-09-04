@@ -750,10 +750,15 @@ LLM_TOOLS = [
         "type": "function",
         "function": {
             "name": "read_screen",
-            "description": "Reads all visible text and document content from the active window and screen. Use this when the user asks you to read, find, or inspect text, lines, documents, or content in an open application like Notepad, Word, browser, or screen.",
+            "description": "Reads all visible text or a specific line from the active window or screen (such as Notepad, Word, browser, code editor). Use this when the user asks to read, inspect, or get content or lines from an open application or screen.",
             "parameters": {
                 "type": "object",
-                "properties": {}
+                "properties": {
+                    "line_number": {
+                        "type": "integer",
+                        "description": "Optional 1-indexed line number to read (e.g. 2 for 2nd line, 10 for 10th line). If omitted, reads all text."
+                    }
+                }
             }
         }
     },
@@ -801,6 +806,7 @@ def get_system_prompt():
         "To click a button you don't know the coordinates for, use `get_clickable_elements` to retrieve the exact X/Y of every button on screen, then `click_at` the correct one. "
         "To read text, lines, or content from an open window or document (such as Notepad, Word, editor, or screen), use the `read_screen` tool directly.\n\n"
         "CRITICAL MULTI-STEP SEQUENCING: When a request requires multiple actions, execute the FIRST step first (e.g. open an application before trying to read from it or type into it). Do not announce in text what you will do without emitting the tool call.\n\n"
+        "CRITICAL READING RULE: When the user asks you to read a specific line (e.g. 'read 2nd line', 'read the 10th line'), ALWAYS call `read_screen(line_number=...)` immediately. There are NO safety restrictions on reading text or lines.\n\n"
         "You have configurable settings that you can change using the update_setting tool. The main settings are:\n"
         "- 'voice_rate': Reading speed (default 170. Higher is faster).\n"
         "- 'voice_volume': Audio volume (default 1.0. Range 0.0 to 1.0).\n\n"

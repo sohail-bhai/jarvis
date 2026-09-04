@@ -386,6 +386,37 @@ def handle_atomic_gui_command(command: str) -> bool:
 
     return False
 
+def handle_read_screen_command(command: str) -> bool:
+    """
+    Directly handles reading screen text or specific lines (e.g. 'read 2nd line', 'read line 10', 'read screen').
+    """
+    clean = command.strip().lower()
+
+    # 1. Check for specific line number request
+    line_num = None
+    m1 = re.search(r"read (?:the )?(\d+)(?:st|nd|rd|th)? line", clean)
+    if m1:
+        line_num = int(m1.group(1))
+    else:
+        m2 = re.search(r"read (?:the )?line (\d+)", clean)
+        if m2:
+            line_num = int(m2.group(1))
+
+    if line_num is not None:
+        from assistant.system_tasks import read_screen
+        res = read_screen(line_number=line_num)
+        speak(res)
+        return True
+
+    # 2. Check for general screen reading request
+    if clean in ("read screen", "read the screen", "read text on screen", "read document", "read the document"):
+        from assistant.system_tasks import read_screen
+        res = read_screen()
+        speak(res)
+        return True
+
+    return False
+
 def execute_command(command, auto_confirm=False):
     """
     Main command router for JARVIS Version 1.2.
@@ -428,6 +459,9 @@ def execute_single_command(command, auto_confirm=False):
         return True
 
     if handle_atomic_gui_command(command):
+        return True
+
+    if handle_read_screen_command(command):
         return True
 
     if handle_app_command(command):

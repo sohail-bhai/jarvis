@@ -642,14 +642,27 @@ def find_and_click_text(target_text):
     speak(f"I could not find the text {target_text} on the screen.")
     return False
 
-def read_screen():
-    """Reads all visible text on the screen and returns it."""
+def read_screen(line_number=None, **kwargs):
+    """Reads all visible text or a specific line from an open window or screen."""
     from assistant.vision import read_screen_text
     
     text = read_screen_text()
-    if text:
-        return f"Visible text on screen:\n{text}"
-    return "No readable text found on the screen."
+    if not text or not text.strip():
+        return "No readable text found on the screen."
+        
+    lines = text.splitlines()
+    if line_number is not None:
+        try:
+            idx = int(line_number)
+            if 1 <= idx <= len(lines):
+                target_line = lines[idx - 1].strip()
+                return f"Line {idx}: {target_line}"
+            else:
+                return f"The document has {len(lines)} lines. Cannot read line {idx}. Here is the visible text:\n{text[:1000]}"
+        except (ValueError, TypeError):
+            pass
+            
+    return f"Visible text on screen:\n{text}"
 
 def analyze_screen(prompt, image_path=None):
     """Takes a screenshot and uses a local Vision AI to answer a question about the screen."""

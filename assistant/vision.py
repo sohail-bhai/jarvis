@@ -92,42 +92,55 @@ def read_screen_text():
             if w.ControlType == auto.ControlType.WindowControl and w not in candidates:
                 candidates.append(w)
 
-        # 1. First search all candidate windows for rich document/editor text (Notepad, Word, editors)
+        # 1. First search all candidate windows specifically for real document/editor controls (Notepad, Word, editors)
         for win in candidates:
             for ctrl, depth in auto.WalkControl(win, maxDepth=6):
-                doc_text = None
-                try:
-                    tp = ctrl.GetTextPattern()
-                    if tp:
-                        doc_text = tp.DocumentRange.GetText(-1)
-                except Exception:
-                    pass
-                if not doc_text:
+                if ctrl.ControlType in (auto.ControlType.DocumentControl, auto.ControlType.EditControl) or ctrl.ClassName in ("RichEditD2DPT", "Edit"):
+                    doc_text = None
                     try:
-                        vp = ctrl.GetValuePattern()
-                        if vp:
-                            doc_text = vp.Value
+                        tp = ctrl.GetTextPattern()
+                        if tp:
+                            doc_text = tp.DocumentRange.GetText(-1)
                     except Exception:
                         pass
-                if doc_text and doc_text.strip():
-                    normalized = doc_text.replace("\r\n", "\n").replace("\r", "\n").strip()
-                    if normalized:
-                        return normalized
+                    if not doc_text:
+                        try:
+                            vp = ctrl.GetValuePattern()
+                            if vp:
+                                doc_text = vp.Value
+                        except Exception:
+                            pass
+                    if doc_text and doc_text.strip():
+                        normalized = doc_text.replace("\r\n", "\n").replace("\r", "\n").strip()
+                        if normalized:
+                            return normalized
 
-        # 2. If no document text found, collect UI element names from foreground/candidate windows
+        # 2. If no dedicated document control found, collect meaningful UI element text, ignoring icon glyphs
         if candidates:
             extracted = []
             for ctrl, depth in auto.WalkControl(candidates[0], maxDepth=6):
-                if ctrl.Name and len(ctrl.Name.strip()) > 1 and ctrl.ControlType in (
+                # Check TextPattern on TextBlocks only if they are not single icon characters
+                val = None
+                try:
+                    tp = ctrl.GetTextPattern()
+                    if tp:
+                        t = tp.DocumentRange.GetText(-1).strip()
+                        if t and not (len(t) == 1 and ord(t) >= 0xE000):
+                            val = t
+                except Exception:
+                    pass
+                if not val and ctrl.Name:
+                    name_str = ctrl.Name.strip()
+                    if len(name_str) > 1 and not (len(name_str) == 1 and ord(name_str) >= 0xE000):
+                        val = name_str
+                if val and val not in extracted and ctrl.ControlType in (
                     auto.ControlType.TextControl,
                     auto.ControlType.ButtonControl,
                     auto.ControlType.MenuItemControl,
                     auto.ControlType.ListItemControl,
                     auto.ControlType.HeaderItemControl,
                 ):
-                    val = ctrl.Name.strip()
-                    if not (len(val) == 1 and ord(val) > 0xE000):
-                        extracted.append(val)
+                    extracted.append(val)
             if extracted:
                 return "\n".join(extracted)
     except Exception as e:
