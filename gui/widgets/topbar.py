@@ -13,7 +13,7 @@ class TopBar(ctk.CTkFrame):
     def __init__(self, parent, on_open_command_palette, on_open_notifications):
         super().__init__(
             parent,
-            height=54,
+            height=64,
             fg_color=theme.MAIN_BG,
             corner_radius=0,
         )
@@ -23,19 +23,19 @@ class TopBar(ctk.CTkFrame):
 
         # Left: Page Title container
         self.left_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.left_frame.pack(side="left", padx=16, fill="y")
+        self.left_frame.pack(side="left", padx=(34, 16), fill="y")
 
         self.title_lbl = ctk.CTkLabel(
             self.left_frame,
             text="Home",
-            font=theme.font(15, "bold"),
-            text_color=theme.TEXT_PRIMARY,
+            font=theme.font(theme.SIZE_BODY, "bold"),
+            text_color=theme.TEXT_SECONDARY,
         )
         self.title_lbl.pack(side="left", pady=12)
 
         # Right: Bell + Avatar
         right_frame = ctk.CTkFrame(self, fg_color="transparent")
-        right_frame.pack(side="right", padx=16, fill="y")
+        right_frame.pack(side="right", padx=(16, 24), fill="y")
 
         # Avatar
         avatar = ctk.CTkLabel(
@@ -62,9 +62,9 @@ class TopBar(ctk.CTkFrame):
             text_color=theme.TEXT_SECONDARY,
             border_width=1,
             border_color=theme.CARD_BORDER,
-            corner_radius=theme.RADIUS_CONTROL,
-            width=52,
-            height=30,
+            corner_radius=theme.RADIUS_PILL,
+            width=54,
+            height=32,
             compound="left",
             command=self.on_open_notifications,
         )
@@ -86,8 +86,8 @@ class TopBar(ctk.CTkFrame):
             text_color=theme.TEXT_MUTED,
             border_width=1,
             border_color=theme.CARD_BORDER,
-            corner_radius=theme.RADIUS_CONTROL,
-            height=32,
+            corner_radius=theme.RADIUS_PILL,
+            height=34,
             anchor="w",
             command=self.on_open_command_palette,
         )

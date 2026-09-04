@@ -5,7 +5,7 @@ Universal file search across Computer, Phone, Server, and Google Drive.
 from __future__ import annotations
 
 import customtkinter as ctk
-from gui import theme
+from gui import icons, theme
 from gui.store import store
 
 
@@ -151,11 +151,18 @@ class FilesPage(ctk.CTkScrollableFrame):
             row = ctk.CTkFrame(card, fg_color="transparent")
             row.pack(fill="x", padx=14, pady=12)
 
+            name = file_item.get("name", "")
+            extension = name.rsplit(".", 1)[-1].upper() if "." in name else "FILE"
             ctk.CTkLabel(
                 row,
-                text=file_item.get("icon", "📄"),
-                font=theme.font(20),
-            ).pack(side="left", padx=(0, 12))
+                text=extension[:4],
+                font=theme.font(theme.SIZE_LABEL, "bold"),
+                text_color=theme.TEXT_SECONDARY,
+                fg_color=theme.SURFACE_SUBTLE,
+                corner_radius=theme.RADIUS_CHIP,
+                width=40,
+                height=40,
+            ).pack(side="left", padx=(0, 14))
 
             info_col = ctk.CTkFrame(row, fg_color="transparent")
             info_col.pack(side="left", fill="both", expand=True)
