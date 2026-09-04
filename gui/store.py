@@ -25,6 +25,10 @@ class AppStore:
         self.jarvis_status_text = "All systems running"
         self.voice_listening = False
         
+        # Chat History for Main Screen
+        # Each: {"role": "user" | "assistant", "text": "..."}
+        self.chat_history: List[Dict[str, str]] = []
+        
         # System Log Entries
         # Each: {"time": "3:24 PM", "text": "...", "status": "working"|"completed"|"waiting"|"approval"|"info"}
         self.system_logs: List[Dict[str, str]] = [
@@ -368,6 +372,11 @@ class AppStore:
         entry = {"time": now_str, "text": redact(text), "status": status}
         self.system_logs.append(entry)
         self._notify("system_log_added", entry)
+
+    def add_chat_message(self, role: str, text: str):
+        entry = {"role": role, "text": redact(text)}
+        self.chat_history.append(entry)
+        self._notify("chat_message_added", entry)
 
     def trigger_approval(self, title: str, description: str, on_approve: Callable[[], None], on_reject: Optional[Callable[[], None]] = None):
         self.pending_approval = {

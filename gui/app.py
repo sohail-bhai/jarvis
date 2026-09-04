@@ -291,11 +291,13 @@ class JarvisDashboardApp(ctk.CTk):
                     text = evt.payload.get("text", "")
                     if text:
                         store.add_system_log(f"Heard: \"{text}\"", "info")
+                        store.add_chat_message("user", text)
 
                 elif evt.event_type == EVENT_ASSISTANT_RESPONSE:
                     resp = evt.payload.get("text", "")
                     if resp:
                         store.add_system_log(resp, "completed")
+                        store.add_chat_message("assistant", resp)
 
                 elif evt.event_type == EVENT_ERROR:
                     err = evt.payload.get("error", "An unexpected error occurred.")
