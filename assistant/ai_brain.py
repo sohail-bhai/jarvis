@@ -48,13 +48,16 @@ def create_google_slides(title: str, slides=None) -> str:
     return str(workspace.create_google_slides(title, slides))
 
 def open_website(url: str):
-    return webbrowser.open(url)
+    success = webbrowser.open(url)
+    return "Website opened in browser. You MUST now use get_clickable_elements() or read_screen() if you need to interact with it." if success else "Failed to open website."
 
 def search_google(query: str):
-    return webbrowser.open(f"https://www.google.com/search?q={urllib.parse.quote_plus(query)}")
+    success = webbrowser.open(f"https://www.google.com/search?q={urllib.parse.quote_plus(query)}")
+    return "Google search opened in browser. You MUST now use get_clickable_elements() to find and click a result." if success else "Failed to open browser."
 
 def search_youtube(query: str):
-    return webbrowser.open(f"https://www.youtube.com/results?search_query={urllib.parse.quote_plus(query)}")
+    success = webbrowser.open(f"https://www.youtube.com/results?search_query={urllib.parse.quote_plus(query)}")
+    return "YouTube search opened in browser. You MUST now use get_clickable_elements() to find the video on the screen and click_at() to play it." if success else "Failed to open browser."
 
 # Mapping of tool names to actual Python functions
 AVAILABLE_FUNCTIONS = {
@@ -67,6 +70,7 @@ AVAILABLE_FUNCTIONS = {
     "create_google_doc": create_google_doc,
     "create_google_slides": create_google_slides,
     "open_app": system_tasks.open_app,
+    "close_app": system_tasks.close_app,
     "tell_time": system_tasks.tell_time,
     "tell_date": system_tasks.tell_date,
     "tell_battery": system_tasks.tell_battery,
@@ -85,7 +89,6 @@ AVAILABLE_FUNCTIONS = {
     "click_at": system_tasks.click_at,
     "type_text": system_tasks.type_text,
     "press_key": system_tasks.press_key,
-    "find_and_click_text": system_tasks.find_and_click_text,
     "remember_fact": memory.remember_fact,
     "search_web": system_tasks.search_web,
     "read_unread_emails": email_tasks.read_unread_emails,
@@ -122,6 +125,7 @@ AVAILABLE_FUNCTIONS = {
     "start_overwatch": __import__('assistant.overwatch', fromlist=['']).start_overwatch,
     "stop_overwatch": __import__('assistant.overwatch', fromlist=['']).stop_overwatch,
     "send_telegram_update": system_tasks.send_telegram_update,
+    "write_to_screen_line": system_tasks.write_to_screen_line,
 
     # Driving a real browser, the way a person uses the web.
     "browse": browser.browse,
@@ -156,6 +160,7 @@ AVAILABLE_FUNCTIONS = {
     "gitlab_read_file": gitlab_agent.gitlab_read_file,
     "gitlab_propose_fix": gitlab_agent.gitlab_propose_fix,
     "gitlab_merge": gitlab_agent.gitlab_merge,
+
 }
 
 def _tool(name, description, properties, required=None):
@@ -522,6 +527,23 @@ LLM_TOOLS = WEB_TOOLS + [
     {
         "type": "function",
         "function": {
+            "name": "close_app",
+            "description": "Closes or terminates a running desktop application by name (e.g. 'notepad', 'chrome', 'netflix', 'spotify', 'calculator').",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "app_name": {
+                        "type": "string",
+                        "description": "The name of the application to close."
+                    }
+                },
+                "required": ["app_name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "send_telegram_update",
             "description": "Sends a message directly to the user's Telegram app. Useful for sending updates, reports, or asking questions when the user is away from their computer.",
             "parameters": {
@@ -876,6 +898,20 @@ LLM_TOOLS = WEB_TOOLS + [
     {
         "type": "function",
         "function": {
+            "name": "search_youtube",
+            "description": "Searches YouTube for a given query in the web browser.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "The search query"}
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "type_text",
             "description": "Types text automatically using the keyboard.",
             "parameters": {
@@ -904,14 +940,40 @@ LLM_TOOLS = WEB_TOOLS + [
     {
         "type": "function",
         "function": {
-            "name": "find_and_click_text",
-            "description": "Scans the screen for specific text and clicks it. Use this to click buttons like 'Save', 'Submit', etc.",
+            "name": "click_at",
+            "description": "Clicks at specific screen coordinates (x, y). Use get_clickable_elements first to find exact coordinates of buttons.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "target_text": {"type": "string", "description": "The exact text to look for and click"}
+                    "x": {"type": "integer", "description": "The X screen coordinate"},
+                    "y": {"type": "integer", "description": "The Y screen coordinate"}
                 },
-                "required": ["target_text"]
+                "required": ["x", "y"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "take_screenshot",
+            "description": "Captures a screenshot of the user's primary display and saves it.",
+            "parameters": {
+                "type": "object",
+                "properties": {}
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "open_website",
+            "description": "Opens a website URL in the user's default browser.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "The website URL or name to open"}
+                },
+                "required": ["url"]
             }
         }
     },
@@ -989,10 +1051,36 @@ LLM_TOOLS = WEB_TOOLS + [
         "type": "function",
         "function": {
             "name": "read_screen",
-            "description": "Reads raw text from the screen using OCR. Useful if the user asks you to read a specific document, email, or webpage that is currently open.",
+            "description": "Reads all visible text or a specific line from the active window or screen (such as Notepad, Word, browser, code editor). Use this when the user asks to read, inspect, or get content or lines from an open application or screen.",
             "parameters": {
                 "type": "object",
-                "properties": {}
+                "properties": {
+                    "line_number": {
+                        "type": "integer",
+                        "description": "Optional 1-indexed line number to read (e.g. 2 for 2nd line, 10 for 10th line). If omitted, reads all text."
+                    }
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "write_to_screen_line",
+            "description": "Writes, adds, or appends text onto a specific line in an open document or editor window (such as Notepad, Word, or code editor).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "line_number": {
+                        "type": "integer",
+                        "description": "The 1-indexed line number to write or append text to."
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "The text to write or add onto the line."
+                    }
+                },
+                "required": ["line_number", "text"]
             }
         }
     },
@@ -1024,7 +1112,15 @@ LLM_TOOLS = WEB_TOOLS + [
                 "required": ["feature_name", "description"]
             }
         }
-    }
+    },
+    {"type": "function", "function": {"name": "tell_date", "description": "Speaks the current date.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "mute_volume", "description": "Mutes the system volume.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "lock_laptop", "description": "Locks the computer.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "shutdown_laptop", "description": "Shuts down the computer.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "restart_laptop", "description": "Restarts the computer.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "read_notes", "description": "Reads all saved notes.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "clear_notes", "description": "Clears all saved notes.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "add_note", "description": "Saves a new note.", "parameters": {"type": "object", "properties": {"text": {"type": "string", "description": "The note text"}}, "required": ["text"]}}}
 ]
 
 # Short-term Memory (Conversation History)
@@ -1035,13 +1131,24 @@ def get_system_prompt():
         "Keep your text answers brief and to the point (no markdown).\n\n"
         "CRITICAL RULE: NEVER ask for permission to use tools. When the user asks you to do something, IMMEDIATELY output the JSON tool call to execute it! Do NOT ask 'shall I proceed?' or 'should I pull the trigger?'. Just DO IT.\n\n"
         "CRITICAL AUTONOMY RULE: If the user asks you to do a computer task that you don't have a direct 'app' tool for, BE RESOURCEFUL. "
-        "You have a vast array of atomic tools like `get_clickable_elements`, `scroll`, `read_clipboard`, `run_terminal_command`, `read_file`, `list_directory`, `click_at`, `type_text`, and `press_key`. "
+        "You have a vast array of atomic tools like `get_clickable_elements`, `scroll`, `read_clipboard`, `run_terminal_command`, `read_file`, `list_directory`, `click_at`, `type_text`, `read_screen`, and `press_key`. "
         "You can chain these together to achieve ANYTHING! For example, to open an unknown app, you can use `press_key('win')`, wait a second, use `type_text('app_name')`, and then `press_key('enter')`. "
-        "To click a button you don't know the coordinates for, use `get_clickable_elements` to retrieve the exact X/Y of every button on screen, then `click_at` the correct one.\n\n"
+        "To click a button you don't know the coordinates for, use `get_clickable_elements` to retrieve the exact X/Y of every button on screen, then `click_at` the correct one. "
+        "To read text, lines, or content from an open window or document (such as Notepad, Word, editor, or screen), use the `read_screen` tool directly.\n\n"
+        "CRITICAL MULTI-STEP SEQUENCING: When a request requires multiple actions, execute the FIRST step first (e.g. open an application before trying to read from it or type into it). Do not announce in text what you will do without emitting the tool call. If you have completed a step but the overall task is not finished, you MUST immediately output the JSON tool call for the NEXT step. NEVER output just conversational text if there are remaining actions to take!\n\n"
+        "CRITICAL READING RULE: When the user asks you to read a specific line (e.g. 'read 2nd line', 'read the 10th line'), ALWAYS call `read_screen(line_number=...)` immediately. There are NO safety restrictions on reading text or lines.\n\n"
         "You have configurable settings that you can change using the update_setting tool. The main settings are:\n"
         "- 'voice_rate': Reading speed (default 170. Higher is faster).\n"
         "- 'voice_volume': Audio volume (default 1.0. Range 0.0 to 1.0).\n\n"
         "CRITICAL RULE: Always use the provided tools to accomplish the user's tasks, chaining them if necessary.\n\n"
+        "WEB INTERACT EXAMPLE: If asked 'open youtube and search for X and play the Nth video', do this EXACTLY: "
+        "Step 1: call search_youtube(query='X') directly (DO NOT call open_website first). "
+        "Step 2: call get_clickable_elements(). "
+        "Step 3: Find the Nth video link in the results (skip ads/sidebar). "
+        "Step 4: call click_at(x=<x>, y=<y>) on that specific element.\n"
+        "ALREADY OPEN WINDOWS: If the user asks you to interact with an ALREADY OPEN tab (e.g. 'play the first video in the opened tab'), DO NOT call search_youtube or open_app again! Immediately call get_clickable_elements() to find the coordinates of what to click.\n"
+        "ANTI-HALLUCINATION RULE: Never claim 'the video is playing' or 'the task is done' if you merely performed a search. You MUST use get_clickable_elements and click_at to actually click the video before saying it is playing. Do not lie to the user.\n"
+        "If they ask for Google instead, use search_google(query='X') in Step 1. NEVER open a URL directly with the index.\n\n"
 
         "USING THE WEB: You drive a real browser. Never say you cannot open a "
         "website - open it. The loop is always the same: `browse` the page, "
@@ -1077,6 +1184,7 @@ def get_system_prompt():
         "send a diff or a snippet - send the whole file after your change. "
         "Proposing opens a merge request and stops there. Only call "
         "`gitlab_merge` when the user has explicitly asked you to merge."
+
     )
 
 conversation_history = []

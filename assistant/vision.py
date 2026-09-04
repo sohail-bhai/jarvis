@@ -2,61 +2,171 @@ import logging
 logger = logging.getLogger(__name__)
 
 import pytesseract
-from PIL import ImageGrab
+from PIL import Image, ImageGrab
 import pyautogui
 import os
 
-# You may need to point pytesseract to the exact installation path on Windows
-# Default path if installed on D drive as requested:
-pytesseract.pytesseract.tesseract_cmd = r'D:\Tesseract-OCR\tesseract.exe'
+def _find_tesseract():
+    """Detects tesseract binary in common Windows locations or system PATH."""
+    candidate_paths = [
+        r'D:\Tesseract-OCR\tesseract.exe',
+        r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+        r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
+        os.path.expandvars(r'%LOCALAPPDATA%\Programs\Tesseract-OCR\tesseract.exe'),
+    ]
+    for path in candidate_paths:
+        if os.path.isfile(path):
+            return path
+    import shutil
+    return shutil.which("tesseract")
+
+# Set binary if found
+_tess_cmd = _find_tesseract()
+if _tess_cmd:
+    pytesseract.pytesseract.tesseract_cmd = _tess_cmd
 
 def find_text_on_screen(target_text):
     """
-    Takes a screenshot, runs OCR, and returns the (x, y) center coordinates
-    of the first instance of target_text. Returns None if not found.
+    Finds (x, y) center coordinates of target_text on screen.
+    Uses Tesseract OCR if available, falling back to UIAutomation control inspection.
     """
+    tess = _find_tesseract()
+    if tess:
+        try:
+            pytesseract.pytesseract.tesseract_cmd = tess
+            screenshot = ImageGrab.grab()
+            data = pytesseract.image_to_data(screenshot, output_type=pytesseract.Output.DICT)
+            target_text_lower = target_text.lower()
+            for i in range(len(data['text'])):
+                detected_word = data['text'][i].strip().lower()
+                if target_text_lower in detected_word and detected_word != '':
+                    x = data['left'][i]
+                    y = data['top'][i]
+                    w = data['width'][i]
+                    h = data['height'][i]
+                    return (x + (w // 2), y + (h // 2))
+        except Exception as e:
+            logger.info(f"[Vision Error] Tesseract OCR search failed: {e}")
+
+    # Fallback: UIAutomation element search
     try:
-        # Take a screenshot
-        screenshot = ImageGrab.grab()
-        
-        # Run OCR and get bounding box data
-        data = pytesseract.image_to_data(screenshot, output_type=pytesseract.Output.DICT)
-        
-        target_text_lower = target_text.lower()
-        
-        # Loop through all detected words
-        for i in range(len(data['text'])):
-            detected_word = data['text'][i].strip().lower()
-            
-            if target_text_lower in detected_word and detected_word != '':
-                # Get the bounding box of the word
-                x = data['left'][i]
-                y = data['top'][i]
-                w = data['width'][i]
-                h = data['height'][i]
-                
-                # Calculate the center point to click
-                center_x = x + (w // 2)
-                center_y = y + (h // 2)
-                
-                return (center_x, center_y)
-                
-        return None
+        import uiautomation as auto
+        target_lower = target_text.lower()
+        active = auto.GetForegroundControl() or auto.GetRootControl()
+        for ctrl, depth in auto.WalkControl(active, maxDepth=6):
+            if ctrl.Name and target_lower in ctrl.Name.lower():
+                rect = ctrl.BoundingRectangle
+                if rect.width() > 0 and rect.height() > 0:
+                    return (rect.left + (rect.width() // 2), rect.top + (rect.height() // 2))
     except Exception as e:
-        logger.info(f"[Vision Error] Failed to find text on screen: {e}")
-        return None
+        logger.info(f"[Vision Error] UIAutomation text search failed: {e}")
+
+    return None
 
 def read_screen_text():
     """
     Takes a screenshot, runs OCR, and returns all text found on the screen.
+    Falls back to UIAutomation control inspection and local VLM when Tesseract is absent.
     """
+    # Tier 1: Tesseract OCR
+    tess = _find_tesseract()
+    if tess:
+        try:
+            pytesseract.pytesseract.tesseract_cmd = tess
+            screenshot = ImageGrab.grab()
+            text = pytesseract.image_to_string(screenshot)
+            if text and text.strip():
+                return text.strip()
+        except Exception as e:
+            logger.info(f"[Vision Error] Tesseract read failed: {e}")
+
+    # Tier 2: UIAutomation structural text extraction from active and candidate windows
     try:
-        screenshot = ImageGrab.grab()
-        text = pytesseract.image_to_string(screenshot)
-        return text.strip()
+        import uiautomation as auto
+        import os
+        current_pid = os.getpid()
+        candidates = []
+
+        # Priority 1: Check known document/editor windows directly (Notepad, etc.)
+        for target_class in ("Notepad", "Notepad_Desktop_Old"):
+            np = auto.WindowControl(searchDepth=1, ClassName=target_class)
+            if np.Exists(0.2) and np.ProcessId != current_pid and np not in candidates:
+                candidates.append(np)
+
+        # Priority 2: Check current foreground window if not JARVIS
+        fg = auto.GetForegroundControl()
+        if fg and fg.ControlType == auto.ControlType.WindowControl:
+            if fg.ProcessId != current_pid and "jarvis" not in fg.Name.lower() and fg not in candidates:
+                candidates.append(fg)
+
+        # Priority 3: Desktop windows excluding JARVIS
+        for w in auto.GetRootControl().GetChildren():
+            if w.ControlType == auto.ControlType.WindowControl:
+                if w.ProcessId != current_pid and "jarvis" not in w.Name.lower() and w not in candidates:
+                    candidates.append(w)
+
+        # 1. First search all candidate windows specifically for real document/editor controls (Notepad, Word, editors)
+        for win in candidates:
+            for ctrl, depth in auto.WalkControl(win, maxDepth=6):
+                if ctrl.ControlType in (auto.ControlType.DocumentControl, auto.ControlType.EditControl) or ctrl.ClassName in ("RichEditD2DPT", "Edit"):
+                    doc_text = None
+                    try:
+                        tp = ctrl.GetTextPattern()
+                        if tp:
+                            doc_text = tp.DocumentRange.GetText(-1)
+                    except Exception:
+                        pass
+                    if doc_text is None:
+                        try:
+                            vp = ctrl.GetValuePattern()
+                            if vp:
+                                doc_text = vp.Value
+                        except Exception:
+                            pass
+                    if doc_text is not None:
+                        normalized = doc_text.replace("\r\n", "\n").replace("\r", "\n").strip()
+                        return normalized
+
+        # 2. If no dedicated document control found, collect meaningful UI element text, ignoring icon glyphs
+        if candidates:
+            extracted = []
+            for ctrl, depth in auto.WalkControl(candidates[0], maxDepth=6):
+                # Check TextPattern on TextBlocks only if they are not single icon characters
+                val = None
+                try:
+                    tp = ctrl.GetTextPattern()
+                    if tp:
+                        t = tp.DocumentRange.GetText(-1).strip()
+                        if t and not (len(t) == 1 and ord(t) >= 0xE000):
+                            val = t
+                except Exception:
+                    pass
+                if not val and ctrl.Name:
+                    name_str = ctrl.Name.strip()
+                    if len(name_str) > 1 and not (len(name_str) == 1 and ord(name_str) >= 0xE000):
+                        val = name_str
+                if val and val not in extracted and ctrl.ControlType in (
+                    auto.ControlType.TextControl,
+                    auto.ControlType.ButtonControl,
+                    auto.ControlType.MenuItemControl,
+                    auto.ControlType.ListItemControl,
+                    auto.ControlType.HeaderItemControl,
+                ):
+                    extracted.append(val)
+            if extracted:
+                return "\n".join(extracted)
     except Exception as e:
-        logger.info(f"[Vision Error] Failed to read screen text: {e}")
-        return f"Error reading screen: {e}"
+        logger.info(f"[Vision Error] UIAutomation text extraction failed: {e}")
+
+    # Tier 3: Multimodal VLM (moondream)
+    try:
+        vlm_res = analyze_screen(prompt="Transcribe all readable text visible on this screen. Return only the visible text.")
+        if vlm_res and not vlm_res.startswith("Error"):
+            return vlm_res
+    except Exception as e:
+        logger.info(f"[Vision Error] VLM screen transcription failed: {e}")
+
+    return "No readable text found on the screen."
 
 def find_icon_on_screen(icon_path):
     """

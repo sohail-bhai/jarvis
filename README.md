@@ -123,9 +123,15 @@ Say goodbye to cryptic terminal outputs and dangerous hallucinated hidden reason
   [12:34:10] [WARN]   JARVIS needs your approval: Ready to commit 14 modified files.
   ```
 
+### 5. 🎨 Minimalist Control Dashboard
+A completely redesigned, true dark-mode CustomTkinter interface inspired by premium tools like ChatGPT and Linear.
+- **Dynamic Conversational UI**: Starts as an ultra-minimal void. Upon interaction, morphs into an auto-scrolling chat window with clean right/left aligned message bubbles.
+- **Native In-App Overlays**: Popups like Notifications, Command Palettes, and Approval Modals render natively as floating frames inside the app, avoiding cluttered OS windows.
+- **Live System Log Dual-View**: Your natural conversation stays centered in the chat view, while JARVIS's internal background thoughts and actions stream independently into the right-hand System Log.
+
 ---
 
-## 🎬 The 3-Minute Demo Workflow
+## ⏱️ The 3-Minute Demo Workflow
 
 Experience how JARVIS turns a high-level goal into reality:
 
@@ -221,7 +227,7 @@ Personalize names, models, and safety levels directly in `config.json`:
 ```bash
 python jarvis_gui.py
 ```
-*Access the interactive interface with the Live Orb, System Log, Overwatch controls, and single-click task approvals.*
+*Access the ultra-minimalist, dark-mode ChatGPT-style interface with native in-app overlays, a dynamic conversational chat layout, Live System Log, and single-click task approvals.*
 
 #### 🎙️ Launch in Continuous Headless / Voice Mode
 ```bash
@@ -327,7 +333,7 @@ python main.py --text "what time is it" --no-speech
 - [x] **Phase 0: Foundations** — Bounded event bus, unified logging, append-only JSONL audit ledger.
 - [x] **Phase 1: Safety Gate** — Context-aware permissions (`guard.py`), unified prompt broker (`confirm.py`).
 - [x] **Phase 2: Autonomous Overwatch** — COM-initialized background UIAutomation scanner with rule matching and rate limiting.
-- [x] **Phase 3: Control Dashboard** — Live System Log, Overwatch status card, and dynamic confirmation cards.
+- [x] **Phase 3: Control Dashboard** — Ultra-minimalist ChatGPT-style dark mode UI, native in-app overlays, Live System Log, and dynamic confirmation cards.
 - [x] **Phase 4: Helper Network Fabric** — Agent registry with health and a kill switch, plus native and HTTP adapters that MCP, LangGraph and containerised agents plug into.
 - [ ] **Phase 5: Google Workspace Cloud Sync** — Full bi-directional Drive semantic indexer and Gmail action drafting.
 

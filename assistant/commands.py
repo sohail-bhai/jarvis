@@ -1,11 +1,18 @@
 import re
+import time
+import logging
 import webbrowser
 import urllib.parse
 
+logger = logging.getLogger(__name__)
+
 from assistant.speech import speak, listen
 from assistant.config import get_setting, update_setting
+from assistant import guard
+from assistant import call_context
 from assistant.system_tasks import (
     open_app,
+    close_app,
     tell_time,
     tell_date,
     tell_battery,
@@ -145,21 +152,29 @@ def handle_volume_command(command):
     return False
 
 def open_website(command):
+    command_lower = command.lower().strip()
     websites = get_setting("websites", {})
 
     for site_name, url in websites.items():
-        if f"open {site_name}" in command:
-            speak(f"Opening {site_name}")
-            webbrowser.open(url)
-            return True
+        for prefix in ["open ", "launch ", "start "]:
+            if command_lower == f"{prefix}{site_name.lower()}" or command_lower == f"{prefix}{site_name.lower()} please":
+                speak(f"Opening {site_name}")
+                webbrowser.open(url)
+                return True
 
     return False
 
 def handle_app_command(command):
     """
-    Handles opening common desktop applications:
-    notepad, chrome, calculator, vscode, file explorer, cmd.
+    Handles opening desktop applications and websites via smart launcher.
+    Does not intercept compound or multi-action commands.
     """
+    command_lower = command.lower().strip()
+
+    compound_markers = [" and ", " then ", " after that ", " also ", " & ", ", "]
+    if any(marker in command_lower for marker in compound_markers):
+        return False
+
     app_aliases = {
         "notepad": "notepad",
         "google chrome": "chrome",
@@ -175,20 +190,40 @@ def handle_app_command(command):
         "cmd": "cmd",
     }
     for alias, app_name in app_aliases.items():
-        if f"open {alias}" in command:
-            open_app(app_name)
+        for prefix in ["open ", "launch ", "start ", "run "]:
+            if command_lower == f"{prefix}{alias}" or command_lower == f"{prefix}{alias} please":
+                open_app(app_name)
+                return True
+
+    # Generic "open <target>" routing through smart launcher
+    if command_lower.startswith("open "):
+        target = command_lower[5:].strip()
+        reserved = ["notes", "my notes", "file", "the door", "link"]
+        action_words = ["read", "write", "type", "check", "find", "search", "click", "tell", "summarize", "copy"]
+        target_words = target.split()
+        if target and target not in reserved and not any(w in target_words for w in action_words):
+            open_app(target)
             return True
+
+    # Generic "close <target>" or "kill <target>"
+    if command_lower.startswith("close ") or command_lower.startswith("kill "):
+        target = command_lower.split(" ", 1)[1].strip()
+        reserved = ["notes", "my notes", "file", "the door", "switch", "all"]
+        if target and target not in reserved:
+            close_app(target)
+            return True
+
     return False
 
 def google_search(command):
     query = ""
 
-    if "search google for" in command:
-        query = command.replace("search google for", "", 1).strip()
-    elif "google search" in command:
-        query = command.replace("google search", "", 1).strip()
+    if command.startswith("search google for "):
+        query = command[len("search google for "):].strip()
+    elif command.startswith("google search "):
+        query = command[len("google search "):].strip()
     elif command.startswith("search "):
-        query = command.replace("search", "", 1).strip()
+        query = command[len("search "):].strip()
 
     if query:
         speak(f"Searching Google for {query}")
@@ -199,14 +234,20 @@ def google_search(command):
     return False
 
 def youtube_search(command):
+    """Only matches commands that are explicitly a YouTube search request.
+    Handles: 'search youtube for X', 'youtube search X', 'search on youtube for X'.
+    Does NOT match 'open youtube search for X and play ...' — that goes to the AI brain.
+    """
     query = ""
 
-    if "youtube search" in command:
-        query = command.replace("youtube search", "", 1).strip()
-    elif "search youtube for" in command:
-        query = command.replace("search youtube for", "", 1).strip()
-    elif "search on youtube" in command:
-        query = command.replace("search on youtube", "", 1).strip()
+    if command.startswith("youtube search "):
+        query = command[len("youtube search "):].strip()
+    elif command.startswith("search youtube for "):
+        query = command[len("search youtube for "):].strip()
+    elif command.startswith("search on youtube for "):
+        query = command[len("search on youtube for "):].strip()
+    elif command.startswith("search on youtube "):
+        query = command[len("search on youtube "):].strip()
 
     if query:
         speak(f"Searching YouTube for {query}")
@@ -214,6 +255,21 @@ def youtube_search(command):
         webbrowser.open(f"https://www.youtube.com/results?search_query={encoded_query}")
         return True
 
+    return False
+
+def handle_web_interact_ai_command(command):
+    """
+    Routes compound commands (search + interact) for Web/YouTube to the AI brain.
+    Examples: 'open youtube search for hasini and play the 3rd video'
+              'search google for weather and click the first link'
+    The AI brain chains: search_youtube/google → wait → get_clickable_elements → click_at.
+    """
+    c = command.lower()
+    has_web = "youtube" in c or "google" in c or "search" in c
+    has_interact = any(w in c for w in ["play", "click", "select", "watch", "open the video", "open the first", "open the link"])
+    if has_web and has_interact:
+        ask_ai(command, auto_confirm=True)
+        return True
     return False
 
 def confirm_action(question):
@@ -246,15 +302,122 @@ def check_routines(command):
             
     return False
 
+def handle_atomic_gui_command(command: str) -> bool:
+    """Directly executes atomic GUI actions like typing or key presses without LLM overhead."""
+    clean = command.strip()
+    clean_lower = clean.lower()
+
+    if clean_lower.startswith("type ") or clean_lower.startswith("write "):
+        first_space = clean.find(" ")
+        text_to_type = clean[first_space + 1:].strip()
+        if text_to_type:
+            from assistant.system_tasks import type_text
+            type_text(text_to_type)
+            speak(f"Typed {text_to_type}")
+            return True
+
+    if clean_lower.startswith("press key ") or clean_lower.startswith("press "):
+        key_name = clean_lower.replace("press key", "press").split("press", 1)[1].strip()
+        if key_name:
+            from assistant.system_tasks import press_key
+            press_key(key_name)
+            speak(f"Pressed {key_name}")
+            return True
+
+    if clean_lower.startswith("scroll down"):
+        from assistant.system_tasks import scroll
+        scroll(-5)
+        speak("Scrolled down.")
+        return True
+
+    if clean_lower.startswith("scroll up"):
+        from assistant.system_tasks import scroll
+        scroll(5)
+        speak("Scrolled up.")
+        return True
+
+    return False
+
+def handle_read_screen_command(command: str) -> bool:
+    """
+    Directly handles reading screen text or specific lines (e.g. 'read 2nd line', 'read line 10', 'read screen').
+    """
+    clean = command.strip().lower()
+
+    # 1. Check for specific line number request
+    line_num = None
+    m1 = re.search(r"read (?:the )?(\d+)(?:st|nd|rd|th)? line", clean)
+    if m1:
+        line_num = int(m1.group(1))
+    else:
+        m2 = re.search(r"read (?:the )?line (\d+)", clean)
+        if m2:
+            line_num = int(m2.group(1))
+
+    if line_num is not None:
+        from assistant.system_tasks import read_screen
+        res = read_screen(line_number=line_num)
+        speak(res)
+        return True
+
+    # 2. Check for general screen reading request
+    if clean in ("read screen", "read the screen", "read text on screen", "read document", "read the document"):
+        from assistant.system_tasks import read_screen
+        res = read_screen()
+        speak(res)
+        return True
+
+    return False
+
+def handle_line_write_command(command: str) -> bool:
+    """
+    Directly handles adding, inserting, or writing text onto a specific line in an open editor window.
+    Example: 'add a hahaha on the 5th line', 'write hello on line 2'
+    """
+    clean = command.strip()
+
+    # 1. 'add <text> on/to/at [the] line <N>' or '[the] <N>th line'
+    m1 = re.search(r'(?:add|write|insert|type|put)\s+(?:a\s+)?(.+?)\s+(?:on|to|at|in)\s+(?:the\s+)?(?:line\s+(\d+)|(\d+)(?:st|nd|rd|th)?\s+line)', clean, re.IGNORECASE)
+    if m1:
+        text = m1.group(1).strip()
+        line_num = int(m1.group(2) or m1.group(3))
+        from assistant.system_tasks import write_to_screen_line
+        write_to_screen_line(line_number=line_num, text=text)
+        return True
+
+    # 2. 'add on/to/at [the] line <N>' or '[the] <N>th line <text>'
+    m2 = re.search(r'(?:add|write|insert|type|put)\s+(?:on|to|at|in)\s+(?:the\s+)?(?:line\s+(\d+)|(\d+)(?:st|nd|rd|th)?\s+line)\s+(?:a\s+)?(.+)', clean, re.IGNORECASE)
+    if m2:
+        line_num = int(m2.group(1) or m2.group(2))
+        text = m2.group(3).strip()
+        from assistant.system_tasks import write_to_screen_line
+        write_to_screen_line(line_number=line_num, text=text)
+        return True
+
+    return False
+
 def execute_command(command, auto_confirm=False):
     """
     Main command router for JARVIS Version 1.2.
+    Routes simple commands to fast-paths, and compound/multi-step commands directly to the AI brain.
     """
-
     if any(word in command for word in ["stop", "exit", "quit", "goodbye"]):
         speak(f"Goodbye {get_setting('user_name', 'Sir')}.")
         return False
 
+    c = command.lower()
+    # Route multi-step instructions straight to the AI brain for intelligent orchestration
+    if " and " in c or " then " in c or " after " in c:
+        logger.info(f"[JARVIS] Routing compound command to AI brain: '{command}'")
+        ask_ai(command, auto_confirm=auto_confirm)
+        return True
+
+    return execute_single_command(command, auto_confirm=auto_confirm)
+
+def execute_single_command(command, auto_confirm=False):
+    """
+    Routes an individual command to its appropriate handler or the AI brain.
+    """
     if handle_model_switch_command(command):
         return True
 
@@ -267,10 +430,22 @@ def execute_command(command, auto_confirm=False):
     if handle_volume_command(command):
         return True
 
-    if open_website(command):
+    if handle_atomic_gui_command(command):
+        return True
+
+    if handle_read_screen_command(command):
+        return True
+
+    if handle_line_write_command(command):
         return True
 
     if handle_app_command(command):
+        return True
+
+    if open_website(command):
+        return True
+
+    if handle_web_interact_ai_command(command):
         return True
 
     if youtube_search(command):
@@ -340,11 +515,11 @@ def execute_command(command, auto_confirm=False):
         provide_morning_briefing()
         return True
 
-    if "time" in command:
+    if re.search(r"\btime\b", command):
         tell_time()
-    elif "date" in command:
+    elif re.search(r"\bdate\b", command):
         tell_date()
-    elif "battery" in command:
+    elif re.search(r"\bbattery\b", command):
         tell_battery()
 
     elif "screenshot" in command or "screen shot" in command:

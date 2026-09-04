@@ -16,12 +16,17 @@ _telegram_thread = None
 _telegram_active = False
 
 def send_telegram_message(token, chat_id, text):
+    if not text:
+        return
     try:
         url = f"https://api.telegram.org/bot{token}/sendMessage"
-        data = urllib.parse.urlencode({'chat_id': chat_id, 'text': text}).encode('utf-8')
-        req = urllib.request.Request(url, data=data)
-        with urllib.request.urlopen(req, timeout=10) as response:
-            pass
+        text_str = str(text)
+        chunks = [text_str[i:i+4000] for i in range(0, len(text_str), 4000)]
+        for chunk in chunks:
+            data = urllib.parse.urlencode({'chat_id': chat_id, 'text': chunk}).encode('utf-8')
+            req = urllib.request.Request(url, data=data)
+            with urllib.request.urlopen(req, timeout=10) as response:
+                pass
     except Exception as e:
         logger.info(f"[Telegram Error] Could not send message: {e}")
 
@@ -30,6 +35,16 @@ def _telegram_worker():
     
     token = get_setting("telegram_bot_token", "")
     chat_id = get_setting("telegram_chat_id", "")
+    
+    if token.startswith("secret://"):
+        try:
+            from assistant.control.store import ControlStore
+            from assistant.control.secrets import SecretStore, load_key
+            store = ControlStore()
+            secrets = SecretStore(store, key=load_key())
+            token = secrets.resolve(token)
+        except Exception as e:
+            logger.warning(f"Could not resolve secret for Telegram token: {e}")
     
     if not token:
         logger.info("[JARVIS] Telegram Bot Token not found in config. Remote execution disabled.")
@@ -68,7 +83,33 @@ def _telegram_worker():
                                 continue
                                 
                             if sender_chat_id == chat_id:
-                                text_lower = text.lower().strip()
+                                text_clean = text.strip()
+                                text_lower = text_clean.lower()
+                                
+                                if text_lower in ["/start", "start"]:
+                                    send_telegram_message(
+                                        token,
+                                        chat_id,
+                                        "Greetings! JARVIS Remote Link is active and connected to your desktop. How can I assist you, Sir?"
+                                    )
+                                    continue
+
+                                if text_lower in ["/help", "help"]:
+                                    send_telegram_message(
+                                        token,
+                                        chat_id,
+                                        "JARVIS Telegram Bridge Commands:\n"
+                                        "- Ask any question (uses local Ollama AI brain)\n"
+                                        "- 'time' or 'date' (check system clock)\n"
+                                        "- 'battery' (hardware battery status)\n"
+                                        "- 'take a note <text>' (save persistent note)\n"
+                                        "- 'read notes' (view notes)\n"
+                                        "- 'screenshot' (capture screen)\n"
+                                        "- '/yes <id>' or '/no <id>' (security confirmations)\n"
+                                        "- '/kill' (emergency kill switch)"
+                                    )
+                                    continue
+
                                 if text_lower.startswith("/yes ") or text_lower.startswith("/no "):
                                     from assistant import confirm
                                     parts = text_lower.split(" ")
@@ -83,12 +124,15 @@ def _telegram_worker():
                                     send_telegram_message(token, chat_id, "Kill switch activated.")
                                     continue
                                     
-                                speak(f"Incoming remote command: {text}")
+                                speak(f"Incoming remote command: {text_clean}")
                                 def _run_remote_cmd(cmd_text, token, chat_id):
                                     call_context.set_origin("telegram")
-                                    enhanced_cmd = f"[From Telegram User]: {cmd_text}. (System note: Use the send_telegram_update tool to reply to the user directly, or execute the requested action.)"
-                                    execute_command(enhanced_cmd)
-                                call_context.spawn_thread(target=_run_remote_cmd, args=(text, token, chat_id), daemon=True)
+                                    try:
+                                        execute_command(cmd_text, auto_confirm=True)
+                                    except Exception as ex:
+                                        logger.error(f"Telegram command error: {ex}")
+                                        speak(f"Error executing command: {ex}")
+                                call_context.spawn_thread(target=_run_remote_cmd, args=(text_clean, token, chat_id), daemon=True)
                             else:
 
                                 logger.info(f"[JARVIS] Unauthorized access attempt from Chat ID: {sender_chat_id}")

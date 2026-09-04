@@ -15,6 +15,7 @@ SCREENSHOT_FOLDER = PROJECT_ROOT / "assets" / "screenshots"
 
 def _get_pyautogui():
     import pyautogui
+    pyautogui.FAILSAFE = False
     return pyautogui
 
 
@@ -28,25 +29,264 @@ def get_os():
 def clamp_number(value, minimum=0, maximum=100):
     return max(minimum, min(maximum, int(value)))
 
+def activate_window(hwnd):
+    """Brings a window by HWND to the foreground and restores it if minimized."""
+    if not hwnd or get_os() != "windows":
+        return False
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        kernel32 = ctypes.windll.kernel32
+        user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+        current_fg = user32.GetForegroundWindow()
+        if current_fg != hwnd:
+            cur_thread = kernel32.GetCurrentThreadId()
+            fg_thread = user32.GetWindowThreadProcessId(current_fg, None)
+            if cur_thread != fg_thread and fg_thread != 0:
+                user32.AttachThreadInput(cur_thread, fg_thread, True)
+                user32.SetForegroundWindow(hwnd)
+                user32.BringWindowToTop(hwnd)
+                user32.AttachThreadInput(cur_thread, fg_thread, False)
+            else:
+                user32.SetForegroundWindow(hwnd)
+                user32.BringWindowToTop(hwnd)
+        return True
+    except Exception as e:
+        logger.debug(f"activate_window failed for hwnd {hwnd}: {e}")
+        return False
+
+_STARTAPPS_CACHE = None
+_STARTAPPS_CACHE_TIME = 0
+
+def _get_windows_start_apps():
+    """Cache and return all registered Windows Store & desktop applications."""
+    global _STARTAPPS_CACHE, _STARTAPPS_CACHE_TIME
+    import time
+    import json
+    now = time.time()
+    if _STARTAPPS_CACHE is not None and (now - _STARTAPPS_CACHE_TIME) < 300:
+        return _STARTAPPS_CACHE
+
+    apps = []
+    try:
+        out = subprocess.check_output(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", "Get-StartApps | ConvertTo-Json"],
+            timeout=5
+        ).decode("utf-8", errors="ignore")
+        data = json.loads(out)
+        apps = data if isinstance(data, list) else [data]
+    except Exception as e:
+        logger.debug(f"Get-StartApps lookup note: {e}")
+
+    _STARTAPPS_CACHE = apps
+    _STARTAPPS_CACHE_TIME = now
+    return apps
+
+def _find_installed_app(query, system):
+    """
+    Search installed desktop applications on Windows, macOS, or Linux.
+    Returns (path, display_name) or (None, None).
+    """
+    clean_q = query.lower().replace(" ", "").replace("_", "").replace("-", "")
+
+    if system == "windows":
+        # 1. Search Windows Store / UWP & desktop applications via Get-StartApps
+        try:
+            start_apps = _get_windows_start_apps()
+            bad_startapp_words = {"uninstall", "remove", "setup", "reset", "documentation", "help", "readme"}
+
+            # Exact normalized match
+            for item in start_apps:
+                raw_name = item.get("Name", "")
+                name = raw_name.lower()
+                if not any(bw in name for bw in bad_startapp_words):
+                    if clean_q == name.replace(" ", "").replace("_", "").replace("-", ""):
+                        return f"shell:AppsFolder\\{item['AppID']}", raw_name
+
+            # Word match
+            for item in start_apps:
+                raw_name = item.get("Name", "")
+                name = raw_name.lower()
+                if not any(bw in name for bw in bad_startapp_words):
+                    words = name.replace("_", " ").replace("-", " ").split()
+                    if query.lower() in words or any(w.startswith(query.lower()) for w in words):
+                        return f"shell:AppsFolder\\{item['AppID']}", raw_name
+
+            # Substring match
+            for item in start_apps:
+                raw_name = item.get("Name", "")
+                name = raw_name.lower()
+                if not any(bw in name for bw in bad_startapp_words):
+                    if query.lower() in name:
+                        return f"shell:AppsFolder\\{item['AppID']}", raw_name
+        except Exception as e:
+            logger.debug(f"StartApps matching note: {e}")
+
+        # 2. Search Start Menu .lnk shortcuts
+        try:
+            import winreg
+        except ImportError:
+            winreg = None
+
+        dirs = [
+            os.path.expandvars(r"%ProgramData%\Microsoft\Windows\Start Menu\Programs"),
+            os.path.expandvars(r"%APPDATA%\Microsoft\Windows\Start Menu\Programs"),
+        ]
+        candidates = []
+        bad_words = {"uninstall", "remove", "setup", "reset", "documentation", "help", "readme", "website", "update"}
+
+        for folder in dirs:
+            if os.path.exists(folder):
+                for root, _, files in os.walk(folder):
+                    for f in files:
+                        if f.lower().endswith(".lnk"):
+                            name = f[:-4].lower()
+                            if not any(bw in name for bw in bad_words):
+                                candidates.append((name, os.path.join(root, f), f[:-4]))
+
+        # Exact normalized match
+        for name, path, orig in candidates:
+            if clean_q == name.replace(" ", "").replace("_", "").replace("-", ""):
+                return path, orig
+
+        # Word-in-name match
+        for name, path, orig in candidates:
+            words = name.replace("_", " ").replace("-", " ").split()
+            if query.lower() in words or any(w.startswith(query.lower()) for w in words):
+                return path, orig
+
+        # Substring match
+        for name, path, orig in candidates:
+            if query.lower() in name:
+                return path, orig
+
+        # Registry App Paths
+        if winreg:
+            for hive in [winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER]:
+                try:
+                    with winreg.OpenKey(hive, r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths") as key:
+                        num = winreg.QueryInfoKey(key)[0]
+                        for i in range(num):
+                            sub = winreg.EnumKey(key, i)
+                            clean = sub.lower().replace(".exe", "")
+                            if clean == clean_q or query.lower() in clean:
+                                val = winreg.QueryValue(key, sub)
+                                if val and os.path.exists(val):
+                                    return val, clean.title()
+                except Exception:
+                    pass
+
+    elif system == "darwin":
+        for app_dir in ["/Applications", os.path.expanduser("~/Applications")]:
+            if os.path.exists(app_dir):
+                for item in os.listdir(app_dir):
+                    if item.lower().endswith(".app"):
+                        name = item[:-4].lower()
+                        if query.lower() in name or clean_q in name.replace(" ", ""):
+                            return os.path.join(app_dir, item), item[:-4]
+
+    else:
+        desk_dir = "/usr/share/applications"
+        if os.path.exists(desk_dir):
+            for item in os.listdir(desk_dir):
+                if item.lower().endswith(".desktop") and query.lower() in item.lower():
+                    return os.path.join(desk_dir, item), item[:-8]
+
+    return None, None
+
+
 def open_app(app_name):
+    """
+    3-tier smart application & website launcher:
+    Tier 1: Built-in known app aliases.
+    Tier 2: Search installed applications on local disk.
+    Tier 3: Fallback to browser (configured websites or web search/URL).
+    """
+    import webbrowser
+    import urllib.parse
+    from assistant.config import get_setting
+
     system = get_os()
+    raw_query = str(app_name).strip()
+    query = raw_query.lower()
+    if query.startswith("open "):
+        query = query[5:].strip()
+
+    display_name = query.replace("_", " ").title()
 
     try:
+        # Tier 1: Built-in known app aliases
         if system == "windows":
             windows_apps = {
                 "chrome": "start chrome",
-                "notepad": "notepad",
-                "calculator": "calc",
-                "vscode": "code",
-                "file_explorer": "explorer",
+                "google chrome": "start chrome",
+                "notepad": "start notepad",
+                "calculator": "start calc",
+                "calc": "start calc",
+                "vscode": "start code",
+                "vs code": "start code",
+                "code": "start code",
+                "file_explorer": "start explorer",
+                "file explorer": "start explorer",
+                "explorer": "start explorer",
                 "cmd": "start cmd",
+                "terminal": "start cmd",
+                "command prompt": "start cmd",
+                "powershell": "start powershell",
+                "paint": "start mspaint",
+                "task manager": "start taskmgr",
+                "taskmgr": "start taskmgr",
+                "settings": "start ms-settings:",
+                "edge": "start msedge",
+                "microsoft edge": "start msedge",
+                "word": "start winword",
+                "excel": "start excel",
+                "powerpoint": "start powerpnt",
             }
-            command = windows_apps.get(app_name)
-            if command:
-                speak(f"Opening {app_name.replace('_', ' ')}")
-                os.system(command)
-            else:
-                speak("This app is not added yet.")
+            if query in windows_apps:
+                # If window is already open, activate it instead of launching a duplicate blank window
+                target_cls = None  # initialize before try so it's always defined below
+                try:
+                    import uiautomation as auto
+                    import time
+                    app_classes = {"notepad": "Notepad", "calculator": "ApplicationFrameWindow", "calc": "ApplicationFrameWindow"}
+                    target_cls = app_classes.get(query)
+                    if target_cls:
+                        existing = auto.WindowControl(searchDepth=1, ClassName=target_cls)
+                        if existing.Exists(0.3):
+                            speak(f"Opening {display_name}")
+                            existing.SetActive()
+                            if existing.NativeWindowHandle:
+                                activate_window(existing.NativeWindowHandle)
+                            return True
+                except Exception:
+                    pass
+
+                speak(f"Opening {display_name}")
+                cmd = windows_apps[query]
+                if not cmd.startswith("start "):
+                    cmd = f"start {cmd}"
+                os.system(cmd)
+
+                # Wait for the launched window AND its document control to be fully ready
+                if target_cls:
+                    for _ in range(80):  # up to 8 seconds total
+                        time.sleep(0.1)
+                        try:
+                            new_win = auto.WindowControl(searchDepth=1, ClassName=target_cls)
+                            if not new_win.Exists(0.1):
+                                continue
+                            # Bring window to foreground
+                            new_win.SetActive()
+                            if new_win.NativeWindowHandle:
+                                activate_window(new_win.NativeWindowHandle)
+                            # Wait until DocumentControl inside is also ready
+                            doc = new_win.DocumentControl(ClassName="RichEditD2DPT")
+                            if doc.Exists(0.1):
+                                break  # App is fully ready
+                        except Exception:
+                            pass
+                return True
 
         elif system == "darwin":
             mac_apps = {
@@ -57,12 +297,10 @@ def open_app(app_name):
                 "file_explorer": "open .",
                 "cmd": "open -a Terminal",
             }
-            command = mac_apps.get(app_name)
-            if command:
-                speak(f"Opening {app_name.replace('_', ' ')}")
-                os.system(command)
-            else:
-                speak("This app is not added yet.")
+            if query in mac_apps:
+                speak(f"Opening {display_name}")
+                os.system(mac_apps[query])
+                return True
 
         else:
             linux_apps = {
@@ -73,16 +311,127 @@ def open_app(app_name):
                 "file_explorer": "xdg-open .",
                 "cmd": "gnome-terminal",
             }
-            command = linux_apps.get(app_name)
-            if command:
-                speak(f"Opening {app_name.replace('_', ' ')}")
-                subprocess.Popen(command, shell=True)
+            if query in linux_apps:
+                speak(f"Opening {display_name}")
+                subprocess.Popen(linux_apps[query], shell=True)
+                return True
+
+        # Tier 2: Search installed applications on local machine
+        app_path, found_name = _find_installed_app(query, system)
+        if app_path:
+            speak(f"Opening {found_name}")
+            if system == "windows":
+                os.startfile(app_path)
+            elif system == "darwin":
+                subprocess.Popen(["open", app_path])
             else:
-                speak("This app is not added yet.")
+                subprocess.Popen([app_path], shell=True)
+            return True
+
+        # Tier 3: Fallback to opening in browser
+        websites = get_setting("websites", {})
+        if query in websites:
+            speak(f"Opening {display_name} in browser.")
+            webbrowser.open(websites[query])
+            return f"Opened {query} in browser. You MUST now use get_clickable_elements() or read_screen() if you need to interact with it."
+
+        web_services = {
+            "youtube": "https://www.youtube.com",
+            "netflix": "https://www.netflix.com",
+            "reddit": "https://www.reddit.com",
+            "twitter": "https://twitter.com",
+            "x": "https://x.com",
+            "instagram": "https://www.instagram.com",
+            "facebook": "https://www.facebook.com",
+            "linkedin": "https://www.linkedin.com",
+            "whatsapp": "https://web.whatsapp.com",
+            "telegram": "https://web.telegram.org",
+            "chatgpt": "https://chatgpt.com",
+            "gemini": "https://gemini.google.com",
+            "claude": "https://claude.ai",
+            "spotify": "https://open.spotify.com",
+            "github": "https://github.com",
+            "gmail": "https://mail.google.com",
+            "drive": "https://drive.google.com",
+            "google drive": "https://drive.google.com",
+            "maps": "https://maps.google.com",
+            "google maps": "https://maps.google.com",
+            "prime video": "https://www.primevideo.com",
+            "amazon": "https://www.amazon.com",
+            "twitch": "https://www.twitch.tv",
+            "wikipedia": "https://www.wikipedia.org",
+            "canva": "https://www.canva.com",
+            "notion": "https://www.notion.so",
+            "figma": "https://www.figma.com",
+        }
+        if query in web_services:
+            speak(f"Opening {display_name} in browser.")
+            webbrowser.open(web_services[query])
+            return f"Opened {query} in browser. You MUST now use get_clickable_elements() or read_screen() if you need to interact with it."
+
+        if " " not in query and query.isalnum():
+            url = f"https://www.{query}.com"
+        else:
+            url = f"https://www.google.com/search?q={urllib.parse.quote_plus(query)}"
+
+        speak(f"Opening {display_name} in browser.")
+        webbrowser.open(url)
+        return f"Opened {url} in browser. You MUST now use get_clickable_elements() or read_screen() if you need to interact with it."
 
     except Exception as error:
-        speak(f"Could not open {app_name.replace('_', ' ')}.")
+        speak(f"Could not open {display_name}.")
         logger.info("Error:", error)
+        return False
+
+
+def close_app(app_name):
+    """
+    Closes or terminates a running application by name.
+    """
+    clean_name = str(app_name).lower().strip().replace("close ", "").replace("kill ", "")
+    display_name = clean_name.replace("_", " ").title()
+    import psutil
+
+    proc_map = {
+        "notepad": ["notepad.exe"],
+        "calculator": ["calculatorapp.exe", "calc.exe", "calculator.exe"],
+        "calc": ["calculatorapp.exe", "calc.exe"],
+        "chrome": ["chrome.exe"],
+        "google chrome": ["chrome.exe"],
+        "vscode": ["code.exe"],
+        "vs code": ["code.exe"],
+        "code": ["code.exe"],
+        "discord": ["discord.exe"],
+        "spotify": ["spotify.exe"],
+        "netflix": ["netflix.exe"],
+        "cmd": ["cmd.exe"],
+        "terminal": ["windowsterminal.exe", "cmd.exe", "powershell.exe"],
+        "edge": ["msedge.exe"],
+        "brave": ["brave.exe"],
+        "word": ["winword.exe"],
+        "excel": ["excel.exe"],
+        "powerpoint": ["powerpnt.exe"],
+    }
+
+    target_exes = [x.lower() for x in proc_map.get(clean_name, [f"{clean_name}.exe", clean_name])]
+    closed = False
+
+    for proc in psutil.process_iter(["name", "pid"]):
+        try:
+            p_name = proc.info["name"].lower()
+            if p_name in target_exes or clean_name in p_name:
+                proc.terminate()
+                closed = True
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+
+    if closed:
+        speak(f"Closed {display_name}.")
+        return f"Closed {display_name} successfully."
+    else:
+        speak(f"No running process found for {display_name}.")
+        return f"No running process found for {display_name}."
+
 
 def tell_time():
     current_time = datetime.datetime.now().strftime("%I:%M %p")
@@ -338,7 +687,12 @@ def find_and_click_text(target_text):
     Uses UIAutomation to find a button/text on the screen and clicks it.
     Returns True if found and clicked, False otherwise.
     """
-    import uiautomation as auto
+    try:
+        import uiautomation as auto
+    except ImportError:
+        speak("The UI Automation module is missing. Please run pip install uiautomation.")
+        return False
+        
     import time
     
     logger.info(f"[JARVIS Vision] Searching entire desktop for '{target_text}'...")
@@ -356,14 +710,135 @@ def find_and_click_text(target_text):
     speak(f"I could not find the text {target_text} on the screen.")
     return False
 
-def read_screen():
-    """Reads all visible text on the screen and returns it."""
+def read_screen(line_number=None, **kwargs):
+    """Reads all visible text or a specific line from an open window or screen."""
     from assistant.vision import read_screen_text
     
     text = read_screen_text()
-    if text:
-        return f"Visible text on screen:\n{text}"
-    return "No readable text found on the screen."
+    if text is None or not text.strip():
+        if line_number is not None:
+            msg = f"The active document is currently blank. Cannot read line {line_number}."
+            speak(msg)
+            return msg
+        return "No readable text found on the screen or the active document is blank."
+        
+    lines = text.splitlines()
+    if line_number is not None:
+        try:
+            idx = int(line_number)
+            if 1 <= idx <= len(lines):
+                target_line = lines[idx - 1].strip()
+                if not target_line:
+                    return f"Line {idx} is blank."
+                return f"Line {idx}: {target_line}"
+            else:
+                return f"The document has {len(lines)} lines. Cannot read line {idx}."
+        except (ValueError, TypeError):
+            pass
+            
+    return f"Visible text on screen:\n{text}"
+
+def write_to_screen_line(line_number: int, text: str):
+    """
+    Writes or appends text to a specific line in an open editor window (like Notepad).
+    Uses UIAutomation ValuePattern directly on the active document, falling back to keyboard navigation on the target window only.
+    """
+    import uiautomation as auto
+    import time
+    
+    clean_text = str(text).strip()
+    idx = int(line_number)
+    current_pid = os.getpid()
+    
+    # 1. Search candidate windows specifically for document/editor controls (EXCLUDING JARVIS GUI)
+    candidates = []
+
+    # Priority 1: Check known document/editor windows directly (Notepad, etc.)
+    for target_class in ("Notepad", "Notepad_Desktop_Old"):
+        np = auto.WindowControl(searchDepth=1, ClassName=target_class)
+        if np.Exists(0.2) and np.ProcessId != current_pid and np not in candidates:
+            candidates.append(np)
+
+    # Priority 2: Check current foreground window if not JARVIS
+    fg = auto.GetForegroundControl()
+    if fg and fg.ControlType == auto.ControlType.WindowControl:
+        if fg.ProcessId != current_pid and "jarvis" not in fg.Name.lower() and fg not in candidates:
+            candidates.append(fg)
+
+    # Priority 3: Desktop windows excluding JARVIS
+    for w in auto.GetRootControl().GetChildren():
+        if w.ControlType == auto.ControlType.WindowControl:
+            if w.ProcessId != current_pid and "jarvis" not in w.Name.lower() and w not in candidates:
+                candidates.append(w)
+
+    target_win = None
+    target_doc_ctrl = None
+
+    for win in candidates:
+        for ctrl, depth in auto.WalkControl(win, maxDepth=6):
+            if ctrl.ControlType in (auto.ControlType.DocumentControl, auto.ControlType.EditControl) or ctrl.ClassName in ("RichEditD2DPT", "Edit"):
+                target_doc_ctrl = ctrl
+                target_win = win
+                break
+        if target_doc_ctrl:
+            break
+
+    if target_doc_ctrl:
+        # First attempt: ValuePattern SetValue directly on the document control
+        try:
+            vp = target_doc_ctrl.GetValuePattern()
+            if vp:
+                orig = vp.Value.replace("\r\n", "\n").replace("\r", "\n")
+                lines = orig.splitlines() if orig else []
+                
+                while len(lines) < idx:
+                    lines.append("")
+                    
+                if lines[idx - 1].strip():
+                    lines[idx - 1] = f"{lines[idx - 1]} {clean_text}"
+                else:
+                    lines[idx - 1] = clean_text
+                    
+                new_content = "\r\n".join(lines)
+                vp.SetValue(new_content)
+                speak(f"Added '{clean_text}' on line {idx}.")
+                return f"Added '{clean_text}' on line {idx}."
+        except Exception as e:
+            logger.debug(f"UIAutomation ValuePattern set failed: {e}")
+
+        # Fallback: Keyboard navigation ON THE TARGET EDITOR WINDOW ONLY
+        try:
+            if target_win:
+                target_win.SetActive()
+                if target_win.NativeWindowHandle:
+                    activate_window(target_win.NativeWindowHandle)
+                time.sleep(0.2)
+
+            # Ensure keyboard focus is inside the target document control
+            try:
+                target_doc_ctrl.Click(simulateMove=False)
+                time.sleep(0.1)
+            except Exception:
+                pass
+
+            pyautogui = _get_pyautogui()
+            pyautogui.hotkey('ctrl', 'home')
+            time.sleep(0.1)
+            for _ in range(idx - 1):
+                pyautogui.press('down')
+            pyautogui.press('end')
+            pyautogui.write(f" {clean_text}", interval=0.01)
+            speak(f"Added '{clean_text}' on line {idx}.")
+            return f"Added '{clean_text}' on line {idx}."
+        except Exception as e:
+            logger.warning(f"Keyboard fallback write failed: {e}")
+            speak(f"Could not add text to line {idx}.")
+            return f"Could not add text to line {idx}: {e}"
+
+    # If no target editor control was found, DO NOT BLINDLY TYPE INTO WHATEVER IS ACTIVE!
+    msg = f"Could not find an open editor window to add text on line {idx}."
+    speak(msg)
+    return msg
 
 def analyze_screen(prompt, image_path=None):
     """Takes a screenshot and uses a local Vision AI to answer a question about the screen."""
@@ -525,9 +1000,12 @@ def read_file(path):
 def write_file(path, content):
     """Writes text content to a local file (overwrites if exists)."""
     try:
-        with open(path, "w", encoding="utf-8") as f:
+        from pathlib import Path
+        target_path = Path(path)
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(target_path, "w", encoding="utf-8") as f:
             f.write(content)
-        return f"Successfully wrote to {path}"
+        return f"Successfully wrote to {target_path}"
     except Exception as e:
         return f"Failed to write file: {e}"
 
@@ -538,11 +1016,21 @@ def get_clickable_elements():
     """
     try:
         import uiautomation as auto
+    except ImportError:
+        return "ERROR: The 'uiautomation' module is missing. Please tell the user to run 'pip install uiautomation' to enable screen reading capabilities."
         
-        # We'll just scan the current active window to keep it fast
+    try:
+        current_pid = os.getpid()
         active_window = auto.GetForegroundControl()
+        if not active_window or active_window.ProcessId == current_pid or "jarvis" in active_window.Name.lower():
+            active_window = None
+            for w in auto.GetRootControl().GetChildren():
+                if w.ControlType == auto.ControlType.WindowControl and w.BoundingRectangle.width() > 100:
+                    if w.ProcessId != current_pid and "jarvis" not in w.Name.lower():
+                        active_window = w
+                        break
         if not active_window:
-            return "No active window found."
+            active_window = auto.GetRootControl()
             
         elements = []
         # Walk through the control tree up to a certain depth to avoid hanging
@@ -620,6 +1108,16 @@ def send_telegram_update(message_text):
     token = get_setting("telegram_bot_token", "")
     chat_id = get_setting("telegram_chat_id", "")
     
+    if token.startswith("secret://"):
+        try:
+            from assistant.control.store import ControlStore
+            from assistant.control.secrets import SecretStore, load_key
+            store = ControlStore()
+            secrets = SecretStore(store, key=load_key())
+            token = secrets.resolve(token)
+        except Exception:
+            pass
+
     if not token or not chat_id:
         return "Telegram is not configured. Missing bot token or chat ID."
         
