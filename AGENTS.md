@@ -53,6 +53,12 @@ Primary user-facing capabilities:
 - `assistant/api/`: HTTP + WebSocket boundary over the control plane. `app.py` (routes), `auth.py` (device pairing, tokens, rate limiting), `errors.py` (one error envelope). Run with `python -m assistant.api`.
 - `assistant/memory.py`: persistent vector memory backed by ChromaDB.
 - `assistant/swarm.py`: parallel sub-agents and actor-critic research.
+- `assistant/browser/`: a real Chromium driven through Playwright. `session.py` (one persistent window, numbered elements), `actions.py` (the tools the model calls). See `docs/web-agent.md`.
+- `assistant/files.py`: the folders in `file_shares` reachable from a paired phone. Every path is resolved before it is checked, so `..` and symlinks out of a share are refused. See `docs/remote-files.md`.
+- `assistant/web_api.py`: `web_api_get` and `web_api_call` reach any service with a REST API, resolving a named credential from the secret store. Prefer this over a per-service module.
+- `assistant/site_memory.py`: per-domain notes in `data/site_notes.json`, handed back when that domain is opened again.
+- `assistant/gitlab_agent.py`: GitLab over its API - issues, files, a fix on its own branch, a merge request, and merging as a separate critical step.
+- `gui/tasks.py`: the desktop Web page hands what you type to the control plane and follows the real steps.
 - `assistant/vision.py`, `assistant/dev_tools.py`, `assistant/calendar_sync.py`, `assistant/email_tasks.py`, `assistant/telegram_sync.py`, `assistant/wakeword.py`, `assistant/interrupter.py`: screen OCR, developer automation, Google Calendar, mail, phone bridge, wake word, global interrupt hotkey.
 - `assistant/guard.py`, `assistant/confirm.py`, `assistant/audit.py`, `assistant/overwatch/`: the safety layer. Preserve these.
 - `docs/control-plane.md`: control plane architecture, endpoints and limitations.
@@ -234,6 +240,17 @@ Known limits in Version 1.2:
   command already running finishes first.
 - A new tool must be added to `TOOL_CAPABILITIES` in `capabilities.py`, or it
   is treated as needing no capability.
+- Browser work needs `pip install playwright && python -m playwright install
+  chromium`. Some sites serve an empty page to a headless browser, so
+  `browser_headless` defaults to false.
+- `gitlab_propose_fix` sends the whole file, never a diff, and never merges.
+- Adding a service usually needs no code: store a credential and use
+  `web_api_get`/`web_api_call`. Write a module only when the flow needs exact
+  operations, as the GitLab fix flow does.
+- JARVIS never types a password. A login wall is handed to the user through
+  `browser_wait_for_login`.
+- File access is opt-in per folder and resolved-then-checked. Never add a path
+  that skips `files.resolve()`; that function is the boundary.
 - A step is retried three times by default; after that the task fails.
 - Resuming after a restart is not automatic: call `POST /api/tasks/resume` or
   `executor.resume_interrupted()`.

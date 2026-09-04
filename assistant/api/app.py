@@ -18,10 +18,20 @@ device token; see `assistant/api/auth.py`.
 import argparse
 import asyncio
 import logging
+from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import (
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from assistant.api.auth import (
@@ -31,6 +41,7 @@ from assistant.api.auth import (
     bearer_token,
 )
 from assistant.api.errors import error_body, install_error_handlers
+from assistant import files as shared_files
 from assistant.control.capabilities import catalog
 from assistant.control.models import EventType
 from assistant.control.notifier import Notifier, TelegramChannel
@@ -140,6 +151,15 @@ class DelegateRequest(BaseModel):
     agent_id: str = Field("", description="A specific agent, if it matters.")
     after: list[int] | None = Field(
         None, description="Positions this must wait for. Defaults to the unfinished ones.")
+
+
+class MoveFileRequest(BaseModel):
+    source: str = Field(..., description="What to move, as it was listed.")
+    destination: str = Field(..., description="Where it should end up.")
+
+
+class NewFolderRequest(BaseModel):
+    path: str = Field(..., min_length=1, description="Folder to create.")
 
 
 class SecretRequest(BaseModel):
@@ -438,6 +458,90 @@ def create_app(control=None, executor=None, security=None, notifier=None):
         if rule is None:
             raise HTTPException(status_code=404, detail="No such policy rule.")
         return rule.to_dict()
+
+    # -- files -------------------------------------------------------------
+    # Your computer's files, reachable from a paired phone anywhere. Only the
+    # folders in `file_shares` are visible, and every path is resolved before
+    # it is checked, so a symlink out of a share fails like any other path.
+
+    def _files_or_404(action, *args, **kwargs):
+        try:
+            return action(*args, **kwargs)
+        except shared_files.FileAccessError as error:
+            raise HTTPException(status_code=404, detail=str(error))
+
+    def _writing_allowed():
+        if not get_setting("files_allow_write", True):
+            raise HTTPException(
+                status_code=403,
+                detail="Changing files from a phone is switched off. "
+                       "Set files_allow_write in config.json.")
+
+    @app.get("/api/files/shares", tags=["files"])
+    def list_shares():
+        """The folders that are reachable at all."""
+        return shared_files.describe_shares()
+
+    @app.get("/api/files", tags=["files"])
+    def list_files(path: str = ""):
+        """What is in a folder, folders first."""
+        return _files_or_404(shared_files.list_dir, path)
+
+    @app.get("/api/files/search", tags=["files"])
+    def search_files(query: str, path: str = "", limit: int = 100):
+        """Find a file by name, without knowing where you left it."""
+        return _files_or_404(shared_files.search, query, path, limit)
+
+    @app.get("/api/files/download", tags=["files"])
+    def download_file(path: str, request: Request):
+        """Send a file to the phone. Streamed, so size is not a problem."""
+        target, media_type = _files_or_404(shared_files.open_for_download, path)
+
+        device = getattr(request.state, "device", None)
+        plane.record(f"Sent {target.name} to {device.name if device else 'this computer'}.",
+                     metadata={"path": str(target)})
+        return FileResponse(target, media_type=media_type, filename=target.name)
+
+    @app.post("/api/files/upload", status_code=201, tags=["files"])
+    async def upload_file(request: Request, file: UploadFile = File(...),
+                          folder: str = Form(""), overwrite: bool = Form(False)):
+        """Take a file from the phone and put it in a shared folder."""
+        _writing_allowed()
+        saved = _files_or_404(shared_files.save_upload, folder, file.filename,
+                              file.file, overwrite)
+
+        device = getattr(request.state, "device", None)
+        plane.record(f"Received {saved['name']} from "
+                     f"{device.name if device else 'this computer'}.",
+                     metadata={"path": saved["path"]})
+        return saved
+
+    @app.post("/api/files/folder", status_code=201, tags=["files"])
+    def create_folder(request_body: NewFolderRequest):
+        _writing_allowed()
+        return _files_or_404(shared_files.make_folder, request_body.path)
+
+    @app.post("/api/files/move", tags=["files"])
+    def move_file(request_body: MoveFileRequest):
+        _writing_allowed()
+        return _files_or_404(shared_files.move, request_body.source,
+                             request_body.destination)
+
+    @app.delete("/api/files", tags=["files"])
+    def delete_file(path: str, request: Request):
+        """Delete a file, or an empty folder. Off unless you turn it on."""
+        if not get_setting("files_allow_delete", False):
+            raise HTTPException(
+                status_code=403,
+                detail="Deleting from a phone is switched off. "
+                       "Set files_allow_delete in config.json.")
+
+        result = _files_or_404(shared_files.delete, path)
+        device = getattr(request.state, "device", None)
+        plane.record(f"Deleted {Path(result['path']).name} at the request of "
+                     f"{device.name if device else 'this computer'}.",
+                     metadata=result)
+        return result
 
     # -- secrets -----------------------------------------------------------
     # Values go in and are never handed back. Agents receive secret://name and
@@ -768,12 +872,114 @@ def create_app(control=None, executor=None, security=None, notifier=None):
     return app
 
 
+def local_addresses():
+    """The addresses a phone or another computer could use to reach this one.
+
+    A machine has several and only some of them are useful, so this returns
+    what someone could actually type rather than the whole interface list.
+    """
+    import socket
+
+    found = []
+    try:
+        # Nothing is sent; this only asks the routing table which address this
+        # machine would use to reach the outside, which is the one on the LAN.
+        probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        probe.connect(("8.8.8.8", 80))
+        found.append(probe.getsockname()[0])
+        probe.close()
+    except OSError:
+        pass
+
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            address = info[4][0]
+            if not address.startswith("127.") and address not in found:
+                found.append(address)
+    except OSError:
+        pass
+
+    return found
+
+
+def request_pairing_code(port):
+    """Ask the running API for a code, and print it for someone to type in.
+
+    The codes live in the running process, so this has to go through it. The
+    request comes from this machine, which is what the server trusts.
+    """
+    import requests
+
+    try:
+        response = requests.post(f"http://127.0.0.1:{port}/api/pair/code", timeout=5)
+        response.raise_for_status()
+    except requests.RequestException as error:
+        status = getattr(getattr(error, "response", None), "status_code", None)
+        if status == 404:
+            print(
+                f"Something is listening on port {port}, but it is not the current "
+                "JARVIS pairing API.\n"
+                "Stop that process, then start this server again:\n\n"
+                f"    python main.py --server --host 0.0.0.0 --port {port}"
+            )
+            return 1
+        print(f"Could not reach JARVIS on port {port}. Is it running?  ({error})")
+        return 1
+
+    body = response.json()
+    minutes = body.get("expires_in", 600) // 60
+    print()
+    print("  Enter this code on your phone:")
+    print(f"\n      {body['code']}\n")
+    print(f"  It stops working in {minutes} minutes.")
+    print()
+    return 0
+
+
+def _print_welcome(host, port):
+    """Tell the user what to type on the phone, since only they can see this."""
+    print()
+    print("  JARVIS is listening.")
+    print()
+    if host in ("127.0.0.1", "localhost"):
+        print(f"  This computer only:      http://127.0.0.1:{port}")
+        print("  To let a phone connect, start it with --host 0.0.0.0")
+    else:
+        for address in local_addresses() or [host]:
+            print(f"  Enter on your phone:     {address}:{port}")
+    print(f"  To connect a phone:      python -m assistant.api --pair --port {port}")
+    print()
+
+
+def _port_available(host, port):
+    """Return False when another process already owns this bind address."""
+    import socket
+
+    probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        probe.bind((host, port))
+        return True
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    finally:
+        probe.close()
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Run the JARVIS control plane API.")
     parser.add_argument("--host", default="127.0.0.1",
                         help="Bind address. Use 0.0.0.0 to allow phone access.")
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--pair", action="store_true",
+                        help="Show a code for a new phone, then exit. "
+                             "JARVIS must already be running.")
     args = parser.parse_args(argv)
+
+    if args.pair:
+        return request_pairing_code(args.port)
 
     import uvicorn
 
@@ -784,6 +990,16 @@ def main(argv=None):
         logger.warning(
             "Listening on %s. Anything on your network can control this computer. "
             "Only do this on a network you trust.", args.host)
+
+    if not _port_available(args.host, args.port):
+        print(
+            f"Port {args.port} is already in use. Stop the existing process or choose "
+            f"another port:\n\n"
+            f"    python main.py --server --host {args.host} --port {args.port + 1}"
+        )
+        return 1
+
+    _print_welcome(args.host, args.port)
 
     uvicorn.run(create_app(), host=args.host, port=args.port, log_level="info")
     return 0

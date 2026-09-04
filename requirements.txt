@@ -63,3 +63,6 @@ uiautomation==2.0.29; sys_platform == "win32"
 # Encrypts the credentials the control plane holds, so a copied control.db is
 # not a copied set of credentials.
 cryptography
+
+# Receiving files from the phone: FastAPI needs this for multipart uploads.
+python-multipart

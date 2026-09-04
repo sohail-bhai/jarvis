@@ -28,6 +28,9 @@ CATALOG = {
     "browser.download": (RiskLevel.MEDIUM, "Download files"),
     "browser.upload": (RiskLevel.HIGH, "Upload your files to a website"),
     "browser.purchase": (RiskLevel.CRITICAL, "Buy something"),
+    "browser.interact": (RiskLevel.HIGH, "Click and type on a website as you"),
+    "web.api.read": (RiskLevel.MEDIUM, "Read from a service's API as you"),
+    "web.api.write": (RiskLevel.HIGH, "Change something through a service's API"),
 
     # -- This computer ----------------------------------------------------
     "filesystem.read": (RiskLevel.MEDIUM, "Read files on this computer"),
@@ -46,6 +49,11 @@ CATALOG = {
     "gcp.storage.write": (RiskLevel.HIGH, "Write to cloud storage"),
     "gcp.cloud_run.deploy": (RiskLevel.CRITICAL, "Deploy to production"),
     "gcp.iam.write": (RiskLevel.CRITICAL, "Change who has access"),
+
+    # -- Source control ---------------------------------------------------
+    "gitlab.read": (RiskLevel.MEDIUM, "Read your GitLab issues and code"),
+    "gitlab.write": (RiskLevel.HIGH, "Push a branch and open a merge request"),
+    "gitlab.merge": (RiskLevel.CRITICAL, "Merge changes into your repository"),
 
     # -- Knowledge --------------------------------------------------------
     "memory.read": (RiskLevel.LOW, "Read what JARVIS remembers"),
@@ -85,6 +93,36 @@ TOOL_CAPABILITIES = {
     "remember_fact": "memory.write",
     "ingest_document": "memory.write",
     "send_telegram_update": "system.notify",
+
+    # Driving a real browser. Reading is cheap; acting as you is not.
+    "browse": "browser.navigate",
+    "browser_read": "browser.read",
+    "browser_elements": "browser.read",
+    "browser_screenshot": "browser.read",
+    "browser_click": "browser.interact",
+    "browser_type": "browser.interact",
+    "browser_press": "browser.interact",
+    "browser_wait_for": "browser.read",
+    "browser_ask_site": "browser.interact",
+    "browser_fill_form": "browser.interact",
+    "browser_new_tab": "browser.navigate",
+    "browser_switch_tab": "browser.navigate",
+    "browser_tabs": "browser.read",
+    "browser_wait_for_login": "browser.read",
+    "remember_about_site": "memory.write",
+    "web_api_get": "web.api.read",
+    "web_api_call": "web.api.write",
+    "list_shared_files": "filesystem.read",
+    "find_shared_file": "filesystem.read",
+    "shared_folders": "filesystem.read",
+
+    # GitLab. Proposing a change and merging it are deliberately different.
+    "gitlab_list_issues": "gitlab.read",
+    "gitlab_read_issue": "gitlab.read",
+    "gitlab_find_file": "gitlab.read",
+    "gitlab_read_file": "gitlab.read",
+    "gitlab_propose_fix": "gitlab.write",
+    "gitlab_merge": "gitlab.merge",
 
     # Google Workspace gateway (assistant/workspace/).
     "search_google_drive": "google.drive.read",

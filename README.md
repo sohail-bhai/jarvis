@@ -239,6 +239,7 @@ Exposes the control plane over HTTP and WebSockets for multi-device sync (deskto
 ```bash
 python -m assistant.api                 # Localhost only
 python -m assistant.api --host 0.0.0.0  # Reachable from mobile/network
+python main.py --server --host 0.0.0.0  # Same server through the main launcher
 ```
 - **Interactive Swagger Documentation**: `http://127.0.0.1:8765/docs`
 - **Real-Time Streams**: `ws://127.0.0.1:8765/ws/activity` (everything),
@@ -265,6 +266,35 @@ curl -X POST http://<computer>:8765/api/pair \
 ```
 Only the SHA-256 hash of a token is stored, and `DELETE /api/devices/{id}/token`
 revokes one device without disturbing the others.
+
+#### 📱 Phone to Desktop Agent Work
+Run JARVIS on the desktop or server that owns the model, browser, files and OS tools:
+```bash
+python main.py --server --host 0.0.0.0 --port 8765
+```
+The server prints an address such as `192.168.1.20:8765`. Enter that in the
+phone app, then mint a one-time pairing code on the desktop:
+```bash
+python -m assistant.api --pair --port 8765
+```
+After pairing, the phone command box posts goals to `/api/tasks` with
+`autoplan=true` and `run=true`. Work executes on the desktop/server through
+`TaskExecutor` and `assistant.ai_brain.run_task_step()`, while the phone follows
+progress through `/ws/events` and answers approvals through `/api/approvals`.
+
+#### 📁 Your Files, From Anywhere
+Share folders with your phone and reach them from a train:
+```json
+"file_shares": ["~/Documents", "~/Pictures"]
+```
+```bash
+curl -H "Authorization: Bearer $TOKEN" localhost:8765/api/files
+curl -H "Authorization: Bearer $TOKEN" \
+     "localhost:8765/api/files/download?path=reports/q3.txt" -o q3.txt
+```
+Only the folders you list are reachable, every path is resolved before it is
+checked, and each transfer is written to the timeline with the device that
+asked. See [`docs/remote-files.md`](docs/remote-files.md).
 
 #### 🗝️ Credentials
 Secrets live in an encrypted store rather than in `config.json`. Agents receive

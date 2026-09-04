@@ -14,6 +14,11 @@ import assistant.memory as memory
 import assistant.email_tasks as email_tasks
 import assistant.dev_tools as dev_tools
 import assistant.calendar_sync as calendar_sync
+import assistant.browser as browser
+import assistant.gitlab_agent as gitlab_agent
+import assistant.web_api as web_api
+import assistant.site_memory as site_memory
+import assistant.files as shared_files
 import assistant.workspace as workspace
 import webbrowser
 import urllib.parse
@@ -116,11 +121,280 @@ AVAILABLE_FUNCTIONS = {
     "start_overwatch": __import__('assistant.overwatch', fromlist=['']).start_overwatch,
     "stop_overwatch": __import__('assistant.overwatch', fromlist=['']).stop_overwatch,
     "send_telegram_update": system_tasks.send_telegram_update,
-    "write_to_screen_line": system_tasks.write_to_screen_line
+    "write_to_screen_line": system_tasks.write_to_screen_line,
+
+    # Driving a real browser, the way a person uses the web.
+    "browse": browser.browse,
+    "browser_read": browser.browser_read,
+    "browser_elements": browser.browser_elements,
+    "browser_click": browser.browser_click,
+    "browser_type": browser.browser_type,
+    "browser_press": browser.browser_press,
+    "browser_wait_for": browser.browser_wait_for,
+    "browser_screenshot": browser.browser_screenshot,
+    "browser_ask_site": browser.browser_ask_site,
+    "browser_fill_form": browser.browser_fill_form,
+    "browser_tabs": browser.browser_tabs,
+    "browser_new_tab": browser.browser_new_tab,
+    "browser_switch_tab": browser.browser_switch_tab,
+    "browser_wait_for_login": browser.browser_wait_for_login,
+    "remember_about_site": browser.remember_about_site,
+
+    # Any service with an API, without a module per service.
+    "web_api_get": web_api.web_api_get,
+    "web_api_call": web_api.web_api_call,
+
+    # The folders shared with the phone, reachable by the agent too.
+    "list_shared_files": shared_files.list_shared_files,
+    "find_shared_file": shared_files.find_shared_file,
+    "shared_folders": shared_files.shared_folders,
+
+    # GitLab, through its API rather than by clicking.
+    "gitlab_list_issues": gitlab_agent.gitlab_list_issues,
+    "gitlab_read_issue": gitlab_agent.gitlab_read_issue,
+    "gitlab_find_file": gitlab_agent.gitlab_find_file,
+    "gitlab_read_file": gitlab_agent.gitlab_read_file,
+    "gitlab_propose_fix": gitlab_agent.gitlab_propose_fix,
+    "gitlab_merge": gitlab_agent.gitlab_merge,
+
 }
 
+def _tool(name, description, properties, required=None):
+    """Shorthand for one entry in the schema the model is given."""
+    return {
+        "type": "function",
+        "function": {
+            "name": name,
+            "description": description,
+            "parameters": {"type": "object", "properties": properties,
+                           "required": required or []},
+        },
+    }
+
+
+# Browsing and GitLab. These are written out with the same shape as the rest,
+# just built by a helper because there are a lot of them.
+WEB_TOOLS = [
+    _tool("browse", "Open a web page in the real browser and read what is on it. "
+          "Use this whenever the user names a website or asks you to look something "
+          "up on a specific site.",
+          {"url": {"type": "string", "description": "The address to open."}},
+          ["url"]),
+    _tool("browser_read", "Read the page that is currently open again, without "
+          "clicking anything. Use `full` when you need the whole page.",
+          {"full": {"type": "boolean", "description": "Read the long version."}}),
+    _tool("browser_elements", "List everything on the current page that can be "
+          "clicked or typed into, numbered. Use this when you are not sure what to "
+          "click next.", {}),
+    _tool("browser_click", "Click something on the page, by its number from "
+          "browser_elements or by the words shown on it.",
+          {"target": {"type": "string", "description": "A number, or the visible text."}},
+          ["target"]),
+    _tool("browser_type", "Type into a box on the page. Set submit to true to press "
+          "Enter afterwards, which is how you send a search or a chat message.",
+          {"target": {"type": "string", "description": "A number, or the box's label."},
+           "text": {"type": "string", "description": "What to type."},
+           "submit": {"type": "boolean", "description": "Press Enter after typing."}},
+          ["target", "text"]),
+    _tool("browser_press", "Press a single key, such as Enter or Escape.",
+          {"key": {"type": "string"}}, ["key"]),
+    _tool("browser_wait_for", "Wait until some text appears on the page. Use this "
+          "when a site is still loading or still writing an answer.",
+          {"text": {"type": "string"}, "seconds": {"type": "number"}}, ["text"]),
+    _tool("browser_screenshot", "Save a picture of the page, for when the text is "
+          "not enough to tell what is going on.", {}),
+    _tool("browser_ask_site", "Open a site that has a chat or search box, ask it "
+          "one question, wait for the answer, and bring the answer back. Use this "
+          "for 'ask ChatGPT ...', 'ask Perplexity ...' and the like.",
+          {"url": {"type": "string", "description": "e.g. https://chatgpt.com"},
+           "prompt": {"type": "string", "description": "The question to ask."},
+           "answer_appears_within": {"type": "number",
+                                     "description": "Seconds to wait. Default 90."}},
+          ["url", "prompt"]),
+
+    _tool("browser_fill_form", "Fill several boxes on the page at once. Send an "
+          "object of label or number to value.",
+          {"fields": {"type": "object", "description": '{"Email": "me@x.com"}'}},
+          ["fields"]),
+    _tool("browser_tabs", "List the open browser tabs.", {}),
+    _tool("browser_new_tab", "Open another tab, so a side trip does not lose the "
+          "page you were on.", {"url": {"type": "string"}}),
+    _tool("browser_switch_tab", "Go back to a tab by its number.",
+          {"index": {"type": "number"}}, ["index"]),
+    _tool("browser_wait_for_login", "When a site asks for a sign-in, call this and "
+          "wait. The user signs in themselves in the window. NEVER type a password.",
+          {"seconds": {"type": "number", "description": "How long to wait. Default 180."}}),
+    _tool("remember_about_site", "Write down something you worked out about a site "
+          "- where a page lives, which element is the search box, that it needs a "
+          "login - so the next visit is faster.",
+          {"url": {"type": "string"}, "note": {"type": "string"}},
+          ["url", "note"]),
+
+    _tool("web_api_get", "Read from any service's API. Use this instead of the "
+          "browser whenever the service has an API - the answer is exact and it "
+          "either worked or it did not. Name a stored credential with auth_secret; "
+          "you never handle the value.",
+          {"url": {"type": "string", "description": "Full https:// address."},
+           "params": {"type": "object", "description": "Query parameters."},
+           "auth_secret": {"type": "string",
+                           "description": "Name of a stored credential, e.g. github_token."},
+           "auth_style": {"type": "string",
+                          "description": "bearer, token, private-token, x-api-key or basic."}},
+          ["url"]),
+    _tool("web_api_call", "Change something through a service's API: POST, PUT, "
+          "PATCH or DELETE. Same credential handling as web_api_get.",
+          {"method": {"type": "string"}, "url": {"type": "string"},
+           "body": {"type": "object", "description": "JSON body to send."},
+           "params": {"type": "object"},
+           "auth_secret": {"type": "string"}, "auth_style": {"type": "string"}},
+          ["method", "url"]),
+
+    _tool("shared_folders", "Say which folders on this computer are reachable "
+          "from the user's phone.", {}),
+    _tool("list_shared_files", "List what is in a shared folder on this computer.",
+          {"path": {"type": "string", "description": "Folder. Empty means the first share."}}),
+    _tool("find_shared_file", "Find a file by name in the shared folders, for "
+          "'where did I put my ...' questions.",
+          {"query": {"type": "string"}}, ["query"]),
+
+    _tool("gitlab_list_issues", "List issues on a GitLab project, so you can pick "
+          "one to work on. The project looks like 'group/repository'.",
+          {"project": {"type": "string"}, "state": {"type": "string"},
+           "limit": {"type": "number"}}, ["project"]),
+    _tool("gitlab_read_issue", "Read one GitLab issue in full, with its comments, "
+          "to understand what is actually being asked for.",
+          {"project": {"type": "string"}, "issue_iid": {"type": "number"}},
+          ["project", "issue_iid"]),
+    _tool("gitlab_find_file", "Search a GitLab repository for the file an issue is "
+          "about, before trying to change anything.",
+          {"project": {"type": "string"}, "query": {"type": "string"}},
+          ["project", "query"]),
+    _tool("gitlab_read_file", "Read a file from a GitLab repository, so your fix is "
+          "written against the real code rather than a guess.",
+          {"project": {"type": "string"}, "path": {"type": "string"},
+           "ref": {"type": "string", "description": "Branch. Defaults to the main one."}},
+          ["project", "path"]),
+    _tool("gitlab_propose_fix", "Put a fix on its own branch and open a merge "
+          "request. Send the complete new contents of the file, not a patch. This "
+          "does not merge anything.",
+          {"project": {"type": "string"}, "issue_iid": {"type": "number"},
+           "path": {"type": "string"},
+           "new_content": {"type": "string",
+                           "description": "The whole file, after your fix."},
+           "summary": {"type": "string", "description": "One line on what changed."}},
+          ["project", "issue_iid", "path", "new_content"]),
+    _tool("gitlab_merge", "Merge a merge request. Only do this when the user has "
+          "asked for it - it changes the real repository.",
+          {"project": {"type": "string"}, "merge_request_iid": {"type": "number"}},
+          ["project", "merge_request_iid"]),
+]
+
+
+# Handing a small model every tool at once is expensive: the whole schema is
+# re-read on every turn, and on a CPU that is the difference between a step
+# taking half a minute and taking two. So each request gets the tools it
+# plausibly needs, chosen by what the user actually asked for.
+TOOL_GROUPS = {
+    "web": (
+        ("http", "https", "www.", ".com", ".org", ".io", "website", "site",
+         "web", "browser", "browse", "open ", "search", "google it", "look up",
+         "chatgpt", "perplexity", "online", "internet", "page", "click", "login",
+         "log in", "sign in", "form", "tab"),
+        ("browse", "browser_read", "browser_elements", "browser_click",
+         "browser_type", "browser_press", "browser_wait_for", "browser_screenshot",
+         "browser_ask_site", "browser_fill_form", "browser_tabs", "browser_new_tab",
+         "browser_switch_tab", "browser_wait_for_login", "remember_about_site",
+         "web_api_get", "web_api_call", "search_web"),
+    ),
+    "gitlab": (
+        ("gitlab", "issue", "merge request", "repository", "repo", "branch",
+         "commit", "pipeline", "mr "),
+        ("gitlab_list_issues", "gitlab_read_issue", "gitlab_find_file",
+         "gitlab_read_file", "gitlab_propose_fix", "gitlab_merge",
+         "web_api_get", "web_api_call"),
+    ),
+    "google": (
+        ("email", "mail", "gmail", "inbox", "drive", "calendar", "meeting",
+         "schedule", "document", "doc", "sheet", "spreadsheet"),
+        ("read_unread_emails", "send_email", "summarize_gmail_inbox",
+         "draft_gmail_message", "search_google_drive", "read_google_drive_file",
+         "upload_google_drive_file", "create_google_doc", "get_schedule",
+         "schedule_meeting", "create_google_calendar_event"),
+    ),
+    "computer": (
+        ("open ", "app", "volume", "screenshot", "screen", "click", "type",
+         "battery", "lock", "shutdown", "restart", "file", "folder", "terminal",
+         "command", "clipboard", "window"),
+        ("open_app", "set_volume", "mute_volume", "take_screenshot", "read_screen",
+         "analyze_screen", "get_clickable_elements", "click_at", "type_text",
+         "press_key", "scroll", "lock_laptop", "run_terminal_command",
+         "list_directory", "read_file", "write_file", "read_clipboard",
+         "write_clipboard", "tell_battery"),
+    ),
+    "notes": (
+        ("note", "remember", "remind", "memory", "wrote down", "document",
+         "pdf", "textbook"),
+        ("add_note", "read_notes", "clear_notes", "remember_fact",
+         "ingest_document", "ask_document"),
+    ),
+    "files": (
+        ("file", "folder", "document", "pdf", "photo", "picture", "download",
+         "upload", "send me", "where did i put", "shared", "phone"),
+        ("shared_folders", "list_shared_files", "find_shared_file", "read_file",
+         "write_file", "list_directory"),
+    ),
+}
+
+# When nothing in the request points anywhere, these are what a person most
+# often means.
+DEFAULT_TOOL_NAMES = (
+    "browse", "browser_ask_site", "web_api_get", "search_web", "tell_time",
+    "tell_date", "tell_battery", "open_app", "add_note", "remember_fact",
+    "read_screen", "send_telegram_update",
+)
+
+# A ceiling, because two matching groups should not undo the point of this.
+MAX_TOOLS_PER_CALL = 22
+
+
+def select_tools(instruction, tools=None):
+    """The tools worth offering for this request, rather than all of them."""
+    catalogue = tools if tools is not None else LLM_TOOLS
+    text = str(instruction or "").lower()
+
+    # Score each group by how much of the request points at it, so "fix the
+    # login issue in gitlab repo x" leads with GitLab rather than with the
+    # browser tools that "login" happens to match too.
+    scored = []
+    for group, (triggers, names) in TOOL_GROUPS.items():
+        hits = sum(1 for trigger in triggers if trigger in text)
+        if hits:
+            scored.append((hits, group, names))
+
+    wanted = []
+    for _, _, names in sorted(scored, key=lambda item: item[0], reverse=True):
+        wanted.extend(names)
+
+    if not wanted:
+        wanted = list(DEFAULT_TOOL_NAMES)
+
+    chosen, seen = [], set()
+    for name in wanted:
+        if name in seen:
+            continue
+        schema = next((item for item in catalogue
+                       if item["function"]["name"] == name), None)
+        if schema is not None:
+            chosen.append(schema)
+            seen.add(name)
+        if len(chosen) >= MAX_TOOLS_PER_CALL:
+            break
+
+    return chosen or catalogue
+
+
 # The JSON schema describing our tools to the LLM
-LLM_TOOLS = [
+LLM_TOOLS = WEB_TOOLS + [
     {
         "type": "function",
         "function": {
@@ -850,7 +1124,43 @@ def get_system_prompt():
         "Step 4: call click_at(x=<x>, y=<y>) on that specific element.\n"
         "ALREADY OPEN WINDOWS: If the user asks you to interact with an ALREADY OPEN tab (e.g. 'play the first video in the opened tab'), DO NOT call search_youtube or open_app again! Immediately call get_clickable_elements() to find the coordinates of what to click.\n"
         "ANTI-HALLUCINATION RULE: Never claim 'the video is playing' or 'the task is done' if you merely performed a search. You MUST use get_clickable_elements and click_at to actually click the video before saying it is playing. Do not lie to the user.\n"
-        "If they ask for Google instead, use search_google(query='X') in Step 1. NEVER open a URL directly with the index."
+        "If they ask for Google instead, use search_google(query='X') in Step 1. NEVER open a URL directly with the index.\n\n"
+
+        "USING THE WEB: You drive a real browser. Never say you cannot open a "
+        "website - open it. The loop is always the same: `browse` the page, "
+        "read what came back, then act on what is ACTUALLY there. Every action "
+        "returns the page's numbered elements, so click and type by those "
+        "numbers or by the words shown on screen. If something is missing, call "
+        "`browser_elements` and look again rather than guessing a selector. "
+        "When a site has one obvious box to type a question into - ChatGPT, "
+        "Perplexity, a search engine - `browser_ask_site` does the whole "
+        "round trip in one call and brings the answer back.\n\n"
+
+        "SERVICES WITH AN API: prefer `web_api_get` and `web_api_call` over "
+        "clicking whenever the service has an API - GitHub, Jira, Linear, "
+        "Notion, Slack, a home server, anything. Name the credential with "
+        "`auth_secret` (for example 'github_token') and JARVIS resolves it; you "
+        "never see or send the value itself. If the credential is missing, say "
+        "which one to store rather than trying the browser instead.\n\n"
+
+        "SIGNING IN: you never type a password and never read one. If a page "
+        "asks for a sign-in, call `browser_wait_for_login` and let the user do "
+        "it in the window, then carry on where you left off.\n\n"
+
+        "LEARNING A SITE: when you work out where something lives or how a "
+        "site behaves, call `remember_about_site`. Those notes come back the "
+        "next time you open that domain, so the second visit is faster.\n\n"
+
+        "WORKING ON GITLAB: use the GitLab tools, not the browser, because they "
+        "make a real commit instead of a click that might have missed. The "
+        "order that works: `gitlab_list_issues` to see what is open, "
+        "`gitlab_read_issue` to understand what is actually being asked, "
+        "`gitlab_find_file` then `gitlab_read_file` to see the real code, then "
+        "`gitlab_propose_fix` with the COMPLETE new contents of the file. Never "
+        "send a diff or a snippet - send the whole file after your change. "
+        "Proposing opens a merge request and stops there. Only call "
+        "`gitlab_merge` when the user has explicitly asked you to merge."
+
     )
 
 conversation_history = []
@@ -881,8 +1191,12 @@ def ask_document(question):
 def query_local_llm_chat(messages, model="qwen2.5:3b", tools=None):
     """
     Queries the local Ollama instance using the /api/chat endpoint with the full message history.
+
+    The address is configurable, because Ollama is not always on the default
+    port: a second instance forced onto the CPU, or one on another machine on
+    your network, is the same conversation from here.
     """
-    url = "http://localhost:11434/api/chat"
+    url = str(get_setting("ollama_url", "http://localhost:11434")).rstrip("/") + "/api/chat"
     
     payload = {
         "model": model,
@@ -901,7 +1215,7 @@ def query_local_llm_chat(messages, model="qwen2.5:3b", tools=None):
     req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'})
 
     try:
-        with urllib.request.urlopen(req, timeout=180) as response:
+        with urllib.request.urlopen(req, timeout=int(get_setting("llm_timeout_seconds", 300))) as response:
             result = json.loads(response.read().decode('utf-8'))
             return result.get("message", {})
     except urllib.error.URLError as e:
@@ -926,7 +1240,8 @@ class StepCancelled(Exception):
 
 
 def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps=5,
-                should_continue=None, authorize=None, resolve_secrets=None):
+                should_continue=None, authorize=None, resolve_secrets=None,
+                tools=None):
     """Run the tool-calling loop over `conversation`, which is mutated in place.
 
     `extra_messages` are injected into the payload just before the latest user
@@ -959,7 +1274,8 @@ def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps
         if auto_confirm:
             current_messages.insert(-1, {"role": "system", "content": "CRITICAL EXCEPTION: You are executing a Routine. IGNORE the rule about asking for permission. DO NOT ask 'Shall I proceed?'. Execute the tool immediately."})
 
-        message = query_local_llm_chat(current_messages, model=model_name)
+        message = query_local_llm_chat(current_messages, model=model_name,
+                                       tools=tools)
 
         if not message:
             return None
@@ -1079,6 +1395,7 @@ def ask_ai(command, auto_confirm=False):
     # 3. Retrieve relevant permanent memories based on current query (RAG)
     reply = _agent_loop(conversation_history,
                         extra_messages=[_memory_message(clean_command)],
+                        tools=select_tools(clean_command),
                         auto_confirm=auto_confirm)
 
     if reply is None:
@@ -1092,7 +1409,8 @@ def ask_ai(command, auto_confirm=False):
 
 
 def run_task_step(instruction, context="", auto_confirm=True,
-                  should_continue=None, authorize=None, resolve_secrets=None):
+                  should_continue=None, authorize=None, resolve_secrets=None,
+                  max_steps=None):
     """Carry out one control plane step with the same tools as the voice loop.
 
     The control plane calls this. It runs in its own short conversation so a
@@ -1114,9 +1432,14 @@ def run_task_step(instruction, context="", auto_confirm=True,
         })
     conversation.append({"role": "user", "content": instruction})
 
+    # Offer the tools this step plausibly needs. On a small local model the
+    # whole schema is re-read every turn, so this is the difference between a
+    # step finishing and a step timing out.
     reply = _agent_loop(conversation,
+                        tools=select_tools(f"{instruction} {context}"),
                         extra_messages=[_memory_message(instruction)],
                         auto_confirm=auto_confirm,
+                        max_steps=max_steps or get_setting("agent_max_steps", 15),
                         should_continue=should_continue, authorize=authorize,
                         resolve_secrets=resolve_secrets)
 
