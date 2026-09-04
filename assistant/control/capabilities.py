@@ -85,6 +85,36 @@ TOOL_CAPABILITIES = {
     "remember_fact": "memory.write",
     "ingest_document": "memory.write",
     "send_telegram_update": "system.notify",
+
+    # Google Workspace gateway (assistant/workspace/).
+    "search_google_drive": "google.drive.read",
+    "read_google_drive_file": "google.drive.read",
+    "upload_google_drive_file": "google.drive.write",
+    "create_google_doc": "google.drive.write",
+    "summarize_gmail_inbox": "google.gmail.read",
+    "draft_gmail_message": "google.gmail.send",
+    "create_google_calendar_event": "google.calendar.write",
+
+    # Local tools that touch something a person would want a say over.
+    "git_auto_commit_and_push": "system.shell.run",
+    "scaffold_code": "filesystem.write",
+    "deep_test_project": "system.shell.run",
+    "read_clipboard": "system.screen.read",
+    "write_clipboard": "system.input.control",
+    "clear_notes": "filesystem.write",
+    "add_note": "filesystem.write",
+    "read_notes": "filesystem.read",
+    "ask_document": "memory.read",
+    "start_overwatch": "system.input.control",
+    "stop_overwatch": "system.notify",
+    "disable_voice_input": "system.settings.write",
+    "enable_voice_input": "system.settings.write",
+    "disable_speech_output": "system.settings.write",
+    "enable_speech_output": "system.settings.write",
+    "provide_morning_briefing": "google.calendar.read",
+    "scrape_project_ideas": "web.search",
+    "spawn_parallel_agents": "web.search",
+    "run_actor_critic_research": "web.search",
 }
 
 # Anything not in the catalog is treated as this risky, because an unknown

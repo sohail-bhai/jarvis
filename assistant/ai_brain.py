@@ -14,11 +14,49 @@ import assistant.memory as memory
 import assistant.email_tasks as email_tasks
 import assistant.dev_tools as dev_tools
 import assistant.calendar_sync as calendar_sync
+import assistant.workspace as workspace
 import webbrowser
 import urllib.parse
 
+def search_google_drive(query: str, limit: int = 5) -> str:
+    return str(workspace.search_drive(query, limit=int(limit)))
+
+def read_google_drive_file(file_id: str) -> str:
+    return str(workspace.read_drive_file(file_id))
+
+def upload_google_drive_file(name: str, content: str) -> str:
+    return str(workspace.upload_drive_file(name, content))
+
+def summarize_gmail_inbox(limit: int = 5) -> str:
+    return workspace.summarize_emails(limit=int(limit))
+
+def draft_gmail_message(to: str, subject: str, body: str) -> str:
+    return str(workspace.draft_email(to, subject, body))
+
+def create_google_calendar_event(summary: str, start_time_iso: str = None, duration_minutes: int = 60, description: str = None) -> str:
+    return str(workspace.create_calendar_event(summary, start_time_iso, int(duration_minutes), description))
+
+def create_google_doc(title: str, content: str = "") -> str:
+    return str(workspace.create_google_doc(title, content))
+
+def open_website(url: str):
+    return webbrowser.open(url)
+
+def search_google(query: str):
+    return webbrowser.open(f"https://www.google.com/search?q={urllib.parse.quote_plus(query)}")
+
+def search_youtube(query: str):
+    return webbrowser.open(f"https://www.youtube.com/results?search_query={urllib.parse.quote_plus(query)}")
+
 # Mapping of tool names to actual Python functions
 AVAILABLE_FUNCTIONS = {
+    "search_google_drive": search_google_drive,
+    "read_google_drive_file": read_google_drive_file,
+    "upload_google_drive_file": upload_google_drive_file,
+    "summarize_gmail_inbox": summarize_gmail_inbox,
+    "draft_gmail_message": draft_gmail_message,
+    "create_google_calendar_event": create_google_calendar_event,
+    "create_google_doc": create_google_doc,
     "open_app": system_tasks.open_app,
     "tell_time": system_tasks.tell_time,
     "tell_date": system_tasks.tell_date,
@@ -32,9 +70,9 @@ AVAILABLE_FUNCTIONS = {
     "add_note": notes.add_note,
     "read_notes": notes.read_notes,
     "clear_notes": notes.clear_notes,
-    "open_website": lambda url: webbrowser.open(url),
-    "search_google": lambda query: webbrowser.open(f"https://www.google.com/search?q={urllib.parse.quote_plus(query)}"),
-    "search_youtube": lambda query: webbrowser.open(f"https://www.youtube.com/results?search_query={urllib.parse.quote_plus(query)}"),
+    "open_website": open_website,
+    "search_google": search_google,
+    "search_youtube": search_youtube,
     "click_at": system_tasks.click_at,
     "type_text": system_tasks.type_text,
     "press_key": system_tasks.press_key,
@@ -79,6 +117,111 @@ AVAILABLE_FUNCTIONS = {
 
 # The JSON schema describing our tools to the LLM
 LLM_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "search_google_drive",
+            "description": "Searches Google Drive for files, presentations, spreadsheets, or documents matching the query.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "The search term or filename to look for in Google Drive."},
+                    "limit": {"type": "integer", "description": "Maximum number of files to return (default 5)."}
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_google_drive_file",
+            "description": "Retrieves the content or text excerpt of a specific file in Google Drive by its file ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_id": {"type": "string", "description": "The Google Drive file ID to read."}
+                },
+                "required": ["file_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "upload_google_drive_file",
+            "description": "Uploads a new file or document to Google Drive.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "The filename including extension (e.g. 'Project_Notes.txt')."},
+                    "content": {"type": "string", "description": "The text content of the file."}
+                },
+                "required": ["name", "content"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "summarize_gmail_inbox",
+            "description": "Retrieves recent unread emails from Gmail and returns a clean executive summary.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "description": "Number of recent unread emails to inspect (default 5)."}
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "draft_gmail_message",
+            "description": "Creates an email draft in Gmail without sending it immediately.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "to": {"type": "string", "description": "Recipient email address."},
+                    "subject": {"type": "string", "description": "Email subject line."},
+                    "body": {"type": "string", "description": "Body text of the draft email."}
+                },
+                "required": ["to", "subject", "body"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_google_calendar_event",
+            "description": "Schedules a new meeting or event on Google Calendar.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "summary": {"type": "string", "description": "Title or summary of the meeting/event."},
+                    "start_time_iso": {"type": "string", "description": "ISO 8601 start timestamp (e.g. '2026-09-04T18:00:00Z'). Defaults to 1 hour from now if omitted."},
+                    "duration_minutes": {"type": "integer", "description": "Duration in minutes (default 60)."},
+                    "description": {"type": "string", "description": "Optional notes or meeting agenda."}
+                },
+                "required": ["summary"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_google_doc",
+            "description": "Creates a new Google Document with a title and optional initial content.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Title of the Google Document."},
+                    "content": {"type": "string", "description": "Initial text content to insert into the document."}
+                },
+                "required": ["title"]
+            }
+        }
+    },
     {
         "type": "function",
         "function": {
@@ -881,6 +1024,6 @@ def run_task_step(instruction, context="", auto_confirm=True,
 for t in ["run_terminal_command", "shutdown_laptop", "restart_laptop", "clear_notes", "write_file", "disable_voice_input", "disable_speech_output"]:
     if t in AVAILABLE_FUNCTIONS:
         guard.register("destructive")(AVAILABLE_FUNCTIONS[t])
-for t in ["update_setting", "take_screenshot", "read_file", "send_email", "git_auto_commit_and_push", "spawn_parallel_agents", "run_actor_critic_research", "send_telegram_update"]:
+for t in ["update_setting", "take_screenshot", "read_file", "send_email", "git_auto_commit_and_push", "spawn_parallel_agents", "run_actor_critic_research", "send_telegram_update", "upload_google_drive_file", "draft_gmail_message", "create_google_calendar_event", "create_google_doc"]:
     if t in AVAILABLE_FUNCTIONS:
         guard.register("sensitive")(AVAILABLE_FUNCTIONS[t])
