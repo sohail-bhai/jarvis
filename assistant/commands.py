@@ -277,10 +277,10 @@ def execute_command(command, auto_confirm=False):
     if handle_volume_command(command):
         return True
 
-    if open_website(command):
+    if handle_app_command(command):
         return True
 
-    if handle_app_command(command):
+    if open_website(command):
         return True
 
     if youtube_search(command):

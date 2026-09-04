@@ -28,6 +28,33 @@ def get_os():
 def clamp_number(value, minimum=0, maximum=100):
     return max(minimum, min(maximum, int(value)))
 
+_STARTAPPS_CACHE = None
+_STARTAPPS_CACHE_TIME = 0
+
+def _get_windows_start_apps():
+    """Cache and return all registered Windows Store & desktop applications."""
+    global _STARTAPPS_CACHE, _STARTAPPS_CACHE_TIME
+    import time
+    import json
+    now = time.time()
+    if _STARTAPPS_CACHE is not None and (now - _STARTAPPS_CACHE_TIME) < 300:
+        return _STARTAPPS_CACHE
+
+    apps = []
+    try:
+        out = subprocess.check_output(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", "Get-StartApps | ConvertTo-Json"],
+            timeout=5
+        ).decode("utf-8", errors="ignore")
+        data = json.loads(out)
+        apps = data if isinstance(data, list) else [data]
+    except Exception as e:
+        logger.debug(f"Get-StartApps lookup note: {e}")
+
+    _STARTAPPS_CACHE = apps
+    _STARTAPPS_CACHE_TIME = now
+    return apps
+
 def _find_installed_app(query, system):
     """
     Search installed desktop applications on Windows, macOS, or Linux.
@@ -36,6 +63,39 @@ def _find_installed_app(query, system):
     clean_q = query.lower().replace(" ", "").replace("_", "").replace("-", "")
 
     if system == "windows":
+        # 1. Search Windows Store / UWP & desktop applications via Get-StartApps
+        try:
+            start_apps = _get_windows_start_apps()
+            bad_startapp_words = {"uninstall", "remove", "setup", "reset", "documentation", "help", "readme"}
+
+            # Exact normalized match
+            for item in start_apps:
+                raw_name = item.get("Name", "")
+                name = raw_name.lower()
+                if not any(bw in name for bw in bad_startapp_words):
+                    if clean_q == name.replace(" ", "").replace("_", "").replace("-", ""):
+                        return f"shell:AppsFolder\\{item['AppID']}", raw_name
+
+            # Word match
+            for item in start_apps:
+                raw_name = item.get("Name", "")
+                name = raw_name.lower()
+                if not any(bw in name for bw in bad_startapp_words):
+                    words = name.replace("_", " ").replace("-", " ").split()
+                    if query.lower() in words or any(w.startswith(query.lower()) for w in words):
+                        return f"shell:AppsFolder\\{item['AppID']}", raw_name
+
+            # Substring match
+            for item in start_apps:
+                raw_name = item.get("Name", "")
+                name = raw_name.lower()
+                if not any(bw in name for bw in bad_startapp_words):
+                    if query.lower() in name:
+                        return f"shell:AppsFolder\\{item['AppID']}", raw_name
+        except Exception as e:
+            logger.debug(f"StartApps matching note: {e}")
+
+        # 2. Search Start Menu .lnk shortcuts
         try:
             import winreg
         except ImportError:
