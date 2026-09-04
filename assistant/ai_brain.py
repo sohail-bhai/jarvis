@@ -677,7 +677,7 @@ class StepCancelled(Exception):
 
 
 def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps=5,
-                should_continue=None, authorize=None):
+                should_continue=None, authorize=None, resolve_secrets=None):
     """Run the tool-calling loop over `conversation`, which is mutated in place.
 
     `extra_messages` are injected into the payload just before the latest user
@@ -687,7 +687,9 @@ def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps
     `should_continue` is checked between model turns and before every tool
     call, so a long task can be stopped without waiting for it to finish.
     `authorize(tool_name)` returns `(allowed, reason)`; a refused tool is
-    reported back to the model rather than run.
+    reported back to the model rather than run. `resolve_secrets` turns
+    `secret://name` in the model's arguments into the real value at the moment
+    the tool runs, so the credential is never in the model's context.
 
     Returns the model's final text, or None if the local brain is unreachable.
     """
@@ -750,6 +752,8 @@ def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps
                     logger.info(f"[JARVIS Executing] {func_name}({args_dict})")
 
                     try:
+                        if resolve_secrets is not None:
+                            args_dict = resolve_secrets(args_dict)
                         args_dict = guard.coerce_args(func_to_call, args_dict)
                         result = guard.call(func_to_call, **args_dict)
                         result_str = str(result) if result is not None else "Success"
@@ -839,7 +843,7 @@ def ask_ai(command, auto_confirm=False):
 
 
 def run_task_step(instruction, context="", auto_confirm=True,
-                  should_continue=None, authorize=None):
+                  should_continue=None, authorize=None, resolve_secrets=None):
     """Carry out one control plane step with the same tools as the voice loop.
 
     The control plane calls this. It runs in its own short conversation so a
@@ -864,7 +868,8 @@ def run_task_step(instruction, context="", auto_confirm=True,
     reply = _agent_loop(conversation,
                         extra_messages=[_memory_message(instruction)],
                         auto_confirm=auto_confirm,
-                        should_continue=should_continue, authorize=authorize)
+                        should_continue=should_continue, authorize=authorize,
+                        resolve_secrets=resolve_secrets)
 
     if reply is None:
         raise RuntimeError("Could not reach the local model. Is Ollama running?")

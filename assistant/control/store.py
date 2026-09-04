@@ -180,6 +180,15 @@ MIGRATIONS = [
         ("activity_events", "approval_id", "ALTER TABLE activity_events ADD COLUMN approval_id TEXT"),
         ("activity_events", "result", "ALTER TABLE activity_events ADD COLUMN result TEXT"),
     ]),
+    ("0011_secrets", """
+        CREATE TABLE IF NOT EXISTS secrets (
+            name TEXT PRIMARY KEY,
+            ciphertext TEXT NOT NULL,
+            description TEXT,
+            created_at REAL NOT NULL,
+            updated_at REAL NOT NULL
+        );
+    """),
 ]
 
 DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "control.db"
@@ -436,6 +445,36 @@ class ControlStore:
              approval.seconds),
         )
         return approval
+
+    # -- secrets ------------------------------------------------------------
+    # Only ciphertext is stored here. The key lives outside the database, in
+    # assistant/control/secrets.py.
+
+    def save_secret(self, name, ciphertext, description="", updated_at=None):
+        existing = self.get_secret(name)
+        created_at = existing["created_at"] if existing else (updated_at or 0.0)
+        self._write(
+            "INSERT INTO secrets (name, ciphertext, description, created_at, "
+            "updated_at) VALUES (?, ?, ?, ?, ?) "
+            "ON CONFLICT(name) DO UPDATE SET ciphertext=excluded.ciphertext, "
+            "description=excluded.description, updated_at=excluded.updated_at",
+            (name, ciphertext, description, created_at, updated_at or 0.0),
+        )
+        return self.get_secret(name)
+
+    def get_secret(self, name):
+        row = self._row("SELECT * FROM secrets WHERE name = ?", (name,))
+        return dict(row) if row is not None else None
+
+    def list_secrets(self):
+        return [dict(row) for row in
+                self._rows("SELECT * FROM secrets ORDER BY name")]
+
+    def delete_secret(self, name):
+        secret = self.get_secret(name)
+        if secret is not None:
+            self._write("DELETE FROM secrets WHERE name = ?", (name,))
+        return secret
 
     # -- policy rules -------------------------------------------------------
 

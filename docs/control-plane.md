@@ -37,6 +37,7 @@ Putting it behind an API means:
 | `assistant/control/models.py` | The data model: `Task`, `TaskStep`, `Helper`, `Device`, `Permission`, `Approval`, `ActivityEvent`, plus their status enums. Plain dataclasses with no framework dependency. |
 | `assistant/control/store.py` | SQLite persistence. The only module that knows SQL, so moving to PostgreSQL later means rewriting this file alone. |
 | `assistant/control/service.py` | `ControlPlane` — the coordination logic and the only thing clients need. |
+| `assistant/control/secrets.py` | Credentials, encrypted at rest. Agents get references; only the plane resolves them. |
 | `assistant/control/notifier.py` | Decides which events are worth interrupting a person for, and delivers them. |
 | `assistant/control/planner.py` | Turns a goal into steps, with a model call that can be injected. |
 | `assistant/control/adapters.py` | How the control plane talks to an agent: in-process, over HTTP, or something added later. |
@@ -316,6 +317,44 @@ Not allowed: google.gmail.send needs your approval first.
 This is what makes `request_capability` more than advice. `TOOL_CAPABILITIES`
 in `capabilities.py` is the mapping.
 
+## Secrets
+
+An agent that has to send mail is given `secret://email_app_password`, not the
+password. The reference is resolved inside the control plane at the moment the
+tool runs, so the credential never enters the model's context, the timeline,
+the logs or an API response.
+
+```bash
+curl -X PUT localhost:8765/api/secrets/email_app_password \
+     -H 'Content-Type: application/json' \
+     -d '{"value": "hunter2", "description": "Gmail app password"}'
+
+curl localhost:8765/api/secrets
+# [{"name": "email_app_password", "reference": "secret://email_app_password", ...}]
+```
+
+There is no endpoint that returns a value - not for a client, not for an
+agent. `plane.secrets.reveal()` exists for the control plane alone.
+
+Values are encrypted with a key that lives outside the database: the
+`JARVIS_SECRET_KEY` environment variable if set, otherwise `data/secret.key`,
+created `0600` on first use. Copying `control.db` does not copy the ability to
+read what is in it. Back the key up separately - without it the stored
+credentials cannot be recovered.
+
+As a last line of defence, `record()` redacts any stored value that appears in
+a timeline message, replacing it with its reference. Nothing should ever put a
+value there; anything this catches is a bug that would otherwise reach a log or
+a phone.
+
+To move the credentials currently sitting in `config.json`:
+
+```bash
+curl -X POST localhost:8765/api/secrets/import-config
+```
+
+That stores each one and leaves `secret://<name>` behind in the config file.
+
 ## Running the API
 
 ```bash
@@ -420,6 +459,10 @@ carries `fields`, naming what was wrong.
 | `GET` | `/api/activity` | Timeline, newest first. `?types=` filters, comma separated. |
 | `GET` | `/api/event-types` | Every event type a client can filter or subscribe to. |
 | `GET` | `/api/notifications` | Recent notifications, newest first. |
+| `GET` | `/api/secrets` | What JARVIS holds, by name. Never the values. |
+| `PUT` | `/api/secrets/{name}` | Store or replace a credential. |
+| `DELETE` | `/api/secrets/{name}` | Forget a credential. |
+| `POST` | `/api/secrets/import-config` | Move credentials out of `config.json`. |
 | `POST` | `/api/emergency-stop` | Stop work and revoke all access. |
 | `POST` | `/api/resume` | Accept work again. |
 | `WS` | `/ws/activity` | Live activity stream. |
@@ -505,6 +548,11 @@ These are known gaps, not oversights:
   recent notifications, or through Telegram if that is switched on.
 - **Notification history is in memory.** It does not survive a restart, unlike
   the timeline, which does.
+- **A remote agent cannot resolve a secret.** References are resolved for
+  in-process tools only; an HTTP agent that needs a credential has no way to
+  ask for one yet.
+- **Secrets are not capability-scoped.** Any step that can call a tool can use
+  any stored secret; there is no per-secret policy rule.
 - **Enforcement covers the tools JARVIS knows.** A tool missing from
   `TOOL_CAPABILITIES` is treated as needing no capability, so new tools must be
   added there as they are written.
@@ -536,7 +584,7 @@ These are known gaps, not oversights:
 python -m unittest discover -s tests
 ```
 
-295 tests cover the task lifecycle, capability matching, permission expiry and
+324 tests cover the task lifecycle, capability matching, permission expiry and
 revocation, the approval flow, emergency stop, step execution, failure and
 cancellation paths, pairing and token authentication, rate limiting, schema
 migrations, the capability catalog, policy precedence, the broker's grant,
@@ -545,6 +593,7 @@ switch, the HTTP and native adapters, planning and its fallbacks, the step
 graph and its parallelism, cancellation part-way through a step, capability
 enforcement at the call site, retries and their cap, resuming interrupted work
 without redoing it, delegation between agents, typed lifecycle events and their
-audit fields, notification routing including a channel that throws, and the
-HTTP and WebSocket surface. The executor tests use an
+audit fields, notification routing including a channel that throws, secret
+storage, resolution, redaction and key handling, and the HTTP and WebSocket
+surface. The executor tests use an
 injected runner, so none of them need Ollama.

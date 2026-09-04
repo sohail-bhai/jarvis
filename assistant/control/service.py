@@ -36,6 +36,7 @@ from assistant.control.models import (
     now,
 )
 from assistant.control.policy import PolicyEngine
+from assistant.control.secrets import SecretStore
 from assistant.control.store import ControlStore
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,7 @@ class ControlPlane:
     def __init__(self, store=None, event_bus=None):
         self.store = store or ControlStore()
         self.policy = PolicyEngine(self.store)
+        self.secrets = SecretStore(self.store)
         self.event_bus = event_bus
         self._lock = threading.RLock()
         self._subscribers = []
@@ -745,6 +747,10 @@ class ControlPlane:
         filters on - which agent, which capability, how risky, which decision,
         and how it turned out.
         """
+        # Nothing should put a credential here; anything that does is caught
+        # before it reaches the timeline, a log, or a phone.
+        message = self.secrets.redact(message)
+
         event = ActivityEvent(task_id=task_id, type=event_type, message=message,
                               actor=actor, device_id=self.local_device.id,
                               metadata=metadata or {}, agent_id=agent_id,

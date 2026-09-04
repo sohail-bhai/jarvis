@@ -142,6 +142,12 @@ class DelegateRequest(BaseModel):
         None, description="Positions this must wait for. Defaults to the unfinished ones.")
 
 
+class SecretRequest(BaseModel):
+    value: str = Field(..., min_length=1,
+                       description="The credential. It is never returned again.")
+    description: str = Field("", description="What this is for.")
+
+
 class PairRequest(BaseModel):
     code: str = Field(..., min_length=4, description="The pairing code shown on the computer.")
     name: str = Field("", description="What to call this device, e.g. 'Rav's phone'.")
@@ -432,6 +438,39 @@ def create_app(control=None, executor=None, security=None, notifier=None):
         if rule is None:
             raise HTTPException(status_code=404, detail="No such policy rule.")
         return rule.to_dict()
+
+    # -- secrets -----------------------------------------------------------
+    # Values go in and are never handed back. Agents receive secret://name and
+    # the control plane resolves it at the moment a tool runs.
+
+    @app.get("/api/secrets", tags=["security"])
+    def list_secrets():
+        """What JARVIS holds, by name. Never the values."""
+        return plane.secrets.list()
+
+    @app.put("/api/secrets/{name}", status_code=201, tags=["security"])
+    def put_secret(name: str, request: SecretRequest):
+        """Store or replace a credential. Use secret://<name> to refer to it."""
+        try:
+            return plane.secrets.put(name, request.value,
+                                     description=request.description)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error))
+
+    @app.delete("/api/secrets/{name}", tags=["security"])
+    def delete_secret(name: str):
+        if plane.secrets.delete(name) is None:
+            raise HTTPException(status_code=404, detail="No such secret.")
+        return {"name": name, "deleted": True}
+
+    @app.post("/api/secrets/import-config", tags=["security"])
+    def import_config_secrets():
+        """Move credentials out of config.json, leaving references behind."""
+        moved = plane.secrets.import_from_config()
+        if moved:
+            plane.record(f"Moved {len(moved)} credential"
+                         f"{'s' if len(moved) != 1 else ''} into the secret store.")
+        return {"moved": moved}
 
     # -- devices and helpers ----------------------------------------------
 

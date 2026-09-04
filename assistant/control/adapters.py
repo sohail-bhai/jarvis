@@ -37,7 +37,7 @@ class NativeAdapter:
         self._runner = runner
 
     def run_step(self, instruction, context="", agent=None, token=None,
-                 authorize=None):
+                 authorize=None, resolve_secrets=None):
         if self._runner is not None:
             return self._runner(instruction, context)
 
@@ -46,7 +46,8 @@ class NativeAdapter:
         from assistant import ai_brain
 
         return ai_brain.run_task_step(instruction, context=context,
-                                      should_continue=token, authorize=authorize)
+                                      should_continue=token, authorize=authorize,
+                                      resolve_secrets=resolve_secrets)
 
 
 class HttpAdapter:
@@ -63,7 +64,9 @@ class HttpAdapter:
         self.timeout = timeout
 
     def run_step(self, instruction, context="", agent=None, token=None,
-                 authorize=None):
+                 authorize=None, resolve_secrets=None):
+        # A remote agent never receives resolved values: it gets the same
+        # references, and asks the control plane if it needs them.
         if token is not None and token.cancelled:
             raise AgentUnavailable("Stopped before the agent was called.")
 

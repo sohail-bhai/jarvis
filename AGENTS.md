@@ -49,7 +49,7 @@ Primary user-facing capabilities:
 - `assistant/config.py`: config defaults, JSON loading/merging, and setting updates.
 - `assistant/notes.py`: note capture, readback, and clearing.
 - `assistant/ai_brain.py`: Ollama-backed agent loop (`_agent_loop`, which takes optional `should_continue` and `authorize` hooks), the voice entry point `ask_ai()`, the control plane entry point `run_task_step()`, the tool-calling schema, and the `AVAILABLE_FUNCTIONS` tool registry.
-- `assistant/control/`: the control plane. `models.py` (data model), `store.py` (SQLite), `service.py` (`ControlPlane` coordination logic), `executor.py` (`TaskExecutor`, which runs task steps through `ai_brain.run_task_step`), `capabilities.py` (namespaced capability catalog with risk levels), `policy.py` (`PolicyEngine`: allow, ask or deny), `adapters.py` (`NativeAdapter`, `HttpAdapter`, `AdapterRegistry`), `planner.py` (goal to steps), `notifier.py` (what reaches the phone, and how).
+- `assistant/control/`: the control plane. `models.py` (data model), `store.py` (SQLite), `service.py` (`ControlPlane` coordination logic), `executor.py` (`TaskExecutor`, which runs task steps through `ai_brain.run_task_step`), `capabilities.py` (namespaced capability catalog with risk levels), `policy.py` (`PolicyEngine`: allow, ask or deny), `adapters.py` (`NativeAdapter`, `HttpAdapter`, `AdapterRegistry`), `planner.py` (goal to steps), `notifier.py` (what reaches the phone, and how), `secrets.py` (encrypted credentials, resolved only inside the plane).
 - `assistant/api/`: HTTP + WebSocket boundary over the control plane. `app.py` (routes), `auth.py` (device pairing, tokens, rate limiting), `errors.py` (one error envelope). Run with `python -m assistant.api`.
 - `assistant/memory.py`: persistent vector memory backed by ChromaDB.
 - `assistant/swarm.py`: parallel sub-agents and actor-critic research.
@@ -239,6 +239,10 @@ Known limits in Version 1.2:
   `executor.resume_interrupted()`.
 - Notifications need a connected client or Telegram; there is no push service,
   and notification history is in memory only.
+- Never put a credential in a tool argument, a log or an event message. Store
+  it with `plane.secrets.put()` and pass `secret://<name>`; the control plane
+  resolves it when the tool runs. `data/secret.key` is not in the database and
+  is not recoverable if lost.
 - Agent and device health is swept on read, not by a background timer, and
   agents have no credential of their own - they call through a paired device.
 

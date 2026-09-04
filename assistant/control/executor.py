@@ -335,7 +335,8 @@ class TaskExecutor:
         try:
             return adapter.run_step(instruction, context=context, agent=agent,
                                     token=token,
-                                    authorize=self._authorizer(task_id, agent))
+                                    authorize=self._authorizer(task_id, agent),
+                                    resolve_secrets=self.plane.secrets.resolve)
         except TypeError:
             # An adapter that predates cancellation still works, it just
             # cannot be interrupted part-way.

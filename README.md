@@ -105,6 +105,13 @@ curl -X POST http://<computer>:8765/api/pair \
 > `--host 0.0.0.0` lets your network reach this computer. Callers still need a
 > paired token, but only use it on a network you trust.
 
+Credentials live in an encrypted store rather than in `config.json`. Agents
+receive `secret://<name>` and never the value:
+
+```bash
+curl -X POST localhost:8765/api/secrets/import-config   # move existing ones
+```
+
 See [docs/control-plane.md](docs/control-plane.md) for the data model,
 the full endpoint list, and known limitations.
 

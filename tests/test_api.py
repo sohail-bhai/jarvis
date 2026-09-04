@@ -628,5 +628,38 @@ class EventStreamTests(ApiTestCase):
         self.assertEqual("action", body[0]["urgency"])
 
 
+class SecretApiTests(ApiTestCase):
+    def test_a_secret_can_be_stored_and_listed_without_its_value(self):
+        stored = self.client.put("/api/secrets/email_app_password",
+                                 json={"value": "hunter2",
+                                       "description": "Gmail"}).json()
+
+        listed = self.client.get("/api/secrets").json()
+
+        self.assertEqual("secret://email_app_password", stored["reference"])
+        self.assertNotIn("hunter2", str(listed))
+        self.assertEqual(["email_app_password"], [item["name"] for item in listed])
+
+    def test_there_is_no_way_to_read_a_value_back(self):
+        self.client.put("/api/secrets/token", json={"value": "hunter2"})
+
+        # Nothing in the API returns it, so a read attempt is simply not routed.
+        self.assertEqual(405, self.client.get("/api/secrets/token").status_code)
+
+    def test_a_secret_can_be_deleted(self):
+        self.client.put("/api/secrets/token", json={"value": "hunter2"})
+
+        self.assertEqual(200, self.client.delete("/api/secrets/token").status_code)
+        self.assertEqual([], self.client.get("/api/secrets").json())
+
+    def test_deleting_an_unknown_secret_is_a_404(self):
+        self.assertEqual(404, self.client.delete("/api/secrets/nope").status_code)
+
+    def test_an_empty_value_is_rejected(self):
+        response = self.client.put("/api/secrets/token", json={"value": ""})
+
+        self.assertEqual(422, response.status_code)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -17,3 +17,6 @@ data/control.db-shm
 
 # Generated speech audio
 temp_speech_*.mp3
+
+# Encryption key for the control plane secret store
+data/secret.key
