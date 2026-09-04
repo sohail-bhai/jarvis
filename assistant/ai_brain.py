@@ -40,13 +40,16 @@ def create_google_doc(title: str, content: str = "") -> str:
     return str(workspace.create_google_doc(title, content))
 
 def open_website(url: str):
-    return webbrowser.open(url)
+    success = webbrowser.open(url)
+    return "Website opened in browser. You MUST now use get_clickable_elements() or read_screen() if you need to interact with it." if success else "Failed to open website."
 
 def search_google(query: str):
-    return webbrowser.open(f"https://www.google.com/search?q={urllib.parse.quote_plus(query)}")
+    success = webbrowser.open(f"https://www.google.com/search?q={urllib.parse.quote_plus(query)}")
+    return "Google search opened in browser. You MUST now use get_clickable_elements() to find and click a result." if success else "Failed to open browser."
 
 def search_youtube(query: str):
-    return webbrowser.open(f"https://www.youtube.com/results?search_query={urllib.parse.quote_plus(query)}")
+    success = webbrowser.open(f"https://www.youtube.com/results?search_query={urllib.parse.quote_plus(query)}")
+    return "YouTube search opened in browser. You MUST now use get_clickable_elements() to find the video on the screen and click_at() to play it." if success else "Failed to open browser."
 
 # Mapping of tool names to actual Python functions
 AVAILABLE_FUNCTIONS = {
@@ -844,7 +847,9 @@ def get_system_prompt():
         "Step 1: call search_youtube(query='X') directly (DO NOT call open_website first). "
         "Step 2: call get_clickable_elements(). "
         "Step 3: Find the Nth video link in the results (skip ads/sidebar). "
-        "Step 4: call click_at(x=<x>, y=<y>) on that specific element. "
+        "Step 4: call click_at(x=<x>, y=<y>) on that specific element.\n"
+        "ALREADY OPEN WINDOWS: If the user asks you to interact with an ALREADY OPEN tab (e.g. 'play the first video in the opened tab'), DO NOT call search_youtube or open_app again! Immediately call get_clickable_elements() to find the coordinates of what to click.\n"
+        "ANTI-HALLUCINATION RULE: Never claim 'the video is playing' or 'the task is done' if you merely performed a search. You MUST use get_clickable_elements and click_at to actually click the video before saying it is playing. Do not lie to the user.\n"
         "If they ask for Google instead, use search_google(query='X') in Step 1. NEVER open a URL directly with the index."
     )
 

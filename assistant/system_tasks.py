@@ -333,7 +333,7 @@ def open_app(app_name):
         if query in websites:
             speak(f"Opening {display_name} in browser.")
             webbrowser.open(websites[query])
-            return True
+            return f"Opened {query} in browser. You MUST now use get_clickable_elements() or read_screen() if you need to interact with it."
 
         web_services = {
             "youtube": "https://www.youtube.com",
@@ -367,7 +367,7 @@ def open_app(app_name):
         if query in web_services:
             speak(f"Opening {display_name} in browser.")
             webbrowser.open(web_services[query])
-            return True
+            return f"Opened {query} in browser. You MUST now use get_clickable_elements() or read_screen() if you need to interact with it."
 
         if " " not in query and query.isalnum():
             url = f"https://www.{query}.com"
@@ -376,7 +376,7 @@ def open_app(app_name):
 
         speak(f"Opening {display_name} in browser.")
         webbrowser.open(url)
-        return True
+        return f"Opened {url} in browser. You MUST now use get_clickable_elements() or read_screen() if you need to interact with it."
 
     except Exception as error:
         speak(f"Could not open {display_name}.")
