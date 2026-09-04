@@ -1215,12 +1215,36 @@ def ask_document(question):
 
 def query_local_llm_chat(messages, model="qwen2.5:3b", tools=None):
     """
-    Queries the local Ollama instance using the /api/chat endpoint with the full message history.
-
-    The address is configurable, because Ollama is not always on the default
-    port: a second instance forced onto the CPU, or one on another machine on
-    your network, is the same conversation from here.
+    Queries the local Ollama instance using the /api/chat endpoint, or Featherless AI if configured.
     """
+    featherless_key = get_setting("featherless_api_key", "")
+    
+    if featherless_key:
+        url = "https://api.featherless.ai/v1/chat/completions"
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {featherless_key}'
+        }
+        payload = {
+            "model": get_setting("featherless_model", "meta-llama/Meta-Llama-3.1-8B-Instruct"),
+            "messages": messages,
+            "stream": False
+        }
+        if tools is not False:
+            payload["tools"] = tools if tools is not None else LLM_TOOLS
+            
+        data = json.dumps(payload).encode('utf-8')
+        req = urllib.request.Request(url, data=data, headers=headers)
+        
+        try:
+            with urllib.request.urlopen(req, timeout=int(get_setting("llm_timeout_seconds", 300))) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                return result.get("choices", [{}])[0].get("message", {})
+        except Exception as e:
+            logger.info(f"[Featherless API Error] {e}")
+            return None
+
+    # Fallback to Local Ollama
     url = str(get_setting("ollama_url", "http://localhost:11434")).rstrip("/") + "/api/chat"
     
     payload = {
