@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import customtkinter as ctk
 from gui import theme
+from gui.tasks import start_web_task
 from gui.store import store
 
 
@@ -120,12 +121,59 @@ class WebPage(ctk.CTkScrollableFrame):
 
     def _submit_web_task(self):
         text = self.web_entry.get().strip()
-        if text:
-            self.web_entry.delete(0, "end")
-            store.add_system_log(f"Starting web research: '{text}'", "working")
-            new_task = {"id": f"w-{len(store.web_tasks)+1}", "query": text, "status": "Working", "time": "Just now"}
-            store.web_tasks.insert(0, new_task)
+        if not text:
+            return
+
+        self.web_entry.delete(0, "end")
+        store.add_system_log(f"Starting web research: '{text}'", "working")
+        new_task = {"id": f"w-{len(store.web_tasks)+1}", "query": text,
+                    "status": "Working", "time": "Just now"}
+        store.web_tasks.insert(0, new_task)
+        self._render_recent_tasks()
+
+        # Hand it to the control plane. The card below now follows real steps.
+        store.browser_progress["title"] = text
+        store.browser_progress["steps"] = []
+        self._build_browser_progress_refresh()
+
+        task = start_web_task(text, on_progress=self._on_task_progress)
+        if task is None:
+            store.add_system_log("JARVIS is stopped, so that task did not start.",
+                                 "waiting")
+            new_task["status"] = "Stopped"
             self._render_recent_tasks()
+            return
+
+        new_task["id"] = task.id
+
+    def _on_task_progress(self, step):
+        """Called from a worker thread, so hop back onto the UI thread."""
+        self.after(0, lambda: self._apply_progress(step))
+
+    def _apply_progress(self, step):
+        steps = store.browser_progress["steps"]
+
+        if step["active"]:
+            steps.append({"text": step["text"], "active": True})
+        else:
+            for existing in steps:
+                existing.pop("active", None)
+            steps.append({"text": step["text"], "done": step["done"],
+                          "failed": step["failed"]})
+
+        if step["needs_you"]:
+            store.add_system_log(step["text"], "waiting")
+
+        store.browser_progress["steps"] = steps[-8:]
+        self._build_browser_progress_refresh()
+
+    def _build_browser_progress_refresh(self):
+        """Redraw the progress card in place."""
+        try:
+            self.progress_card.destroy()
+        except Exception:
+            pass
+        self._build_browser_progress()
 
     def _build_browser_progress(self):
         card = ctk.CTkFrame(
@@ -136,6 +184,7 @@ class WebPage(ctk.CTkScrollableFrame):
             corner_radius=14,
         )
         card.pack(fill="x", padx=16, pady=(0, 16))
+        self.progress_card = card
 
         inner = ctk.CTkFrame(card, fg_color="transparent")
         inner.pack(fill="x", padx=16, pady=14)

@@ -19,3 +19,7 @@ data/control.db-shm
 
 # Encryption key for the control plane secret store
 data/secret.key
+
+# The logged-in browser profile. Treat it like a password store.
+data/browser_profile/
+data/browser_last.png

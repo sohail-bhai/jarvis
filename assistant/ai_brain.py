@@ -14,6 +14,8 @@ import assistant.memory as memory
 import assistant.email_tasks as email_tasks
 import assistant.dev_tools as dev_tools
 import assistant.calendar_sync as calendar_sync
+import assistant.browser as browser
+import assistant.gitlab_agent as gitlab_agent
 import assistant.workspace as workspace
 import webbrowser
 import urllib.parse
@@ -112,11 +114,116 @@ AVAILABLE_FUNCTIONS = {
     "enable_speech_output": system_tasks.enable_speech_output,
     "start_overwatch": __import__('assistant.overwatch', fromlist=['']).start_overwatch,
     "stop_overwatch": __import__('assistant.overwatch', fromlist=['']).stop_overwatch,
-    "send_telegram_update": system_tasks.send_telegram_update
+    "send_telegram_update": system_tasks.send_telegram_update,
+
+    # Driving a real browser, the way a person uses the web.
+    "browse": browser.browse,
+    "browser_read": browser.browser_read,
+    "browser_elements": browser.browser_elements,
+    "browser_click": browser.browser_click,
+    "browser_type": browser.browser_type,
+    "browser_press": browser.browser_press,
+    "browser_wait_for": browser.browser_wait_for,
+    "browser_screenshot": browser.browser_screenshot,
+    "browser_ask_site": browser.browser_ask_site,
+
+    # GitLab, through its API rather than by clicking.
+    "gitlab_list_issues": gitlab_agent.gitlab_list_issues,
+    "gitlab_read_issue": gitlab_agent.gitlab_read_issue,
+    "gitlab_find_file": gitlab_agent.gitlab_find_file,
+    "gitlab_read_file": gitlab_agent.gitlab_read_file,
+    "gitlab_propose_fix": gitlab_agent.gitlab_propose_fix,
+    "gitlab_merge": gitlab_agent.gitlab_merge,
 }
 
+def _tool(name, description, properties, required=None):
+    """Shorthand for one entry in the schema the model is given."""
+    return {
+        "type": "function",
+        "function": {
+            "name": name,
+            "description": description,
+            "parameters": {"type": "object", "properties": properties,
+                           "required": required or []},
+        },
+    }
+
+
+# Browsing and GitLab. These are written out with the same shape as the rest,
+# just built by a helper because there are a lot of them.
+WEB_TOOLS = [
+    _tool("browse", "Open a web page in the real browser and read what is on it. "
+          "Use this whenever the user names a website or asks you to look something "
+          "up on a specific site.",
+          {"url": {"type": "string", "description": "The address to open."}},
+          ["url"]),
+    _tool("browser_read", "Read the page that is currently open again, without "
+          "clicking anything. Use `full` when you need the whole page.",
+          {"full": {"type": "boolean", "description": "Read the long version."}}),
+    _tool("browser_elements", "List everything on the current page that can be "
+          "clicked or typed into, numbered. Use this when you are not sure what to "
+          "click next.", {}),
+    _tool("browser_click", "Click something on the page, by its number from "
+          "browser_elements or by the words shown on it.",
+          {"target": {"type": "string", "description": "A number, or the visible text."}},
+          ["target"]),
+    _tool("browser_type", "Type into a box on the page. Set submit to true to press "
+          "Enter afterwards, which is how you send a search or a chat message.",
+          {"target": {"type": "string", "description": "A number, or the box's label."},
+           "text": {"type": "string", "description": "What to type."},
+           "submit": {"type": "boolean", "description": "Press Enter after typing."}},
+          ["target", "text"]),
+    _tool("browser_press", "Press a single key, such as Enter or Escape.",
+          {"key": {"type": "string"}}, ["key"]),
+    _tool("browser_wait_for", "Wait until some text appears on the page. Use this "
+          "when a site is still loading or still writing an answer.",
+          {"text": {"type": "string"}, "seconds": {"type": "number"}}, ["text"]),
+    _tool("browser_screenshot", "Save a picture of the page, for when the text is "
+          "not enough to tell what is going on.", {}),
+    _tool("browser_ask_site", "Open a site that has a chat or search box, ask it "
+          "one question, wait for the answer, and bring the answer back. Use this "
+          "for 'ask ChatGPT ...', 'ask Perplexity ...' and the like.",
+          {"url": {"type": "string", "description": "e.g. https://chatgpt.com"},
+           "prompt": {"type": "string", "description": "The question to ask."},
+           "answer_appears_within": {"type": "number",
+                                     "description": "Seconds to wait. Default 90."}},
+          ["url", "prompt"]),
+
+    _tool("gitlab_list_issues", "List issues on a GitLab project, so you can pick "
+          "one to work on. The project looks like 'group/repository'.",
+          {"project": {"type": "string"}, "state": {"type": "string"},
+           "limit": {"type": "number"}}, ["project"]),
+    _tool("gitlab_read_issue", "Read one GitLab issue in full, with its comments, "
+          "to understand what is actually being asked for.",
+          {"project": {"type": "string"}, "issue_iid": {"type": "number"}},
+          ["project", "issue_iid"]),
+    _tool("gitlab_find_file", "Search a GitLab repository for the file an issue is "
+          "about, before trying to change anything.",
+          {"project": {"type": "string"}, "query": {"type": "string"}},
+          ["project", "query"]),
+    _tool("gitlab_read_file", "Read a file from a GitLab repository, so your fix is "
+          "written against the real code rather than a guess.",
+          {"project": {"type": "string"}, "path": {"type": "string"},
+           "ref": {"type": "string", "description": "Branch. Defaults to the main one."}},
+          ["project", "path"]),
+    _tool("gitlab_propose_fix", "Put a fix on its own branch and open a merge "
+          "request. Send the complete new contents of the file, not a patch. This "
+          "does not merge anything.",
+          {"project": {"type": "string"}, "issue_iid": {"type": "number"},
+           "path": {"type": "string"},
+           "new_content": {"type": "string",
+                           "description": "The whole file, after your fix."},
+           "summary": {"type": "string", "description": "One line on what changed."}},
+          ["project", "issue_iid", "path", "new_content"]),
+    _tool("gitlab_merge", "Merge a merge request. Only do this when the user has "
+          "asked for it - it changes the real repository.",
+          {"project": {"type": "string"}, "merge_request_iid": {"type": "number"}},
+          ["project", "merge_request_iid"]),
+]
+
+
 # The JSON schema describing our tools to the LLM
-LLM_TOOLS = [
+LLM_TOOLS = WEB_TOOLS + [
     {
         "type": "function",
         "function": {
@@ -744,7 +851,27 @@ def get_system_prompt():
         "You have configurable settings that you can change using the update_setting tool. The main settings are:\n"
         "- 'voice_rate': Reading speed (default 170. Higher is faster).\n"
         "- 'voice_volume': Audio volume (default 1.0. Range 0.0 to 1.0).\n\n"
-        "CRITICAL RULE: Always use the provided tools to accomplish the user's tasks, chaining them if necessary."
+        "CRITICAL RULE: Always use the provided tools to accomplish the user's tasks, chaining them if necessary.\n\n"
+
+        "USING THE WEB: You drive a real browser. Never say you cannot open a "
+        "website - open it. The loop is always the same: `browse` the page, "
+        "read what came back, then act on what is ACTUALLY there. Every action "
+        "returns the page's numbered elements, so click and type by those "
+        "numbers or by the words shown on screen. If something is missing, call "
+        "`browser_elements` and look again rather than guessing a selector. "
+        "When a site has one obvious box to type a question into - ChatGPT, "
+        "Perplexity, a search engine - `browser_ask_site` does the whole "
+        "round trip in one call and brings the answer back.\n\n"
+
+        "WORKING ON GITLAB: use the GitLab tools, not the browser, because they "
+        "make a real commit instead of a click that might have missed. The "
+        "order that works: `gitlab_list_issues` to see what is open, "
+        "`gitlab_read_issue` to understand what is actually being asked, "
+        "`gitlab_find_file` then `gitlab_read_file` to see the real code, then "
+        "`gitlab_propose_fix` with the COMPLETE new contents of the file. Never "
+        "send a diff or a snippet - send the whole file after your change. "
+        "Proposing opens a merge request and stops there. Only call "
+        "`gitlab_merge` when the user has explicitly asked you to merge."
     )
 
 conversation_history = []
