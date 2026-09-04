@@ -9,23 +9,58 @@ import { MenuItem } from '../../src/components/MenuItem';
 import { useAppState } from '../../src/store/AppContext';
 import { devicesService } from '../../src/services/devices';
 import { approvalsService } from '../../src/services/approvals';
+import { googleService } from '../../src/services/google';
+import { securityService } from '../../src/services/security';
+import { sessionService } from '../../src/api/session';
+import { getHost } from '../../src/api/client';
 
 export default function YouScreen() {
   const router = useRouter();
   const { state, dispatch } = useAppState();
   const [deviceCount, setDeviceCount] = useState(0);
   const [approvalCount, setApprovalCount] = useState(0);
+  const [reachable, setReachable] = useState(false);
+  const [securityLine, setSecurityLine] = useState('');
 
   useEffect(() => {
     loadData();
   }, []);
 
   const loadData = async () => {
-    const count = await devicesService.getOnlineCount();
-    setDeviceCount(count);
-    const aCount = await approvalsService.getApprovalCount();
-    setApprovalCount(aCount);
-    dispatch({ type: 'SET_APPROVAL_COUNT', payload: aCount });
+    try {
+      setDeviceCount(await devicesService.getOnlineCount());
+
+      const pending = await approvalsService.getPendingApprovals();
+      setApprovalCount(pending.length);
+      dispatch({ type: 'SET_APPROVAL_COUNT', payload: pending.length });
+
+      const security = await securityService.getSecurityStatus();
+      setSecurityLine(security.stopped ? 'Everything stopped' : 'Protected');
+      setReachable(true);
+    } catch {
+      // Say nothing rather than something untrue: the computer is not
+      // answering, so these numbers are unknown, not zero.
+      setReachable(false);
+      setSecurityLine('');
+    }
+  };
+
+  const disconnect = () => {
+    Alert.alert(
+      'Disconnect this phone?',
+      'JARVIS keeps working on your computer. This phone will need a new code to connect again.',
+      [
+        { text: 'Not now', style: 'cancel' },
+        {
+          text: 'Disconnect',
+          style: 'destructive',
+          onPress: async () => {
+            await sessionService.disconnect();
+            router.replace('/connect');
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -36,7 +71,10 @@ export default function YouScreen() {
           <Text style={styles.title}>You</Text>
           <Pressable
             style={styles.settingsButton}
-            onPress={() => Alert.alert('Settings', 'JARVIS App Version 1.2\nConnected to Local AI Brain & Desktop Assistant')}
+            onPress={() => Alert.alert(
+              'Settings',
+              `JARVIS on your phone, version 1.2.\n\nConnected to ${getHost() || 'no computer yet'}.`,
+            )}
             hitSlop={8}
           >
             <Ionicons name="settings-outline" size={22} color={colors.textSecondary} />
@@ -53,18 +91,24 @@ export default function YouScreen() {
         {/* Divider */}
         <View style={styles.divider} />
 
-        {/* Menu Items matching Screen 5 */}
+        {/* Which computer this phone belongs to */}
+        <MenuItem
+          icon="desktop-outline"
+          label="Your computer"
+          value={reachable ? getHost().replace(/^https?:\/\//, '') : 'Not reachable'}
+          onPress={() => router.push('/devices')}
+        />
         <MenuItem
           icon="laptop-outline"
           label="My Devices"
-          value={`${deviceCount} connected`}
+          value={reachable ? `${deviceCount} connected` : 'Unknown'}
           onPress={() => router.push('/devices')}
         />
         <MenuItem
           icon="logo-google"
           iconColor="#4285F4"
           label="Google Workspace"
-          value="Connected"
+          value={googleService.isConnected() ? 'Connected' : 'Not connected'}
           onPress={() => router.push('/google' as any)}
         />
         <MenuItem
@@ -82,7 +126,7 @@ export default function YouScreen() {
         <MenuItem
           icon="lock-closed-outline"
           label="Your Security"
-          value="Protected"
+          value={securityLine || 'Unknown'}
           onPress={() => router.push('/security')}
         />
 
@@ -92,13 +136,17 @@ export default function YouScreen() {
         <MenuItem
           icon="link-outline"
           label="Connected Services"
-          value="3 services"
-          onPress={() => Alert.alert('Connected Services', '• Python Local Desktop Assistant\n• Google Workspace API\n• Telegram Notification Relay')}
+          value={googleService.isConnected() ? '2 connected' : '1 connected'}
+          onPress={() => Alert.alert(
+            'Connected Services',
+            `• Your computer${reachable ? '' : ' (not reachable right now)'}\n` +
+            `• Google Workspace${googleService.isConnected() ? '' : ' - not connected yet'}`,
+          )}
         />
         <MenuItem
-          icon="cog-outline"
-          label="Settings"
-          onPress={() => Alert.alert('Settings', 'Theme: Light (Restrained)\nNotification Level: High Priority Only\nOffline Fail-safe: Enabled')}
+          icon="log-out-outline"
+          label="Disconnect this phone"
+          onPress={disconnect}
         />
         <MenuItem
           icon="help-circle-outline"

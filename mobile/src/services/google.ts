@@ -1,3 +1,10 @@
+/**
+ * Google Workspace - not connected yet.
+ *
+ * The control plane has no Google endpoints, so everything below is example
+ * data. It is exported behind `isDemo` so the screens can say so out loud
+ * rather than showing invented mail as if it were yours.
+ */
 import { DriveFile, Email, CalendarEvent } from './types';
 
 const mockDriveFiles: DriveFile[] = [
@@ -64,7 +71,11 @@ export const googleService = {
   },
 
   // Status
+  /** Nothing is connected to a real Google account yet. */
   isConnected(): boolean {
-    return true;
+    return false;
   },
+
+  /** True while these answers are examples rather than your data. */
+  isDemo: true,
 };

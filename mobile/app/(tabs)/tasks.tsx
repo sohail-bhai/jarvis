@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, Modal, TextInput, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import { TabSelector } from '../../src/components/TabSelector';
 import { TaskCard } from '../../src/components/TaskCard';
 import { tasksService } from '../../src/services/tasks';
 import { jarvisService } from '../../src/services/jarvis';
+import { openEventStream } from '../../src/api/live';
 import { useAppState } from '../../src/store/AppContext';
 import { Task } from '../../src/services/types';
 
@@ -20,21 +21,40 @@ export default function TasksScreen() {
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
 
-  useEffect(() => {
-    loadTasks();
-    const interval = setInterval(loadTasks, 1500);
-    return () => clearInterval(interval);
+  const [problem, setProblem] = useState('');
+
+  const loadTasks = useCallback(async () => {
+    try {
+      setTasks(activeTab === 'Active'
+        ? await tasksService.getActiveTasks()
+        : await tasksService.getCompletedTasks());
+      setProblem('');
+    } catch (error) {
+      setTasks([]);
+      setProblem(error instanceof Error ? error.message : 'Could not reach your computer.');
+    }
   }, [activeTab]);
 
-  const loadTasks = async () => {
-    if (activeTab === 'Active') {
-      const data = await tasksService.getActiveTasks();
-      setTasks(data);
-    } else {
-      const data = await tasksService.getCompletedTasks();
-      setTasks(data);
-    }
-  };
+  useEffect(() => {
+    loadTasks();
+
+    // The computer says when a task changed, so the list follows the work
+    // instead of asking about it constantly.
+    const close = openEventStream({
+      types: [
+        'task_created', 'task_started', 'task_completed', 'task_failed',
+        'task_cancelled', 'step_finished', 'approval_requested',
+      ],
+      onEvent: () => loadTasks(),
+    });
+
+    const interval = setInterval(loadTasks, 30000);
+
+    return () => {
+      close();
+      clearInterval(interval);
+    };
+  }, [loadTasks]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -47,12 +67,19 @@ export default function TasksScreen() {
       Alert.alert('Empty Command', 'Please enter a task description.');
       return;
     }
-    const task = await jarvisService.processCommand(newTaskTitle);
-    dispatch({ type: 'ADD_TASK', payload: task });
-    setCreateModalVisible(false);
-    setNewTaskTitle('');
-    loadTasks();
-    router.push(`/task/${task.id}`);
+    try {
+      const task = await jarvisService.processCommand(newTaskTitle);
+      dispatch({ type: 'ADD_TASK', payload: task });
+      setCreateModalVisible(false);
+      setNewTaskTitle('');
+      loadTasks();
+      router.push(`/task/${task.id}`);
+    } catch (error) {
+      Alert.alert(
+        'JARVIS could not start that',
+        error instanceof Error ? error.message : 'Your computer did not answer.',
+      );
+    }
   };
 
   return (

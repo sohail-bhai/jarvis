@@ -19,8 +19,15 @@ export default function DevicesScreen() {
   }, []);
 
   const loadDevices = async () => {
-    const data = await devicesService.getDevices();
-    setDevices(data);
+    try {
+      setDevices(await devicesService.getDevices());
+    } catch (error) {
+      setDevices([]);
+      Alert.alert(
+        'Could not reach JARVIS',
+        error instanceof Error ? error.message : 'Your computer did not answer.',
+      );
+    }
   };
 
   const handleDevicePress = (device: Device) => {
@@ -41,7 +48,11 @@ export default function DevicesScreen() {
         `OS: ${selectedDevice.os}\nStatus: ${selectedDevice.status}\nCapabilities: ${(selectedDevice.capabilities || []).join(', ')}`
       );
     } else {
-      Alert.alert('Device Action', `${action} triggered on ${selectedDevice.name}`);
+      // Nothing behind this yet, so it must not claim the action happened.
+      Alert.alert(
+        action,
+        `JARVIS cannot do this on ${selectedDevice.name} yet.`,
+      );
     }
   };
 

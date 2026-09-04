@@ -368,6 +368,10 @@ Interactive documentation is generated at `http://127.0.0.1:8765/docs`.
 > Binding to `0.0.0.0` lets anything on your network control this computer.
 > It is opt-in and logs a warning on startup. Remote clients must pair first.
 
+On startup it prints the addresses a phone or another computer can use, and the
+command that shows a pairing code. `docs/mobile.md` walks through connecting a
+phone.
+
 ## Pairing a device
 
 Reaching the port is not the same as being allowed to use it. Every remote
@@ -375,7 +379,9 @@ client is a paired device holding its own token, and one token can be revoked
 without disturbing the others.
 
 ```bash
-# On the computer itself (or from an already paired device):
+# On the computer itself:
+python -m assistant.api --pair
+# or, equivalently, from an already paired device:
 curl -X POST localhost:8765/api/pair/code
 # {"code": "418302", "expires_in": 600}
 

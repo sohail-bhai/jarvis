@@ -1,26 +1,45 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, typography, spacing } from '../../src/theme';
 import { ActivityItemComponent } from '../../src/components/ActivityItem';
 import { SectionHeader } from '../../src/components/SectionHeader';
 import { activityService } from '../../src/services/activity';
+import { openEventStream } from '../../src/api/live';
+import { toActivity } from '../../src/api/mappers';
 import { ActivityEntry } from '../../src/services/types';
 
 export default function ActivityScreen() {
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadActivity();
-    const interval = setInterval(loadActivity, 1500);
-    return () => clearInterval(interval);
+  const [problem, setProblem] = useState('');
+
+  const loadActivity = useCallback(async () => {
+    try {
+      setActivity(await activityService.getActivity());
+      setProblem('');
+    } catch (error) {
+      setProblem(error instanceof Error ? error.message : 'Could not reach your computer.');
+    }
   }, []);
 
-  const loadActivity = async () => {
-    const data = await activityService.getActivity();
-    setActivity(data);
-  };
+  useEffect(() => {
+    loadActivity();
+
+    // The timeline is the one screen that should never lag behind the work,
+    // so each event is added as it arrives rather than reloading the list.
+    const close = openEventStream({
+      onEvent: event =>
+        setActivity(current => {
+          const entry = toActivity(event);
+          if (current.some(item => item.id === entry.id)) return current;
+          return [entry, ...current].slice(0, 200);
+        }),
+    });
+
+    return close;
+  }, [loadActivity]);
 
   const handleRefresh = async () => {
     setRefreshing(true);

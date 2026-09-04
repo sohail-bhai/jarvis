@@ -5,7 +5,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { colors, typography, spacing, borderRadius, shadows } from '../src/theme';
 import { approvalsService } from '../src/services/approvals';
-import { activityService } from '../src/services/activity';
 import { useAppState } from '../src/store/AppContext';
 import { ApprovalRequest } from '../src/services/types';
 
@@ -20,33 +19,54 @@ export default function ApprovalsScreen() {
   }, []);
 
   const loadApprovals = async () => {
-    const data = await approvalsService.getAllApprovals();
-    setApprovals(data);
-    const count = await approvalsService.getApprovalCount();
-    dispatch({ type: 'SET_APPROVAL_COUNT', payload: count });
+    try {
+      const data = await approvalsService.getAllApprovals();
+      setApprovals(data);
+      dispatch({
+        type: 'SET_APPROVAL_COUNT',
+        payload: data.filter(item => item.status === 'pending').length,
+      });
+    } catch (error) {
+      Alert.alert(
+        'Could not reach JARVIS',
+        error instanceof Error ? error.message : 'Your computer did not answer.',
+      );
+    }
   };
 
   const pendingApprovals = approvals.filter(a => a.status === 'pending');
 
   const handleApprove = async (id: string, title: string) => {
     setLoading(true);
-    await approvalsService.approve(id);
-    await activityService.addActivity({
-      type: 'approval',
-      title: `You approved: ${title}`,
-      timestamp: new Date().toISOString(),
-      timeLabel: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    });
-    await loadApprovals();
-    setLoading(false);
-    Alert.alert('Action Approved', `Changes for "${title}" have been applied.`);
+    try {
+      await approvalsService.approve(id);
+      await loadApprovals();
+      // Approving releases the access and lets the work continue. It has not
+      // happened yet, so this must not say that it has.
+      Alert.alert('Approved', `JARVIS is carrying on with "${title}".`);
+    } catch (error) {
+      Alert.alert(
+        'Could not approve',
+        error instanceof Error ? error.message : 'Your computer did not answer.',
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDeny = async (id: string) => {
     setLoading(true);
-    await approvalsService.deny(id);
-    await loadApprovals();
-    setLoading(false);
+    try {
+      await approvalsService.deny(id);
+      await loadApprovals();
+    } catch (error) {
+      Alert.alert(
+        'Could not decline',
+        error instanceof Error ? error.message : 'Your computer did not answer.',
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

@@ -872,12 +872,88 @@ def create_app(control=None, executor=None, security=None, notifier=None):
     return app
 
 
+def local_addresses():
+    """The addresses a phone or another computer could use to reach this one.
+
+    A machine has several and only some of them are useful, so this returns
+    what someone could actually type rather than the whole interface list.
+    """
+    import socket
+
+    found = []
+    try:
+        # Nothing is sent; this only asks the routing table which address this
+        # machine would use to reach the outside, which is the one on the LAN.
+        probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        probe.connect(("8.8.8.8", 80))
+        found.append(probe.getsockname()[0])
+        probe.close()
+    except OSError:
+        pass
+
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            address = info[4][0]
+            if not address.startswith("127.") and address not in found:
+                found.append(address)
+    except OSError:
+        pass
+
+    return found
+
+
+def request_pairing_code(port):
+    """Ask the running API for a code, and print it for someone to type in.
+
+    The codes live in the running process, so this has to go through it. The
+    request comes from this machine, which is what the server trusts.
+    """
+    import requests
+
+    try:
+        response = requests.post(f"http://127.0.0.1:{port}/api/pair/code", timeout=5)
+        response.raise_for_status()
+    except requests.RequestException as error:
+        print(f"Could not reach JARVIS on port {port}. Is it running?  ({error})")
+        return 1
+
+    body = response.json()
+    minutes = body.get("expires_in", 600) // 60
+    print()
+    print("  Enter this code on your phone:")
+    print(f"\n      {body['code']}\n")
+    print(f"  It stops working in {minutes} minutes.")
+    print()
+    return 0
+
+
+def _print_welcome(host, port):
+    """Tell the user what to type on the phone, since only they can see this."""
+    print()
+    print("  JARVIS is listening.")
+    print()
+    if host in ("127.0.0.1", "localhost"):
+        print(f"  This computer only:      http://127.0.0.1:{port}")
+        print("  To let a phone connect, start it with --host 0.0.0.0")
+    else:
+        for address in local_addresses() or [host]:
+            print(f"  Enter on your phone:     {address}:{port}")
+    print(f"  To connect a phone:      python -m assistant.api --pair --port {port}")
+    print()
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Run the JARVIS control plane API.")
     parser.add_argument("--host", default="127.0.0.1",
                         help="Bind address. Use 0.0.0.0 to allow phone access.")
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--pair", action="store_true",
+                        help="Show a code for a new phone, then exit. "
+                             "JARVIS must already be running.")
     args = parser.parse_args(argv)
+
+    if args.pair:
+        return request_pairing_code(args.port)
 
     import uvicorn
 
@@ -888,6 +964,8 @@ def main(argv=None):
         logger.warning(
             "Listening on %s. Anything on your network can control this computer. "
             "Only do this on a network you trust.", args.host)
+
+    _print_welcome(args.host, args.port)
 
     uvicorn.run(create_app(), host=args.host, port=args.port, log_level="info")
     return 0

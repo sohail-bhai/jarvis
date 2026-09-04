@@ -1,150 +1,99 @@
+/**
+ * The computer's files, from the phone.
+ *
+ * Only the folders listed in `file_shares` on the computer are reachable, and
+ * every path is checked on the server, so nothing here can wander outside
+ * them. Browsing uses the relative path the server returns rather than an
+ * absolute one, which is what keeps a request inside its share.
+ */
+import { request } from '../api/client';
+import { relativeLabel, toIso } from '../api/mappers';
 import { FileItem, FileSource, FileType } from './types';
 
-const mockFiles: FileItem[] = [
-  {
-    id: 'f1',
-    name: 'Hackwave_Final.pptx',
-    type: 'presentation',
-    source: 'computer',
-    sourcePath: 'Projects/Hackwave',
-    size: '4.2 MB',
-    modifiedAt: '2026-09-03T14:00:00Z',
-    modifiedRelative: 'Modified yesterday',
-  },
-  {
-    id: 'f2',
-    name: 'Architecture.pdf',
-    type: 'pdf',
-    source: 'drive',
-    sourcePath: 'Google Drive',
-    size: '2.1 MB',
-    modifiedAt: '2026-09-02T10:00:00Z',
-    modifiedRelative: 'Modified 2 days ago',
-  },
-  {
-    id: 'f3',
-    name: 'Dataset.zip',
-    type: 'archive',
-    source: 'computer',
-    sourcePath: 'ML Project',
-    size: '156 MB',
-    modifiedAt: '2026-09-01T08:00:00Z',
-    modifiedRelative: 'Modified 3 days ago',
-  },
-  {
-    id: 'f4',
-    name: 'Project Notes.docx',
-    type: 'document',
-    source: 'drive',
-    sourcePath: 'Google Drive',
-    size: '340 KB',
-    modifiedAt: '2026-08-30T16:00:00Z',
-    modifiedRelative: 'Modified 5 days ago',
-  },
-  {
-    id: 'f5',
-    name: 'Meeting Recording.mp4',
-    type: 'other',
-    source: 'phone',
-    sourcePath: 'Phone',
-    size: '1.2 GB',
-    modifiedAt: '2026-09-04T09:00:00Z',
-    modifiedRelative: 'Modified today',
-  },
-  {
-    id: 'f6',
-    name: 'Budget_Q3.xlsx',
-    type: 'spreadsheet',
-    source: 'drive',
-    sourcePath: 'Google Drive / Finance',
-    size: '890 KB',
-    modifiedAt: '2026-09-03T11:00:00Z',
-    modifiedRelative: 'Modified yesterday',
-  },
-  {
-    id: 'f7',
-    name: 'AI_Research_Summary.docx',
-    type: 'document',
-    source: 'computer',
-    sourcePath: 'Documents / Research',
-    size: '520 KB',
-    modifiedAt: '2026-09-04T13:00:00Z',
-    modifiedRelative: 'Modified 2 hours ago',
-  },
-  {
-    id: 'f8',
-    name: 'app_screenshot.png',
-    type: 'image',
-    source: 'phone',
-    sourcePath: 'Phone / Screenshots',
-    size: '2.4 MB',
-    modifiedAt: '2026-09-04T12:30:00Z',
-    modifiedRelative: 'Modified today',
-  },
-];
+interface RawFile {
+  name: string;
+  path: string;
+  relative: string;
+  is_dir: boolean;
+  size: number;
+  modified: number;
+  kind: string;
+}
 
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+interface RawShare {
+  name: string;
+  path: string;
+}
+
+/** Map a MIME type onto the icon set the file list already draws. */
+function toFileType(raw: RawFile): FileType {
+  if (raw.is_dir) return 'folder';
+
+  const kind = raw.kind ?? '';
+  const extension = raw.name.split('.').pop()?.toLowerCase() ?? '';
+
+  if (kind.startsWith('image/')) return 'image';
+  if (kind.includes('pdf')) return 'pdf';
+  if (['ppt', 'pptx', 'odp', 'key'].includes(extension)) return 'presentation';
+  if (['xls', 'xlsx', 'ods', 'csv'].includes(extension)) return 'spreadsheet';
+  if (['doc', 'docx', 'odt', 'txt', 'md', 'rtf'].includes(extension)) return 'document';
+  if (['zip', 'tar', 'gz', 'rar', '7z'].includes(extension)) return 'archive';
+  if (['py', 'ts', 'tsx', 'js', 'jsx', 'json', 'sh', 'go', 'rs', 'java'].includes(extension)) return 'code';
+  return 'other';
+}
+
+function readableSize(bytes: number): string | undefined {
+  if (!bytes) return undefined;
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value < 10 && unit > 0 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
+}
+
+function toFileItem(raw: RawFile): FileItem {
+  return {
+    // The path is unique and stable, which an index would not be.
+    id: raw.relative || raw.path,
+    name: raw.name,
+    type: toFileType(raw),
+    source: 'computer' as FileSource,
+    sourcePath: raw.relative || raw.path,
+    size: readableSize(raw.size),
+    modifiedAt: toIso(raw.modified),
+    modifiedRelative: relativeLabel(raw.modified),
+  };
+}
 
 export const filesService = {
-  async getFiles(source?: FileSource): Promise<FileItem[]> {
-    await delay(400);
-    if (source) {
-      return mockFiles.filter(f => f.source === source);
-    }
-    return [...mockFiles];
+  /** The folders the computer is willing to show at all. */
+  async getShares(): Promise<RawShare[]> {
+    return request<RawShare[]>('/api/files/shares');
   },
 
-  async searchFiles(query: string, source?: FileSource): Promise<FileItem[]> {
-    await delay(600);
-    const q = query.toLowerCase();
-    let results = mockFiles.filter(
-      f => f.name.toLowerCase().includes(q) || (f.sourcePath && f.sourcePath.toLowerCase().includes(q))
+  /** List one folder. An empty path lists the shares themselves. */
+  async getFiles(path = ''): Promise<FileItem[]> {
+    const raw = await request<RawFile[]>(`/api/files?path=${encodeURIComponent(path)}`);
+    return raw.map(toFileItem);
+  },
+
+  /** "Where did I put it" - search by name across every shared folder. */
+  async searchFiles(query: string): Promise<FileItem[]> {
+    if (!query.trim()) return [];
+    const raw = await request<RawFile[]>(
+      `/api/files/search?query=${encodeURIComponent(query.trim())}`,
     );
-    if (source) {
-      results = results.filter(f => f.source === source);
-    }
-    return results;
-  },
-
-  async getFile(id: string): Promise<FileItem | undefined> {
-    await delay(200);
-    return mockFiles.find(f => f.id === id);
+    return raw.map(toFileItem);
   },
 
   async getRecentFiles(limit = 5): Promise<FileItem[]> {
-    await delay(300);
-    return [...mockFiles]
-      .sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime())
+    const files = await this.getFiles();
+    return files
+      .filter(file => file.type !== 'folder')
+      .sort((a, b) => (a.modifiedAt < b.modifiedAt ? 1 : -1))
       .slice(0, limit);
-  },
-
-  getFileTypeColor(type: FileType): string {
-    const map: Record<FileType, string> = {
-      presentation: '#E85D4A',
-      pdf: '#E85D4A',
-      document: '#3B7DDD',
-      spreadsheet: '#4CAF6E',
-      archive: '#6B7B94',
-      image: '#F5A623',
-      code: '#8B5CF6',
-      folder: '#6B7B94',
-      other: '#6B7B94',
-    };
-    return map[type];
-  },
-
-  getFileTypeIcon(type: FileType): string {
-    const map: Record<FileType, string> = {
-      presentation: 'easel-outline',
-      pdf: 'document-text-outline',
-      document: 'document-outline',
-      spreadsheet: 'grid-outline',
-      archive: 'archive-outline',
-      image: 'image-outline',
-      code: 'code-slash-outline',
-      folder: 'folder-outline',
-      other: 'document-outline',
-    };
-    return map[type];
   },
 };

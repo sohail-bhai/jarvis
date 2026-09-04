@@ -11,6 +11,9 @@ import { useAppState } from '../../src/store/AppContext';
 import { jarvisService } from '../../src/services/jarvis';
 import { tasksService } from '../../src/services/tasks';
 import { approvalsService } from '../../src/services/approvals';
+import { googleService } from '../../src/services/google';
+import { openEventStream } from '../../src/api/live';
+import { getHost } from '../../src/api/client';
 import { Task, ApprovalRequest } from '../../src/services/types';
 
 export default function HomeScreen() {
@@ -19,49 +22,69 @@ export default function HomeScreen() {
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [approvalVisible, setApprovalVisible] = useState(false);
   const [currentApproval, setCurrentApproval] = useState<ApprovalRequest | null>(null);
+  const [online, setOnline] = useState(false);
+  const [problem, setProblem] = useState('');
 
   const greeting = jarvisService.getGreeting();
   const suggestions = jarvisService.getSuggestions();
 
+  const loadData = useCallback(async () => {
+    try {
+      const tasks = await tasksService.getTasks();
+      dispatch({ type: 'SET_TASKS', payload: tasks });
+
+      const active = tasks.find(task =>
+        ['running', 'pending', 'waiting_approval'].includes(task.status));
+      // The list omits steps, so the card asks for the one task it shows.
+      setActiveTask(active ? ((await tasksService.getTask(active.id)) ?? active) : null);
+
+      const approvals = await approvalsService.getPendingApprovals();
+      dispatch({ type: 'SET_APPROVAL_COUNT', payload: approvals.length });
+
+      setOnline(true);
+      setProblem('');
+    } catch (error) {
+      setOnline(false);
+      setProblem(error instanceof Error ? error.message : 'Could not reach your computer.');
+    }
+  }, [dispatch]);
+
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 1200);
-    return () => clearInterval(interval);
-  }, []);
 
-  const loadData = async () => {
-    const activeTasks = await tasksService.getActiveTasks();
-    dispatch({ type: 'SET_TASKS', payload: await tasksService.getTasks() });
-    if (activeTasks.length > 0) {
-      const updated = await tasksService.getTask(activeTasks[0].id);
-      setActiveTask(updated || activeTasks[0]);
-    } else {
-      setActiveTask(null);
-    }
+    // The computer pushes what it is doing, so the phone reloads when
+    // something actually changed rather than asking twice a second.
+    const close = openEventStream({
+      types: [
+        'task_created', 'task_completed', 'task_failed', 'task_cancelled',
+        'step_started', 'step_finished', 'approval_requested', 'approval_resolved',
+      ],
+      onEvent: () => loadData(),
+      onStatus: setOnline,
+    });
 
-    const count = await approvalsService.getApprovalCount();
-    dispatch({ type: 'SET_APPROVAL_COUNT', payload: count });
-  };
+    // A slow safety net for anything the socket missed while the phone slept.
+    const interval = setInterval(loadData, 30000);
+
+    return () => {
+      close();
+      clearInterval(interval);
+    };
+  }, [loadData]);
 
   const handleCommand = useCallback(async (text: string) => {
-    const task = await jarvisService.processCommand(text);
-    setActiveTask(task);
-    dispatch({ type: 'ADD_TASK', payload: task });
-
-    if (task.requiresApproval) {
-      setTimeout(async () => {
-        const approvals = await approvalsService.getPendingApprovals();
-        const latest = approvals.find(a => a.taskId === task.id);
-        if (latest) {
-          setCurrentApproval(latest);
-          setApprovalVisible(true);
-        }
-      }, 2500);
-    }
-
-    setTimeout(() => {
+    try {
+      // The computer plans the steps and starts working them straight away.
+      const task = await jarvisService.processCommand(text);
+      setActiveTask(task);
+      dispatch({ type: 'ADD_TASK', payload: task });
+      setProblem('');
       router.push(`/task/${task.id}`);
-    }, 500);
+    } catch (error) {
+      setProblem(
+        error instanceof Error ? error.message : 'JARVIS could not start that.',
+      );
+    }
   }, [dispatch, router]);
 
   const handleQuickAction = useCallback((label: string) => {
@@ -82,28 +105,52 @@ export default function HomeScreen() {
   }, [handleCommand]);
 
   const handleApprove = async () => {
-    if (currentApproval) {
-      await approvalsService.approve(currentApproval.id);
-      setApprovalVisible(false);
-      setCurrentApproval(null);
-      const count = await approvalsService.getApprovalCount();
-      dispatch({ type: 'SET_APPROVAL_COUNT', payload: count });
-    }
+    if (!currentApproval) return;
+    await approvalsService.approve(currentApproval.id);
+    setApprovalVisible(false);
+    setCurrentApproval(null);
+    loadData();
   };
 
   const handleDeny = async () => {
-    if (currentApproval) {
-      await approvalsService.deny(currentApproval.id);
-      setApprovalVisible(false);
-      setCurrentApproval(null);
-    }
+    if (!currentApproval) return;
+    await approvalsService.deny(currentApproval.id);
+    setApprovalVisible(false);
+    setCurrentApproval(null);
+    loadData();
   };
 
+  // What each of these says has to be true. A card that claims a service is
+  // connected when it is not is worse than a card that admits it is not.
   const envCards = [
-    { title: 'My Computer', status: '● Online', color: colors.primary, bg: colors.primaryLight, icon: 'laptop-outline' },
-    { title: 'My Phone', status: '● Connected', color: colors.success, bg: colors.successLight, icon: 'phone-portrait-outline' },
-    { title: 'Google Drive', status: '● Connected', color: colors.warning, bg: colors.warningLight, icon: 'folder-outline' },
-    { title: 'Internet', status: '● Ready', color: '#8B5CF6', bg: '#F3EEFA', icon: 'globe-outline' },
+    {
+      title: 'My Computer',
+      status: online ? '● Online' : '○ Not reachable',
+      color: online ? colors.primary : colors.textTertiary,
+      bg: online ? colors.primaryLight : colors.surface,
+      icon: 'laptop-outline',
+    },
+    {
+      title: 'My Phone',
+      status: '● Connected',
+      color: colors.success,
+      bg: colors.successLight,
+      icon: 'phone-portrait-outline',
+    },
+    {
+      title: 'Google Drive',
+      status: googleService.isConnected() ? '● Connected' : '○ Not connected',
+      color: googleService.isConnected() ? colors.warning : colors.textTertiary,
+      bg: googleService.isConnected() ? colors.warningLight : colors.surface,
+      icon: 'folder-outline',
+    },
+    {
+      title: 'Internet',
+      status: online ? '● Ready' : '○ Waiting',
+      color: online ? '#8B5CF6' : colors.textTertiary,
+      bg: online ? '#F3EEFA' : colors.surface,
+      icon: 'globe-outline',
+    },
   ];
 
   return (
@@ -136,6 +183,15 @@ export default function HomeScreen() {
         {/* Command Input Bar */}
         <View style={styles.inputSection}>
           <JarvisInput onSubmit={handleCommand} />
+
+          {problem ? (
+            <Pressable style={styles.problemBar} onPress={() => router.push('/connect')}>
+              <Ionicons name="cloud-offline-outline" size={16} color={colors.error} />
+              <Text style={styles.problemText}>
+                {problem} Tap to check the connection to {getHost() || 'your computer'}.
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
 
         {/* Suggestion Chips */}
@@ -354,6 +410,21 @@ const styles = StyleSheet.create({
   envStatus: {
     ...typography.caption,
     fontWeight: '600',
+  },
+  problemBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.errorLight,
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.md,
+    marginTop: spacing.md,
+  },
+  problemText: {
+    ...typography.caption,
+    color: colors.error,
+    flex: 1,
   },
   activeTaskSection: {
     paddingHorizontal: spacing.lg,

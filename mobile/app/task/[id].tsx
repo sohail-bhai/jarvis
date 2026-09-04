@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, typography, spacing, borderRadius, shadows } from '../../src/theme';
 import { ProgressBar } from '../../src/components/ProgressBar';
 import { tasksService } from '../../src/services/tasks';
+import { openEventStream } from '../../src/api/live';
 import { Task, TaskStep } from '../../src/services/types';
 
 function getStepIcon(status: TaskStep['status']): { name: string; color: string } {
@@ -24,36 +25,58 @@ export default function TaskDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [task, setTask] = useState<Task | null>(null);
+  const [problem, setProblem] = useState('');
+
+  const loadTask = useCallback(async () => {
+    if (!id) return;
+    try {
+      const data = await tasksService.getTask(id);
+      if (data) setTask(data);
+      setProblem('');
+    } catch (error) {
+      setProblem(error instanceof Error ? error.message : 'Could not reach your computer.');
+    }
+  }, [id]);
 
   useEffect(() => {
     loadTask();
-    const interval = setInterval(loadTask, 1500);
-    return () => clearInterval(interval);
-  }, [id]);
 
-  const loadTask = async () => {
-    if (id) {
-      const data = await tasksService.getTask(id);
-      if (data) {
-        // If task is already cancelled locally, don't revert unless status in service is updated
-        setTask(prev => (prev && prev.status === 'cancelled' && data.status !== 'cancelled' ? prev : data));
-      }
-    }
-  };
+    // Follow this one task as the computer works it, rather than asking the
+    // computer for it twice a second.
+    const close = openEventStream({
+      taskId: id,
+      onEvent: () => loadTask(),
+    });
+
+    // A slow reload covers whatever the socket missed while the phone slept.
+    const interval = setInterval(loadTask, 20000);
+
+    return () => {
+      close();
+      clearInterval(interval);
+    };
+  }, [id, loadTask]);
 
   const handleCancel = async () => {
-    if (!id || !task) return;
-    const cancelledTask: Task = {
-      ...task,
-      status: 'cancelled',
-      error: 'Task was cancelled by user.',
-      steps: task.steps.map(s => (s.status === 'running' || s.status === 'pending' ? { ...s, status: 'failed' } : s)),
-    };
-    setTask(cancelledTask);
-    await tasksService.cancelTask(id);
+    if (!id) return;
+    try {
+      await tasksService.cancelTask(id);
+    } catch (error) {
+      setProblem(error instanceof Error ? error.message : 'Could not stop the task.');
+    }
+    // Show what the computer actually did, not what was asked for.
+    loadTask();
   };
 
-  if (!task) return null;
+  if (!task) {
+    return (
+      <View style={styles.pending}>
+        <Text style={styles.pendingText}>
+          {problem || 'Loading this task...'}
+        </Text>
+      </View>
+    );
+  }
 
   const isActive = task.status === 'running' || task.status === 'pending' || task.status === 'waiting_approval';
 
@@ -148,6 +171,18 @@ export default function TaskDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  pending: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+    backgroundColor: colors.background,
+  },
+  pendingText: {
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
   container: {
     flex: 1,
     backgroundColor: colors.surface,

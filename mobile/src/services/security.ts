@@ -1,104 +1,111 @@
-import { SecurityEvent, Permission } from './types';
+/**
+ * Access, and the ability to take it all back.
+ *
+ * Temporary grants and the emergency stop live on the computer, so stopping
+ * everything from the phone stops it everywhere - the desktop app sees the
+ * same latch.
+ */
+import { request } from '../api/client';
+import { RawEvent, RawPermission, RawStatus, toPermission, toIso } from '../api/mappers';
+import { Permission, SecurityEvent } from './types';
 
-const mockPermissions: Permission[] = [
-  {
-    id: 'perm-1',
-    service: 'Google Drive',
-    scope: 'Read & Write files',
-    grantedAt: '2026-09-01T10:00:00Z',
-    isTemporary: false,
-  },
-  {
-    id: 'perm-2',
-    service: 'Gmail',
-    scope: 'Read emails, draft replies',
-    grantedAt: '2026-09-01T10:00:00Z',
-    isTemporary: false,
-  },
-  {
-    id: 'perm-3',
-    service: 'Google Calendar',
-    scope: 'View and create events',
-    grantedAt: '2026-09-01T10:00:00Z',
-    isTemporary: false,
-  },
-  {
-    id: 'perm-4',
-    service: 'Laptop File Access',
-    scope: 'Read files in Projects folder',
-    grantedAt: '2026-09-04T15:10:00Z',
-    expiresAt: '2026-09-04T16:10:00Z',
-    taskId: 'task-1',
-    isTemporary: true,
-  },
-];
+/** Timeline events that belong on a security screen rather than a feed. */
+const SECURITY_EVENTS = [
+  'permission_granted',
+  'permission_revoked',
+  'capability_denied',
+  'approval_resolved',
+  'emergency_stop',
+  'agent_quarantined',
+].join(',');
 
-const mockEvents: SecurityEvent[] = [
-  {
-    id: 'sec-1',
-    type: 'sensitive_action',
-    description: 'Presentation files accessed on Laptop',
-    timestamp: '2026-09-04T15:18:00Z',
-    severity: 'low',
-  },
-  {
-    id: 'sec-2',
-    type: 'access_granted',
-    description: 'Temporary access to Laptop files',
-    timestamp: '2026-09-04T15:10:00Z',
-    severity: 'medium',
-  },
-  {
-    id: 'sec-3',
-    type: 'permission_expired',
-    description: 'Browser Agent web access expired',
-    timestamp: '2026-09-04T14:00:00Z',
-    severity: 'low',
-  },
-];
+const EVENT_KIND: Record<string, SecurityEvent['type']> = {
+  permission_granted: 'access_granted',
+  permission_revoked: 'access_revoked',
+  capability_denied: 'sensitive_action',
+  approval_resolved: 'sensitive_action',
+  emergency_stop: 'sensitive_action',
+  agent_quarantined: 'sensitive_action',
+};
 
-let emergencyStopped = false;
-
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const EVENT_SEVERITY: Record<string, SecurityEvent['severity']> = {
+  permission_granted: 'low',
+  approval_resolved: 'low',
+  permission_revoked: 'medium',
+  capability_denied: 'high',
+  emergency_stop: 'high',
+  agent_quarantined: 'high',
+};
 
 export const securityService = {
   async getPermissions(): Promise<Permission[]> {
-    await delay(300);
-    return [...mockPermissions];
+    const raw = await request<RawPermission[]>('/api/permissions');
+    return raw.map(toPermission);
   },
 
   async getSecurityEvents(): Promise<SecurityEvent[]> {
-    await delay(300);
-    return [...mockEvents];
+    const raw = await request<RawEvent[]>(`/api/activity?limit=40&types=${SECURITY_EVENTS}`);
+    return raw.map(event => ({
+      id: event.id,
+      type: EVENT_KIND[event.type] ?? 'sensitive_action',
+      description: event.message,
+      timestamp: toIso(event.timestamp),
+      severity: EVENT_SEVERITY[event.type] ?? 'low',
+    }));
   },
 
   async revokePermission(id: string): Promise<void> {
-    await delay(500);
-    const idx = mockPermissions.findIndex(p => p.id === id);
-    if (idx >= 0) {
-      mockPermissions.splice(idx, 1);
-    }
+    await request(`/api/permissions/${id}`, { method: 'DELETE' });
   },
 
+  /**
+   * Stop everything: active work is cancelled, every temporary grant is
+   * revoked, pending approvals are declined. Nothing is deleted, and the
+   * computer refuses new work until it is resumed.
+   */
   async emergencyStop(): Promise<void> {
-    await delay(200);
-    emergencyStopped = true;
+    await request('/api/emergency-stop', { method: 'POST' });
   },
 
   async resumeFromEmergency(): Promise<void> {
-    await delay(200);
-    emergencyStopped = false;
+    await request('/api/resume', { method: 'POST' });
   },
 
-  isEmergencyStopped(): boolean {
-    return emergencyStopped;
+  async getStatus(): Promise<RawStatus> {
+    return request<RawStatus>('/api/status');
   },
 
-  async getSecurityStatus(): Promise<{ status: 'protected' | 'warning' | 'critical'; message: string }> {
-    await delay(200);
-    if (emergencyStopped) {
-      return { status: 'critical', message: 'All operations stopped' };
-    }
-    return { status: 'protected', message: 'All systems secure' };
+  async getSecurityStatus(): Promise<{
+    status: 'protected' | 'warning' | 'critical';
+    message: string;
+    devices: number;
+    pendingApprovals: number;
+    temporaryAccess: number;
+    stopped: boolean;
+  }> {
+    const status = await this.getStatus();
+
+    // An emergency stop is not a failure, but it is the most important thing
+    // on the screen while it is latched.
+    const level = status.stopped
+      ? 'critical'
+      : status.agents_quarantined > 0
+        ? 'warning'
+        : 'protected';
+
+    const message = status.stopped
+      ? 'Everything is stopped. JARVIS will not start new work.'
+      : status.agents_quarantined > 0
+        ? `${status.agents_quarantined} helper is stopped and being kept aside.`
+        : "You're protected";
+
+    return {
+      status: level,
+      message,
+      devices: status.devices,
+      pendingApprovals: status.pending_approvals,
+      temporaryAccess: status.temporary_access,
+      stopped: status.stopped,
+    };
   },
 };

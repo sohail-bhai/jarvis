@@ -1,44 +1,51 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, typography, spacing, borderRadius } from '../../src/theme';
-import { TabSelector } from '../../src/components/TabSelector';
 import { FileItemComponent } from '../../src/components/FileItem';
 import { FileActionsModal } from '../../src/components/FileActionsModal';
 import { filesService } from '../../src/services/files';
-import { FileItem, FileSource } from '../../src/services/types';
-
-const FILE_TABS = ['All', 'Computer', 'Phone', 'Drive'];
+import { FileItem } from '../../src/services/types';
 
 export default function FilesScreen() {
-  const [activeTab, setActiveTab] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [files, setFiles] = useState<FileItem[]>([]);
+  // Empty is the top level: the folders the computer agreed to share.
+  const [folder, setFolder] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [problem, setProblem] = useState('');
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
 
+  const loadFiles = useCallback(async () => {
+    try {
+      setFiles(await filesService.getFiles(folder));
+      setProblem('');
+    } catch (error) {
+      setFiles([]);
+      setProblem(error instanceof Error ? error.message : 'Could not read your files.');
+    }
+  }, [folder]);
+
   useEffect(() => {
     loadFiles();
-  }, [activeTab]);
-
-  const loadFiles = async () => {
-    const source = activeTab === 'All' ? undefined : activeTab.toLowerCase() as FileSource;
-    const data = await filesService.getFiles(source);
-    setFiles(data);
-  };
+  }, [loadFiles]);
 
   const handleSearch = useCallback(async (query: string) => {
     setSearchQuery(query);
-    if (query.trim()) {
-      const source = activeTab === 'All' ? undefined : activeTab.toLowerCase() as FileSource;
-      const results = await filesService.searchFiles(query, source);
-      setFiles(results);
-    } else {
+    if (!query.trim()) {
       loadFiles();
+      return;
     }
-  }, [activeTab]);
+    try {
+      setFiles(await filesService.searchFiles(query));
+      setProblem('');
+    } catch (error) {
+      setFiles([]);
+      setProblem(error instanceof Error ? error.message : 'Could not search your files.');
+    }
+  }, [loadFiles]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -47,8 +54,19 @@ export default function FilesScreen() {
   };
 
   const handleFilePress = (file: FileItem) => {
+    // A folder opens; anything else offers what you can do with it.
+    if (file.type === 'folder') {
+      setSearchQuery('');
+      setFolder(file.sourcePath ?? '');
+      return;
+    }
     setSelectedFile(file);
     setModalVisible(true);
+  };
+
+  const goUp = () => {
+    setSearchQuery('');
+    setFolder(current => current.split('/').slice(0, -1).join('/'));
   };
 
   return (
@@ -72,12 +90,17 @@ export default function FilesScreen() {
         <Ionicons name="options-outline" size={18} color={colors.textSecondary} />
       </View>
 
-      {/* Tab Selector */}
-      <TabSelector
-        tabs={FILE_TABS}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-      />
+      {/* Where you are, and the way back out of it */}
+      {folder && !searchQuery ? (
+        <TouchableOpacity style={styles.crumb} onPress={goUp}>
+          <Ionicons name="chevron-back" size={16} color={colors.primary} />
+          <Text style={styles.crumbText} numberOfLines={1}>
+            {folder}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
+
+      {problem ? <Text style={styles.problem}>{problem}</Text> : null}
 
       {/* File List */}
       <FlatList
@@ -96,8 +119,12 @@ export default function FilesScreen() {
         ListEmptyComponent={
           <View style={styles.empty}>
             <Ionicons name="folder-open-outline" size={48} color={colors.textTertiary} />
-            <Text style={styles.emptyText}>No files found</Text>
-            <Text style={styles.emptySubtext}>Try searching for something else</Text>
+            <Text style={styles.emptyText}>Nothing here</Text>
+            <Text style={styles.emptySubtext}>
+              {searchQuery
+                ? 'No file matches that name.'
+                : 'Your computer shares folders with JARVIS. Add some in its settings.'}
+            </Text>
           </View>
         }
       />
@@ -143,6 +170,24 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textPrimary,
     padding: 0,
+  },
+  crumb: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
+  crumbText: {
+    ...typography.caption,
+    color: colors.primary,
+    flex: 1,
+  },
+  problem: {
+    ...typography.caption,
+    color: colors.error,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.sm,
   },
   list: {
     flexGrow: 1,

@@ -1,79 +1,37 @@
+/**
+ * Decisions the computer is holding until you answer.
+ *
+ * This is the point of carrying JARVIS in a pocket: work pauses on the
+ * computer, the question arrives on the phone, and answering it here releases
+ * exactly the access that was being asked for.
+ */
+import { request } from '../api/client';
+import { RawApproval, toApproval } from '../api/mappers';
 import { ApprovalRequest } from './types';
-
-const mockApprovals: ApprovalRequest[] = [
-  {
-    id: 'apr-1',
-    taskId: 'task-1',
-    title: 'Update your presentation',
-    description: "I'm ready to update your Hackwave presentation with the latest research findings.",
-    action: 'modify_document',
-    metadata: {
-      'Document': 'Hackwave_Final.pptx',
-      'Changes': '12 slides updated',
-      'Sources added': '3',
-    },
-    createdAt: '2026-09-04T15:25:00Z',
-    status: 'pending',
-  },
-  {
-    id: 'apr-2',
-    taskId: 'task-2',
-    title: 'Merge project changes',
-    description: "Ready to merge your project changes to the main branch.",
-    action: 'github_change',
-    metadata: {
-      'Repository': 'Hackwave',
-      'Tests': '142 passed',
-      'Files changed': '8',
-    },
-    createdAt: '2026-09-04T15:20:00Z',
-    status: 'pending',
-  },
-];
-
-let approvals = [...mockApprovals];
-let nextId = 3;
-
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const approvalsService = {
   async getPendingApprovals(): Promise<ApprovalRequest[]> {
-    await delay(300);
-    return approvals.filter(a => a.status === 'pending');
+    const raw = await request<RawApproval[]>('/api/approvals');
+    return raw.map(toApproval);
   },
 
   async getAllApprovals(): Promise<ApprovalRequest[]> {
-    await delay(300);
-    return [...approvals];
+    const raw = await request<RawApproval[]>('/api/approvals?pending_only=false');
+    return raw.map(toApproval);
   },
 
   async getApprovalCount(): Promise<number> {
-    return approvals.filter(a => a.status === 'pending').length;
+    const pending = await this.getPendingApprovals();
+    return pending.length;
   },
 
+  /** Approve: the held work resumes and the access is released. */
   async approve(id: string): Promise<void> {
-    await delay(800);
-    const approval = approvals.find(a => a.id === id);
-    if (approval) {
-      approval.status = 'approved';
-    }
+    await request(`/api/approvals/${id}`, { method: 'POST', body: { approved: true } });
   },
 
+  /** Decline: the task stops. Nothing is granted. */
   async deny(id: string): Promise<void> {
-    await delay(300);
-    const approval = approvals.find(a => a.id === id);
-    if (approval) {
-      approval.status = 'denied';
-    }
-  },
-
-  async createApproval(approval: Omit<ApprovalRequest, 'id' | 'status'>): Promise<ApprovalRequest> {
-    const newApproval: ApprovalRequest = {
-      ...approval,
-      id: `apr-${nextId++}`,
-      status: 'pending',
-    };
-    approvals.unshift(newApproval);
-    return newApproval;
+    await request(`/api/approvals/${id}`, { method: 'POST', body: { approved: false } });
   },
 };

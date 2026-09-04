@@ -10,28 +10,38 @@ export default function GoogleWorkspaceScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
+  // Google is not wired to the control plane yet, so every answer below is an
+  // example. Each one says so, because a made-up email that looks real is
+  // worse than no email at all.
+  const demo = googleService.isDemo;
+
   const handleQuickQuery = async (query: string) => {
     setLoading(true);
+    const prefix = demo ? 'Example only - Google is not connected.\n\n' : '';
+
     if (query.includes('emails')) {
       const emails = await googleService.getImportantEmails();
-      Alert.alert('Gmail Assistant', `Found ${emails.length} important emails:\n\n` + emails.map(e => `• ${e.from}: ${e.subject}`).join('\n'));
+      Alert.alert('Gmail', prefix + emails.map(e => `• ${e.from}: ${e.subject}`).join('\n'));
     } else if (query.includes('meetings') || query.includes('Calendar')) {
       const events = await googleService.getTodayEvents();
-      Alert.alert('Calendar Assistant', `You have ${events.length} meeting(s) today:\n\n` + events.map(e => `• ${e.title} (${new Date(e.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`).join('\n'));
+      Alert.alert('Calendar', prefix + events.map(e =>
+        `• ${e.title} (${new Date(e.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`).join('\n'));
     } else {
       const files = await googleService.searchDrive('Hackwave');
-      Alert.alert('Drive Intelligence', `Found ${files.length} matching document(s):\n\n` + files.map(f => `• ${f.name} (${f.size})`).join('\n'));
+      Alert.alert('Drive', prefix + files.map(f => `• ${f.name} (${f.size})`).join('\n'));
     }
     setLoading(false);
   };
 
+  // No counts here: JARVIS has not looked at any of these accounts, so it has
+  // nothing to count.
   const services = [
-    { name: 'Google Drive', icon: 'folder-open-outline', color: '#4285F4', desc: '5 documents indexed' },
-    { name: 'Gmail', icon: 'mail-outline', color: '#EA4335', desc: '4 unread emails' },
-    { name: 'Google Calendar', icon: 'calendar-outline', color: '#34A853', desc: '2 meetings today' },
-    { name: 'Google Docs', icon: 'document-text-outline', color: '#4285F4', desc: 'Ready for AI drafting' },
-    { name: 'Google Sheets', icon: 'grid-outline', color: '#34A853', desc: 'Spreadsheet automation' },
-    { name: 'Google Slides', icon: 'easel-outline', color: '#FBBC05', desc: 'Presentation generator' },
+    { name: 'Google Drive', icon: 'folder-open-outline', color: '#4285F4', desc: 'Find and read your files' },
+    { name: 'Gmail', icon: 'mail-outline', color: '#EA4335', desc: 'Search mail and draft replies' },
+    { name: 'Google Calendar', icon: 'calendar-outline', color: '#34A853', desc: 'See and arrange your day' },
+    { name: 'Google Docs', icon: 'document-text-outline', color: '#4285F4', desc: 'Write documents for you' },
+    { name: 'Google Sheets', icon: 'grid-outline', color: '#34A853', desc: 'Put results into a spreadsheet' },
+    { name: 'Google Slides', icon: 'easel-outline', color: '#FBBC05', desc: 'Turn work into a presentation' },
   ];
 
   return (
@@ -42,13 +52,25 @@ export default function GoogleWorkspaceScreen() {
           <Ionicons name="chevron-back" size={24} color={colors.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>Google Workspace</Text>
-        <View style={styles.connectedBadge}>
-          <View style={styles.connectedDot} />
-          <Text style={styles.connectedText}>Connected</Text>
+        <View style={[styles.connectedBadge, demo && styles.demoBadge]}>
+          <View style={[styles.connectedDot, demo && styles.demoDot]} />
+          <Text style={[styles.connectedText, demo && styles.demoText]}>
+            {demo ? 'Not connected' : 'Connected'}
+          </Text>
         </View>
       </View>
 
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        {demo ? (
+          <View style={styles.demoNotice}>
+            <Ionicons name="information-circle-outline" size={18} color={colors.warning} />
+            <Text style={styles.demoNoticeText}>
+              Demo mode. Google isn't connected yet, so everything on this page is an
+              example rather than your own mail, files or calendar.
+            </Text>
+          </View>
+        ) : null}
+
         {/* Banner */}
         <View style={styles.bannerCard}>
           <Ionicons name="logo-google" size={28} color="#4285F4" />
@@ -110,6 +132,23 @@ export default function GoogleWorkspaceScreen() {
 }
 
 const styles = StyleSheet.create({
+  demoBadge: { backgroundColor: colors.surface },
+  demoDot: { backgroundColor: colors.textTertiary },
+  demoText: { color: colors.textSecondary },
+  demoNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    backgroundColor: colors.warningLight,
+    borderRadius: borderRadius.md,
+    padding: spacing.base,
+    marginBottom: spacing.base,
+  },
+  demoNoticeText: {
+    ...typography.caption,
+    color: colors.textPrimary,
+    flex: 1,
+  },
   safeArea: {
     flex: 1,
     backgroundColor: colors.background,

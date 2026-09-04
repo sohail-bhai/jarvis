@@ -17,12 +17,21 @@ export default function SecurityScreen() {
   }, []);
 
   const loadData = async () => {
-    const perms = await securityService.getPermissions();
-    setPermissions(perms);
-    const evts = await securityService.getSecurityEvents();
-    setEvents(evts);
-    const status = await securityService.getSecurityStatus();
-    setSecurityStatus(status);
+    try {
+      setPermissions(await securityService.getPermissions());
+      setEvents(await securityService.getSecurityEvents());
+      setSecurityStatus(await securityService.getSecurityStatus());
+    } catch (error) {
+      // Never show a reassuring security screen built on no information.
+      setPermissions([]);
+      setEvents([]);
+      setSecurityStatus({
+        status: 'warning',
+        message: error instanceof Error
+          ? `Cannot check: ${error.message}`
+          : 'Cannot reach your computer to check.',
+      });
+    }
   };
 
   const handleEmergencyStop = () => {

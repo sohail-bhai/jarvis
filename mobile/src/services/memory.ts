@@ -1,3 +1,9 @@
+/**
+ * What JARVIS remembers - example data for now.
+ *
+ * The computer keeps real memory, but it is not exposed over the API yet, so
+ * this is a placeholder marked as one.
+ */
 import { MemoryItem } from './types';
 
 const mockMemory: MemoryItem[] = [
@@ -31,4 +37,7 @@ export const memoryService = {
       lastAccessed: new Date().toISOString(),
     });
   },
+
+  /** True while these answers are examples rather than your data. */
+  isDemo: true,
 };
