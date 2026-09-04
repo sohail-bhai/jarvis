@@ -620,6 +620,16 @@ def send_telegram_update(message_text):
     token = get_setting("telegram_bot_token", "")
     chat_id = get_setting("telegram_chat_id", "")
     
+    if token.startswith("secret://"):
+        try:
+            from assistant.control.store import ControlStore
+            from assistant.control.secrets import SecretStore, load_key
+            store = ControlStore()
+            secrets = SecretStore(store, key=load_key())
+            token = secrets.resolve(token)
+        except Exception:
+            pass
+
     if not token or not chat_id:
         return "Telegram is not configured. Missing bot token or chat ID."
         
