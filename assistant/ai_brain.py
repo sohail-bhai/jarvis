@@ -639,6 +639,46 @@ LLM_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "click_at",
+            "description": "Clicks at specific screen coordinates (x, y). Use get_clickable_elements first to find exact coordinates of buttons.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "x": {"type": "integer", "description": "The X screen coordinate"},
+                    "y": {"type": "integer", "description": "The Y screen coordinate"}
+                },
+                "required": ["x", "y"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "take_screenshot",
+            "description": "Captures a screenshot of the user's primary display and saves it.",
+            "parameters": {
+                "type": "object",
+                "properties": {}
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "open_website",
+            "description": "Opens a website URL in the user's default browser.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "The website URL or name to open"}
+                },
+                "required": ["url"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "remember_fact",
             "description": "Saves a fact, user preference, or piece of context to permanent memory so you can recall it in the future.",
             "parameters": {

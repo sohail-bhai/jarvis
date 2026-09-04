@@ -15,6 +15,7 @@ SCREENSHOT_FOLDER = PROJECT_ROOT / "assets" / "screenshots"
 
 def _get_pyautogui():
     import pyautogui
+    pyautogui.FAILSAFE = False
     return pyautogui
 
 
@@ -824,7 +825,12 @@ def get_clickable_elements():
         # We'll just scan the current active window to keep it fast
         active_window = auto.GetForegroundControl()
         if not active_window:
-            return "No active window found."
+            for w in auto.GetRootControl().GetChildren():
+                if w.ControlType == auto.ControlType.WindowControl and w.BoundingRectangle.width() > 100:
+                    active_window = w
+                    break
+        if not active_window:
+            active_window = auto.GetRootControl()
             
         elements = []
         # Walk through the control tree up to a certain depth to avoid hanging

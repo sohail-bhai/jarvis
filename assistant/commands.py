@@ -4,6 +4,8 @@ import urllib.parse
 
 from assistant.speech import speak, listen
 from assistant.config import get_setting, update_setting
+from assistant import guard
+from assistant import call_context
 from assistant.system_tasks import (
     open_app,
     close_app,
