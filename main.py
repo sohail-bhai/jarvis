@@ -41,6 +41,8 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
 
     if args.smoke_test:
+        # Configure logging first; the smoke test reports results through logging.
+        logging_setup.configure_logging()
         passed = run_smoke_tests()
         return 0 if passed else 1
 

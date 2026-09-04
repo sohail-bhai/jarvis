@@ -1,31 +1,82 @@
-import logging
-logger = logging.getLogger(__name__)
+"""JARVIS desktop shell.
 
-import io
+Layout: sidebar navigation, a content area holding one page at a time, and the
+System Log pinned to the right so the user can always see what JARVIS is doing.
+
+Threading rule: worker threads never touch widgets. They emit events on the
+EventBus, and this class polls that bus from the Tk main thread.
+"""
+
+import logging
 import threading
 import traceback
-from contextlib import redirect_stdout
+from pathlib import Path
 
 import customtkinter as ctk
 
+from assistant import logging_setup
+from assistant.config import get_setting
 from assistant.controller import AssistantController
 from assistant.events import (
     EVENT_ASSISTANT_RESPONSE,
+    EVENT_CONFIRM_REQUEST,
+    EVENT_CONFIRM_RESOLVED,
     EVENT_ERROR,
+    EVENT_LOG,
+    EVENT_OVERWATCH_ACTION,
+    EVENT_OVERWATCH_CANDIDATE,
+    EVENT_OVERWATCH_STATE,
     EVENT_RECOGNIZED_TEXT,
     EVENT_STATE_CHANGED,
     EVENT_STATUS,
+    EVENT_TOOL_CALL,
     EventBus,
-    set_global_event_bus
+    set_global_event_bus,
 )
-from assistant import logging_setup
-from assistant.smoke_test import run_smoke_tests
 from assistant.speech import is_speech_enabled, set_speech_enabled
-from gui import theme
-from gui.widgets.command_panel import CommandPanel
-from gui.widgets.history_panel import HistoryPanel
-from gui.widgets.overwatch_card import OverwatchCard
-from gui.widgets.status_panel import StatusPanel
+from gui import integrations, theme
+from gui.pages import PAGE_CLASSES
+from gui.widgets.sidebar import Sidebar
+from gui.widgets.system_log import SystemLog
+
+logger = logging.getLogger(__name__)
+
+# Assistant states rendered as something a person would say.
+STATE_WORDS = {
+    "idle": "Ready",
+    "calibrating": "Getting the microphone ready",
+    "listening": "Listening",
+    "recognizing": "Working out what you said",
+    "processing": "Working on it",
+    "speaking": "Speaking",
+    "error": "Something went wrong",
+    "stopped": "Stopped",
+}
+
+# Tool names turned into plain English for the System Log.
+TOOL_WORDS = {
+    "search_web": "Researching on the web",
+    "search_google": "Searching Google",
+    "search_youtube": "Searching YouTube",
+    "open_app": "Opening an app",
+    "open_website": "Opening a website",
+    "read_screen": "Reading your screen",
+    "analyze_screen": "Looking at your screen",
+    "take_screenshot": "Taking a screenshot",
+    "read_file": "Reading a file",
+    "write_file": "Saving a file",
+    "list_directory": "Looking through a folder",
+    "read_unread_emails": "Checking your emails",
+    "send_email": "Preparing an email",
+    "get_schedule": "Checking your schedule",
+    "schedule_meeting": "Adding to your calendar",
+    "remember_fact": "Remembering that for you",
+    "ingest_document": "Reading a document",
+    "get_weather": "Checking the weather",
+    "run_terminal_command": "Running a command on this computer",
+    "spawn_parallel_agents": "Asking other AI helpers to help",
+    "run_actor_critic_research": "Researching this in depth",
+}
 
 
 class JarvisDashboardApp(ctk.CTk):
@@ -33,436 +84,321 @@ class JarvisDashboardApp(ctk.CTk):
         theme.configure_theme(ctk)
         super().__init__()
 
-        self.title("JARVIS Desktop Assistant")
-        self.geometry("1000x650")
-        self.minsize(850, 550)
+        self.title("JARVIS")
+        self.geometry("1180x760")
+        self.minsize(980, 640)
         self.configure(fg_color=theme.BACKGROUND)
 
         self.event_bus = EventBus(maxsize=2000)
         set_global_event_bus(self.event_bus)
         logging_setup.configure_logging(event_bus=self.event_bus)
-        
-        from assistant import audit, guard, confirm, overwatch
-        from pathlib import Path
+
+        from assistant import audit, confirm, guard, overwatch
         audit.configure(Path("logs/audit.jsonl"), max_bytes=5_000_000, backup_count=20)
         guard.configure(event_bus=self.event_bus)
         confirm.configure(event_bus=self.event_bus)
         overwatch.configure(event_bus=self.event_bus)
+        self._confirm = confirm
 
-        self.controller = AssistantController(
-            event_bus=self.event_bus,
-            speech_enabled=True,
-        )
+        self.controller = AssistantController(event_bus=self.event_bus,
+                                              speech_enabled=True)
+
+        self.user_name = get_setting("user_name", "there")
         self.listener_thread = None
         self.text_thread = None
-        self.smoke_thread = None
-        self.listening_active = False
-        self.stopping_requested = False
+        self.pages = {}
+        self.current_page = None
 
         self._build_layout()
-        self._set_listening_controls(active=False)
+        self.navigate("home")
+
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(100, self._poll_events)
+        self.after(200, self.refresh_environments)
+
+    # -- layout -------------------------------------------------------------
 
     def _build_layout(self):
-        self.grid_columnconfigure(0, minsize=240, weight=0) # Left Nav
-        self.grid_columnconfigure(1, weight=1) # Center Orb
-        self.grid_columnconfigure(2, minsize=280, weight=0) # Right Panel
+        self.grid_columnconfigure(0, weight=0)
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_columnconfigure(2, weight=0)
         self.grid_rowconfigure(0, weight=1)
 
-        # ---------------------------------------------------------
-        # LEFT SIDEBAR
-        # ---------------------------------------------------------
-        self.sidebar = ctk.CTkFrame(self, width=240, fg_color=theme.BACKGROUND, corner_radius=0)
-        self.sidebar.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
-        self.sidebar.grid_propagate(False)
+        self.sidebar = Sidebar(ctk, self, self.navigate)
+        self.sidebar.frame.grid(row=0, column=0, sticky="nsw")
 
-        # Logo Area
-        logo_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
-        logo_frame.pack(fill="x", pady=(10, 30), padx=15)
-        
-        # A mock hexagon icon
-        logo_icon = ctk.CTkLabel(logo_frame, text="⬡", font=theme.font(28), text_color=theme.ACCENT)
-        logo_icon.pack(side="left")
-        
-        logo_text = ctk.CTkLabel(logo_frame, text=" J A R V I S", font=theme.font(16, "bold"), text_color=theme.TEXT)
-        logo_text.pack(side="left", padx=5)
+        self.content = ctk.CTkFrame(self, fg_color="transparent")
+        self.content.grid(row=0, column=1, sticky="nsew",
+                          padx=theme.PAD_LG, pady=theme.PAD_LG)
+        self.content.grid_columnconfigure(0, weight=1)
+        self.content.grid_rowconfigure(0, weight=1)
 
-        # Nav Menu Container (Looks like a rounded card)
-        nav_card = ctk.CTkFrame(self.sidebar, fg_color=theme.SURFACE, corner_radius=15, border_width=1, border_color=theme.BORDER)
-        nav_card.pack(fill="x", padx=10)
+        log_column = ctk.CTkFrame(self, fg_color="transparent", width=300)
+        log_column.grid(row=0, column=2, sticky="nsew",
+                        padx=(0, theme.PAD_LG), pady=theme.PAD_LG)
+        log_column.grid_propagate(False)
+        log_column.grid_columnconfigure(0, weight=1)
+        log_column.grid_rowconfigure(0, weight=1)
 
-        def make_nav_button(parent, icon, title, subtitle, is_active=False):
-            btn_frame = ctk.CTkFrame(parent, fg_color=theme.SURFACE_ALT if is_active else "transparent", corner_radius=10)
-            btn_frame.pack(fill="x", padx=10, pady=5)
-            
-            # Icon
-            lbl_icon = ctk.CTkLabel(btn_frame, text=icon, font=theme.font(20), text_color=theme.ACCENT if is_active else theme.TEXT_MUTED)
-            lbl_icon.grid(row=0, column=0, rowspan=2, padx=(10, 15), pady=10)
-            
-            # Title
-            lbl_title = ctk.CTkLabel(btn_frame, text=title, font=theme.font(12, "bold"), text_color=theme.TEXT)
-            lbl_title.grid(row=0, column=1, sticky="w", pady=(8, 0))
-            
-            # Subtitle
-            lbl_sub = ctk.CTkLabel(btn_frame, text=subtitle, font=theme.font(10), text_color=theme.TEXT_MUTED)
-            lbl_sub.grid(row=1, column=1, sticky="w", pady=(0, 8))
-            
-            # If active, add a small left border indicator
-            if is_active:
-                indicator = ctk.CTkFrame(btn_frame, width=4, fg_color=theme.ACCENT, corner_radius=2)
-                indicator.place(relx=0, rely=0.1, relheight=0.8)
+        self.system_log = SystemLog(ctk, log_column)
+        self.system_log.frame.grid(row=0, column=0, sticky="nsew")
 
-        make_nav_button(nav_card, "🎙", "VOICE MODE", "Start a voice conversation", True)
-        make_nav_button(nav_card, "💬", "CHAT", "Text based interaction")
-        make_nav_button(nav_card, "💻", "CONTROL PC", "System control center")
-        make_nav_button(nav_card, "🏠", "SMART HOME", "Manage your devices")
-        make_nav_button(nav_card, "☁", "CLOUD DRIVE", "Access your files")
-        make_nav_button(nav_card, "🎵", "MEDIA", "Music & video control")
-        make_nav_button(nav_card, "⚙", "SETTINGS", "Preferences & tools")
+        self.log("JARVIS is ready.", tone="success")
 
-        # Start/Stop overlay buttons (since we replaced the original ones)
-        self.start_button = ctk.CTkButton(self.sidebar, text="START LISTENING", fg_color=theme.ACCENT_MUTED, hover_color=theme.ACCENT, command=self.start_listening)
-        self.start_button.pack(fill="x", padx=10, pady=(20, 5))
-        
-        self.stop_button = ctk.CTkButton(self.sidebar, text="STOP LISTENING", fg_color=theme.SURFACE, hover_color=theme.BORDER, command=self.stop_listening)
-        self.stop_button.pack(fill="x", padx=10)
+    def navigate(self, key):
+        if key not in PAGE_CLASSES:
+            return
 
-        # Status at bottom
-        self.sidebar_status = ctk.CTkLabel(self.sidebar, text="● JARVIS ONLINE\nAll systems operational", font=theme.font(11), text_color=theme.SUCCESS, justify="left")
-        self.sidebar_status.pack(side="bottom", anchor="w", padx=15, pady=20)
+        if key not in self.pages:
+            self.pages[key] = PAGE_CLASSES[key](ctk, self.content, self)
 
-        # ---------------------------------------------------------
-        # CENTER AREA (ORB & WAVEFORM)
-        # ---------------------------------------------------------
-        self.main_area = ctk.CTkFrame(self, fg_color=theme.BACKGROUND, corner_radius=0)
-        self.main_area.grid(row=0, column=1, sticky="nsew")
-        
-        # Center container
-        center_container = ctk.CTkFrame(self.main_area, fg_color="transparent")
-        center_container.place(relx=0.5, rely=0.45, anchor="center")
+        if self.current_page is not None:
+            self.current_page.frame.grid_forget()
 
-        from gui.widgets.hud_elements import GlowingOrb, AudioWaveform
-        self.orb = GlowingOrb(center_container, size=350)
-        self.orb.pack(pady=10)
+        page = self.pages[key]
+        page.frame.grid(row=0, column=0, sticky="nsew")
+        self.current_page = page
+        self.sidebar.set_active(key)
 
-        self.status_label = ctk.CTkLabel(center_container, text="Awaiting Command...", font=theme.font(24), text_color=theme.TEXT)
-        self.status_label.pack()
+        try:
+            page.on_show()
+        except Exception:
+            logger.exception("Failed to refresh page %s", key)
 
-        self.sub_status = ctk.CTkLabel(center_container, text="System is idle.", font=theme.font(14), text_color=theme.TEXT_MUTED)
-        self.sub_status.pack(pady=(5, 20))
+    # -- helpers used by pages ---------------------------------------------
 
-        self.waveform = AudioWaveform(center_container, width=300, height=40)
-        self.waveform.pack()
+    def log(self, message, tone="normal"):
+        """Add a plain-English line to the System Log."""
+        self.system_log.add(message, tone)
 
-        # We need the CommandPanel at the bottom
-        bottom_container = ctk.CTkFrame(self.main_area, fg_color="transparent")
-        bottom_container.pack(side="bottom", fill="x", pady=20)
-        
-        self.command_panel = CommandPanel(ctk, bottom_container, self.submit_text_command)
-        self.command_panel.frame.pack(fill="x", padx=50)
+    def speech_enabled(self):
+        return is_speech_enabled()
 
-        class DummyStatus:
-            def set_state(self, *args): pass
-            def set_status(self, *args): pass
-        self.status_panel = DummyStatus()
-        self.command_card = {"value": self.sub_status} # Route recognized text to sub_status
-        self.response_card = {"value": self.sub_status} # Route responses to sub_status
+    def toggle_speech(self):
+        set_speech_enabled(not is_speech_enabled())
+        self.log("Speaking responses turned "
+                 + ("on." if is_speech_enabled() else "off."), tone="muted")
 
+    def open_path(self, path):
+        """Open a file with whatever the operating system uses for it."""
+        import subprocess
+        import sys
 
-        # ---------------------------------------------------------
-        # RIGHT SIDEBAR (LIVE PANELS)
-        # ---------------------------------------------------------
-        self.right_sidebar = ctk.CTkFrame(self, width=320, fg_color=theme.BACKGROUND, corner_radius=0)
-        self.right_sidebar.grid(row=0, column=2, sticky="nsew", padx=10, pady=10)
-        self.right_sidebar.grid_propagate(False)
+        path = Path(path)
+        try:
+            if sys.platform.startswith("win"):
+                os_startfile = getattr(__import__("os"), "startfile")
+                os_startfile(str(path))
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", str(path)])
+            else:
+                subprocess.Popen(["xdg-open", str(path)])
+            self.log(f"Opened {path.name}", tone="success")
+        except Exception as error:
+            self.log(f"Couldn't open {path.name}: {error}", tone="error")
 
-        # Overwatch Card
-        self.overwatch_card = OverwatchCard(ctk, self.right_sidebar)
-        self.overwatch_card.frame.pack(fill="x", pady=(10, 20))
-        
-        # Confirmation Card
-        self.confirm_frame = ctk.CTkFrame(self.right_sidebar, fg_color=theme.SURFACE, border_color=theme.WARNING, border_width=1, corner_radius=8)
-        self.confirm_label = ctk.CTkLabel(self.confirm_frame, text="Confirmation Required", font=theme.font(14, "bold"), text_color=theme.WARNING, wraplength=280)
-        self.confirm_label.pack(pady=(10, 5), padx=10)
-        
-        btn_frame = ctk.CTkFrame(self.confirm_frame, fg_color="transparent")
-        btn_frame.pack(pady=(0, 10))
-        
-        self.btn_yes = ctk.CTkButton(btn_frame, text="Yes", width=60, fg_color=theme.SUCCESS, hover_color=theme.SUCCESS, command=lambda: self.resolve_confirm(True))
-        self.btn_yes.pack(side="left", padx=5)
-        self.btn_no = ctk.CTkButton(btn_frame, text="No", width=60, fg_color=theme.ERROR, hover_color=theme.ERROR, command=lambda: self.resolve_confirm(False))
-        self.btn_no.pack(side="left", padx=5)
-        
-        self.pending_confirmation_id = None
-        
-        # History Panel
-        self.history_panel = HistoryPanel(ctk, self.right_sidebar, max_lines=5000)
-        self.history_panel.frame.pack(fill="both", expand=True, pady=10)
+    def refresh_environments(self):
+        """Check connection states off the main thread, then update the tiles."""
+        def worker():
+            statuses = {
+                "computer": integrations.computer_status(),
+                "phone": integrations.phone_status(),
+                "google": integrations.google_status(),
+                "internet": integrations.internet_status(),
+            }
+            self.after(0, lambda: self._apply_environments(statuses))
 
+        threading.Thread(target=worker, name="JarvisEnvCheck", daemon=True).start()
 
-    def _create_info_card(self, parent, title, initial_text):
-        frame = ctk.CTkFrame(
-            parent,
-            fg_color=theme.SURFACE,
-            border_color=theme.BORDER,
-            border_width=1,
-            corner_radius=8,
-        )
-        frame.grid_columnconfigure(0, weight=1)
+    def _apply_environments(self, statuses):
+        home = self.pages.get("home")
+        if home is not None:
+            home.update_environments(statuses)
 
-        label = ctk.CTkLabel(
-            frame,
-            text=title,
-            font=theme.font(14, "bold"),
-            text_color=theme.TEXT_MUTED,
-            anchor="w",
-        )
-        label.grid(row=0, column=0, sticky="ew", padx=18, pady=(14, 4))
+    # -- goals --------------------------------------------------------------
 
-        value = ctk.CTkLabel(
-            frame,
-            text=initial_text,
-            font=theme.font(20, "bold"),
-            text_color=theme.TEXT,
-            anchor="w",
-            wraplength=330,
-        )
-        value.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 16))
+    def submit_goal(self, goal_text):
+        if self._listener_running():
+            self.log("Stop voice mode before typing a request.", tone="warning")
+            return
 
-        return {"frame": frame, "value": value}
+        if self.text_thread is not None and self.text_thread.is_alive():
+            self.log("Still working on the last request.", tone="warning")
+            return
+
+        home = self.pages.get("home")
+        if home is not None:
+            home.set_input_enabled(False)
+            home.task_progress.set_task(goal_text, [("Working on it", "active")])
+
+        self.log(f"You asked: {goal_text}")
+        self.sidebar.set_status("Working…", "waiting")
+
+        self.text_thread = threading.Thread(
+            target=self._run_goal, args=(goal_text,),
+            name="JarvisGoal", daemon=True)
+        self.text_thread.start()
+        self.after(150, self._check_goal_finished)
+
+    def _run_goal(self, goal_text):
+        try:
+            self.controller.handle_text_command(goal_text)
+        except Exception as error:
+            logger.exception("Goal failed")
+            self.event_bus.emit(EVENT_ERROR, "Couldn't finish this step.",
+                                error=str(error))
+
+    def _check_goal_finished(self):
+        if self.text_thread is not None and self.text_thread.is_alive():
+            self.after(150, self._check_goal_finished)
+            return
+
+        home = self.pages.get("home")
+        if home is not None:
+            home.set_input_enabled(True)
+            home.task_progress.set_task(
+                home.task_progress.title.cget("text"), [("Done", "done")])
+        self.sidebar.set_status("JARVIS Online", "online")
+
+    # -- voice --------------------------------------------------------------
+
+    def toggle_listening(self):
+        if self._listener_running():
+            self.stop_listening()
+        else:
+            self.start_listening()
 
     def start_listening(self):
         if self._listener_running():
-            self._set_status("Already listening")
             return
 
-        self.listening_active = True
-        self.stopping_requested = False
-        self._set_status("Starting...")
-        self.status_label.configure(text="STARTING...")
-        self._set_listening_controls(active=True)
+        self.log("Listening for your voice.", tone="muted")
+        home = self.pages.get("home")
+        if home is not None:
+            home.set_voice_active(True)
 
         self.listener_thread = threading.Thread(
-            target=self._run_voice_loop,
-            name="JarvisVoiceLoop",
-            daemon=True,
-        )
+            target=self._run_voice_loop, name="JarvisVoiceLoop", daemon=True)
         self.listener_thread.start()
 
     def _run_voice_loop(self):
         try:
             self.controller.run_forever(greet=True)
         except Exception as error:
-            logger.info("GUI listener thread error:", error)
-            traceback.print_exc()
-            self.event_bus.emit(
-                EVENT_ERROR,
-                "Voice listener stopped because an error occurred.",
-                error=str(error),
-            )
+            logger.exception("Voice loop failed")
+            self.event_bus.emit(EVENT_ERROR, "Voice mode stopped.", error=str(error))
         finally:
-            self.event_bus.emit(EVENT_STATUS, "Voice listener stopped.")
+            self.event_bus.emit(EVENT_STATUS, "Voice mode stopped.")
 
     def stop_listening(self):
         if not self._listener_running():
-            self._set_status("Listener is not running")
-            self._set_listening_controls(active=False)
             return
 
-        self.stopping_requested = True
-        self._set_status("Stopping...")
         self.controller.stop()
-        self.stop_button.configure(state="disabled")
+        self.log("Stopping voice mode.", tone="muted")
         self.after(250, self._check_listener_stopped)
-
-    def submit_text_command(self, command_text):
-        if self._listener_running():
-            self._set_status("Stop listening before sending text commands")
-            return
-
-        if self.text_thread is not None and self.text_thread.is_alive():
-            self._set_status("Text command already processing")
-            return
-
-        self.command_panel.clear()
-        self.command_panel.set_enabled(False)
-        self.sub_status.configure(text=command_text)
-        self._set_status("Processing...")
-
-        self.text_thread = threading.Thread(
-            target=self._run_text_command,
-            args=(command_text,),
-            name="JarvisTextCommand",
-            daemon=True,
-        )
-        self.text_thread.start()
-        self.after(150, self._check_text_finished)
-
-    def _run_text_command(self, command_text):
-        try:
-            self.controller.handle_text_command(command_text)
-        except Exception as error:
-            logger.info("GUI text command error:", error)
-            traceback.print_exc()
-            self.event_bus.emit(
-                EVENT_ERROR,
-                "Text command failed.",
-                error=str(error),
-            )
-
-    def run_smoke_test(self):
-        if self._listener_running():
-            self._set_status("Stop listening before running smoke tests")
-            return
-
-        if self.smoke_thread is not None and self.smoke_thread.is_alive():
-            self._set_status("Smoke test already running")
-            return
-
-        self.smoke_button.configure(state="disabled")
-        self._set_status("Running smoke test...")
-
-        self.smoke_thread = threading.Thread(
-            target=self._run_smoke_test_worker,
-            name="JarvisSmokeTest",
-            daemon=True,
-        )
-        self.smoke_thread.start()
-        self.after(200, self._check_smoke_finished)
-
-    def _run_smoke_test_worker(self):
-        output = io.StringIO()
-
-        try:
-            with redirect_stdout(output):
-                passed = run_smoke_tests()
-
-            summary = "Smoke test passed." if passed else "Smoke test failed."
-            logger.info(output.getvalue(), end="")
-            self.event_bus.emit(EVENT_ASSISTANT_RESPONSE, summary, text=summary)
-            self.event_bus.emit(EVENT_STATUS, summary)
-        except Exception as error:
-            logger.info("GUI smoke test error:", error)
-            traceback.print_exc()
-            self.event_bus.emit(
-                EVENT_ERROR,
-                "Smoke test failed unexpectedly.",
-                error=str(error),
-            )
-
-    def _poll_events(self):
-        for event in self.event_bus.poll(max_events=100):
-            self._handle_event(event)
-
-        self.after(50, self._poll_events)
-
-    def _handle_event(self, event):
-        if event.event_type == EVENT_STATE_CHANGED:
-            state = event.payload.get("state", event.message)
-            self.status_label.configure(text=state.upper() + "...")
-            
-            if state == "listening":
-                self.waveform.set_listening(True)
-            else:
-                self.waveform.set_listening(False)
-
-            if state == "stopped":
-                self._set_listening_controls(active=False)
-
-        elif event.event_type == EVENT_STATUS:
-            self._set_status(event.message)
-
-        elif event.event_type == EVENT_RECOGNIZED_TEXT:
-            text = event.payload.get("text", event.message)
-            self.sub_status.configure(text=text or "No command")
-
-        elif event.event_type == EVENT_ASSISTANT_RESPONSE:
-            text = event.payload.get("text", event.message)
-            self.sub_status.configure(text=text or "No response")
-
-        elif event.event_type == EVENT_ERROR:
-            message = event.message or "An error occurred."
-            self._set_status(message, is_error=True)
-            self.sub_status.configure(text=message, text_color=theme.ERROR)
-            error_detail = event.payload.get("error")
-
-            if error_detail:
-                logger.info("GUI event error detail:", error_detail)
-
-        elif event.event_type == EVENT_LOG:
-            self.history_panel.add_entry(event.payload.get("level", "INFO"), event.message)
-            
-        elif event.event_type == EVENT_AUDIT:
-            self.history_panel.add_entry("AUDIT", event.message)
-            
-        elif event.event_type == EVENT_TOOL_CALL:
-            self.history_panel.add_entry("TOOL", event.message)
-            
-        elif event.event_type == EVENT_OVERWATCH_CANDIDATE:
-            self.history_panel.add_entry("OW_CANDIDATE", event.message)
-            
-        elif event.event_type == EVENT_OVERWATCH_ACTION:
-            self.history_panel.add_entry("OW_ACTION", event.message)
-            
-        elif event.event_type == EVENT_OVERWATCH_STATE:
-            self.overwatch_card.update_state(event.message)
-            self.history_panel.add_entry("OW_STATE", event.message)
-            
-        elif event.event_type == EVENT_CONFIRMATION_REQUEST:
-            self.pending_confirmation_id = event.payload.get("request_id")
-            self.confirm_label.configure(text=f"Confirm: {event.message}")
-            self.confirm_frame.pack(fill="x", pady=(0, 20), before=self.history_panel.frame)
-            self.history_panel.add_entry("WARNING", f"Confirmation requested: {event.message}")
-
 
     def _check_listener_stopped(self):
         if self._listener_running():
             self.after(250, self._check_listener_stopped)
             return
 
-        self.listening_active = False
-        self.stopping_requested = False
-        self._set_listening_controls(active=False)
-        self._set_status("Ready")
-
-    def _check_text_finished(self):
-        if self.text_thread is not None and self.text_thread.is_alive():
-            self.after(150, self._check_text_finished)
-            return
-
-        self.command_panel.set_enabled(True)
-
-    def _check_smoke_finished(self):
-        if self.smoke_thread is not None and self.smoke_thread.is_alive():
-            self.after(200, self._check_smoke_finished)
-            return
-
-        self.smoke_button.configure(state="normal")
+        home = self.pages.get("home")
+        if home is not None:
+            home.set_voice_active(False)
+        self.sidebar.set_status("JARVIS Online", "online")
 
     def _listener_running(self):
         return self.listener_thread is not None and self.listener_thread.is_alive()
 
-    def _set_listening_controls(self, active):
-        self.start_button.configure(state="disabled" if active else "normal")
-        self.stop_button.configure(state="normal" if active else "disabled")
-        self.waveform.set_listening(active)
+    # -- approvals ----------------------------------------------------------
 
-    def _set_status(self, message, is_error=False):
-        color = theme.ERROR if is_error else theme.TEXT_MUTED
-        self.status_label.configure(text=message)
-        self.sidebar_status.configure(text=f"● JARVIS ONLINE\n{message}", text_color=theme.SUCCESS if not is_error else theme.ERROR)
+    def resolve_approval(self, request_id, approved):
+        home = self.pages.get("home")
+        if home is not None:
+            home.hide_approval()
+
+        if not request_id:
+            return
+
+        self._confirm.resolve(request_id, approved)
+        self.log("You approved the action." if approved
+                 else "You declined the action.",
+                 tone="success" if approved else "muted")
+
+    # -- events -------------------------------------------------------------
+
+    def _poll_events(self):
+        try:
+            for event in self.event_bus.poll(max_events=100):
+                try:
+                    self._handle_event(event)
+                except Exception:
+                    # One bad event must never stop the UI from updating.
+                    logger.exception("Failed to handle event %s", event.event_type)
+        finally:
+            # Always reschedule, even if polling itself failed.
+            self.after(50, self._poll_events)
+
+    def _handle_event(self, event):
+        kind = event.event_type
+        payload = event.payload
+
+        if kind == EVENT_STATE_CHANGED:
+            state = payload.get("state", event.message)
+            words = STATE_WORDS.get(state, state.capitalize())
+            tone = "waiting" if state in ("listening", "processing") else "online"
+            if state == "error":
+                tone = "error"
+            self.sidebar.set_status(words, tone)
+
+        elif kind == EVENT_RECOGNIZED_TEXT:
+            text = payload.get("text", event.message)
+            if text:
+                self.log(f"You said: {text}")
+
+        elif kind == EVENT_ASSISTANT_RESPONSE:
+            text = payload.get("text", event.message)
+            if text:
+                self.log(text, tone="success")
+
+        elif kind == EVENT_TOOL_CALL:
+            name = payload.get("tool") or payload.get("name") or event.message
+            self.log(TOOL_WORDS.get(name, f"Working with {name}"))
+
+        elif kind == EVENT_CONFIRM_REQUEST:
+            self.navigate("home")
+            home = self.pages.get("home")
+            if home is not None:
+                home.show_approval(payload.get("req_id"), event.message)
+            self.log("Waiting for your approval.", tone="warning")
+
+        elif kind == EVENT_CONFIRM_RESOLVED:
+            self.log(event.message or "Approval resolved.", tone="muted")
+
+        elif kind == EVENT_ERROR:
+            self.log(event.message or "Couldn't finish this step.", tone="error")
+
+        elif kind == EVENT_OVERWATCH_STATE:
+            self.log(event.message, tone="muted")
+
+        elif kind in (EVENT_OVERWATCH_CANDIDATE, EVENT_OVERWATCH_ACTION):
+            self.log(event.message, tone="muted")
+
+        elif kind == EVENT_LOG:
+            # Only surface warnings and errors; routine logs stay in the file.
+            level = payload.get("level", "INFO")
+            if level in ("WARNING", "ERROR", "CRITICAL"):
+                self.log(event.message, tone="warning" if level == "WARNING" else "error")
+
+        elif kind == EVENT_STATUS:
+            message = (event.message or "").strip()
+            if message and not message.lower().startswith("processing"):
+                self.log(message, tone="muted")
+
+    # -- lifecycle ----------------------------------------------------------
 
     def _on_close(self):
         if self._listener_running():
             self.controller.stop()
-
         self.destroy()
-
-    def resolve_confirm(self, approved):
-        if self.pending_confirmation_id:
-            from assistant import confirm
-            confirm.resolve(self.pending_confirmation_id, approved)
-            self.confirm_frame.pack_forget()
-            self.pending_confirmation_id = None
-            self.history_panel.add_entry("USER", f"Confirmed: {approved}")

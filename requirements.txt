@@ -1,3 +1,4 @@
+# Core assistant dependencies (cross-platform)
 SpeechRecognition>=3.16.1
 standard-aifc
 pyttsx3==2.90
@@ -5,24 +6,50 @@ pyautogui>=0.9.54
 pyscreeze>=1.0.1
 pillow>=11.0.0
 psutil==5.9.8
-PyAudio==0.2.14
-pycaw>=20240210
-comtypes>=1.4.0
 customtkinter
-pytesseract
+requests
+
+# Speech input. PyAudio needs system PortAudio headers.
+# Windows: `pipwin install pyaudio`. Fedora: `sudo dnf install portaudio-devel`.
+PyAudio==0.2.14
+
+# Text to speech: online first, local Piper as fallback
 edge-tts
 pygame
-wikipedia
-googlesearch-python
 piper-tts
 
+# Screen awareness / OCR
+pytesseract
+
+# Web + knowledge lookup
+wikipedia
+googlesearch-python
+duckduckgo-search
 playwright==1.42.0
 
+# Google Workspace
 google-api-python-client
 google-auth-httplib2
 google-auth-oauthlib
+python-dateutil
 
+# Documents and long-term vector memory
 PyPDF2==3.0.1
+chromadb
 
+# Clipboard
 pyperclip==1.11.0
-uiautomation==2.0.29
+
+# Hands-free wake word
+openwakeword
+numpy
+
+# Global interrupt hotkey. On Linux this needs root to read input devices,
+# so the assistant degrades gracefully when it cannot be imported.
+keyboard
+
+# Windows-only integrations. Guarded by lazy imports in system_tasks.py,
+# so the assistant still runs without them on Linux and macOS.
+pycaw>=20240210; sys_platform == "win32"
+comtypes>=1.4.0; sys_platform == "win32"
+uiautomation==2.0.29; sys_platform == "win32"
