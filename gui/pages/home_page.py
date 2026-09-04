@@ -65,8 +65,8 @@ class HomePage(ctk.CTkScrollableFrame):
             text_color=theme.TEXT_PRIMARY,
         ).pack(anchor="w", pady=(3, 0))
 
-        # Right date, plain text rather than a badge
-        date_str = datetime.datetime.now().strftime("%a, %-d %b %Y")
+        now = datetime.datetime.now()
+        date_str = now.strftime(f"%a, {now.day} %b %Y")
         ctk.CTkLabel(
             header_frame,
             text=date_str,
