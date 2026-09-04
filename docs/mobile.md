@@ -26,8 +26,14 @@ tokens can be revoked without disturbing the others.
 On the machine that should do the work:
 
 ```bash
-python -m assistant.api --host 0.0.0.0
+./run-server.sh --host 0.0.0.0
 ```
+
+The dependencies live in `./venv`, so a plain `python -m assistant.api` from a
+shell that has not activated it fails with `No module named 'fastapi'`. The
+script picks the project's interpreter and passes your arguments through. With
+the venv activated (`source venv/bin/activate`), `python -m assistant.api
+--host 0.0.0.0` is the same thing.
 
 It prints the address to type on the phone:
 
@@ -78,7 +84,7 @@ order you can actually supply them:
 2. **The code.** Run this on the computer:
 
    ```bash
-   python -m assistant.api --pair
+   ./run-server.sh --pair
    ```
 
    It prints a six-digit code that lasts ten minutes. Type it on the phone.

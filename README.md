@@ -237,10 +237,13 @@ python main.py
 #### 🌐 Launch the Control Plane API & WebSocket Server
 Exposes the control plane over HTTP and WebSockets for multi-device sync (desktop, mobile, cloud):
 ```bash
-python -m assistant.api                 # Localhost only
-python -m assistant.api --host 0.0.0.0  # Reachable from mobile/network
-python main.py --server --host 0.0.0.0  # Same server through the main launcher
+./run-server.sh                 # Localhost only
+./run-server.sh --host 0.0.0.0  # Reachable from mobile/network
+./run-server.sh --pair          # Print a pairing code for a phone
 ```
+`run-server.sh` uses the interpreter in `./venv`, where the dependencies are
+installed. Calling `python -m assistant.api` from a shell that has not run
+`source venv/bin/activate` fails with `No module named 'fastapi'`.
 - **Interactive Swagger Documentation**: `http://127.0.0.1:8765/docs`
 - **Real-Time Streams**: `ws://127.0.0.1:8765/ws/activity` (everything),
   `/ws/events` (filterable by type and task), `/ws/notifications` (only what needs you).
