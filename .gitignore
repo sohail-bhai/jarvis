@@ -9,3 +9,5 @@ dist/
 *.spec
 assets/screenshots/*.png
 logs/
+temp_speech_*.mp3
+.freebuff/
