@@ -281,14 +281,10 @@ def check_routines(command):
             
     return False
 
-def split_compound_command(command: str) -> list[str]:
-    """
-    Splits compound commands connected by conjunctions (e.g. 'and', 'then')
-    into sequential individual sub-tasks if subsequent clauses represent distinct actions.
-    """
-    clean = command.strip()
+def _split_compound_single(text: str) -> list[str]:
+    clean = text.strip()
     if not clean:
-        return []
+        return [clean]
 
     clean_lower = clean.lower()
 
@@ -315,40 +311,49 @@ def split_compound_command(command: str) -> list[str]:
         "press", "click", "scroll", "take", "tell", "mute", "unmute", "set",
         "volume", "increase", "decrease", "raise", "lower", "lock", "shutdown",
         "restart", "search", "google", "youtube", "check", "summarize",
-        "send", "show", "switch", "find", "drag", "list", "save", "clear"
+        "send", "show", "switch", "find", "drag", "list", "save", "clear",
+        "add", "insert", "put", "append"
     }
 
     for conj in conjunctions:
         if conj in clean_lower:
-            parts = clean.split(conj)
-            valid = True
-            cleaned_parts = []
-            first_verb = parts[0].strip().lower().split()[0] if parts[0].strip() else ""
+            parts = clean.split(conj, 1)
+            head = parts[0].strip()
+            tail = parts[1].strip()
+            if not head or not tail:
+                continue
 
-            for i, p in enumerate(parts):
-                p_str = p.strip()
-                if not p_str:
-                    valid = False
-                    break
-                p_lower = p_str.lower()
-                first_word = p_lower.split()[0] if p_lower.split() else ""
+            tail_lower = tail.lower()
+            first_word = tail_lower.split()[0] if tail_lower.split() else ""
+            first_verb = head.lower().split()[0] if head.lower().split() else ""
 
-                if i > 0:
-                    if first_word in action_verbs:
-                        cleaned_parts.append(p_str)
-                    elif first_verb in ("open", "launch", "close", "tell") and len(p_str.split()) <= 2:
-                        # Elided command: 'open chrome and notepad' -> 'open notepad'
-                        cleaned_parts.append(f"{first_verb} {p_str}")
-                    else:
-                        valid = False
-                        break
-                else:
-                    cleaned_parts.append(p_str)
-
-            if valid and len(cleaned_parts) >= 2:
-                return cleaned_parts
+            if first_word in action_verbs:
+                return [head, tail]
+            elif first_verb in ("open", "launch", "close", "tell") and len(tail.split()) <= 2:
+                return [head, f"{first_verb} {tail}"]
 
     return [clean]
+
+def split_compound_command(command: str) -> list[str]:
+    """
+    Recursively splits compound commands containing multiple conjunctions
+    (e.g. 'open notepad then read 3rd line and add a hahaha on the 5th line')
+    into distinct sequential sub-tasks.
+    """
+    tasks = [command.strip()]
+    changed = True
+    while changed:
+        changed = False
+        new_tasks = []
+        for t in tasks:
+            parts = _split_compound_single(t)
+            if len(parts) > 1:
+                new_tasks.extend(parts)
+                changed = True
+            else:
+                new_tasks.append(t)
+        tasks = new_tasks
+    return tasks
 
 def handle_atomic_gui_command(command: str) -> bool:
     """Directly executes atomic GUI actions like typing or key presses without LLM overhead."""
@@ -417,6 +422,33 @@ def handle_read_screen_command(command: str) -> bool:
 
     return False
 
+def handle_line_write_command(command: str) -> bool:
+    """
+    Directly handles adding, inserting, or writing text onto a specific line in an open editor window.
+    Example: 'add a hahaha on the 5th line', 'write hello on line 2'
+    """
+    clean = command.strip()
+
+    # 1. 'add <text> on/to/at [the] line <N>' or '[the] <N>th line'
+    m1 = re.search(r'(?:add|write|insert|type|put)\s+(?:a\s+)?(.+?)\s+(?:on|to|at|in)\s+(?:the\s+)?(?:line\s+(\d+)|(\d+)(?:st|nd|rd|th)?\s+line)', clean, re.IGNORECASE)
+    if m1:
+        text = m1.group(1).strip()
+        line_num = int(m1.group(2) or m1.group(3))
+        from assistant.system_tasks import write_to_screen_line
+        write_to_screen_line(line_number=line_num, text=text)
+        return True
+
+    # 2. 'add on/to/at [the] line <N>' or '[the] <N>th line <text>'
+    m2 = re.search(r'(?:add|write|insert|type|put)\s+(?:on|to|at|in)\s+(?:the\s+)?(?:line\s+(\d+)|(\d+)(?:st|nd|rd|th)?\s+line)\s+(?:a\s+)?(.+)', clean, re.IGNORECASE)
+    if m2:
+        line_num = int(m2.group(1) or m2.group(2))
+        text = m2.group(3).strip()
+        from assistant.system_tasks import write_to_screen_line
+        write_to_screen_line(line_number=line_num, text=text)
+        return True
+
+    return False
+
 def execute_command(command, auto_confirm=False):
     """
     Main command router for JARVIS Version 1.2.
@@ -462,6 +494,9 @@ def execute_single_command(command, auto_confirm=False):
         return True
 
     if handle_read_screen_command(command):
+        return True
+
+    if handle_line_write_command(command):
         return True
 
     if handle_app_command(command):

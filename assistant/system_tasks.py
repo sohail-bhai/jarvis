@@ -218,6 +218,20 @@ def open_app(app_name):
                 "powerpoint": "start powerpnt",
             }
             if query in windows_apps:
+                # If window is already open, activate it instead of launching a duplicate blank window
+                try:
+                    import uiautomation as auto
+                    app_classes = {"notepad": "Notepad", "calculator": "ApplicationFrameWindow", "calc": "ApplicationFrameWindow"}
+                    target_cls = app_classes.get(query)
+                    if target_cls:
+                        existing = auto.WindowControl(searchDepth=1, ClassName=target_cls)
+                        if existing.Exists(0.3):
+                            speak(f"Opening {display_name}")
+                            existing.SetActive()
+                            return True
+                except Exception:
+                    pass
+
                 speak(f"Opening {display_name}")
                 cmd = windows_apps[query]
                 if not cmd.startswith("start "):
@@ -656,13 +670,88 @@ def read_screen(line_number=None, **kwargs):
             idx = int(line_number)
             if 1 <= idx <= len(lines):
                 target_line = lines[idx - 1].strip()
+                if not target_line:
+                    return f"Line {idx} is blank."
                 return f"Line {idx}: {target_line}"
             else:
-                return f"The document has {len(lines)} lines. Cannot read line {idx}. Here is the visible text:\n{text[:1000]}"
+                return f"The document has {len(lines)} lines. Cannot read line {idx}."
         except (ValueError, TypeError):
             pass
             
     return f"Visible text on screen:\n{text}"
+
+def write_to_screen_line(line_number: int, text: str):
+    """
+    Writes or appends text to a specific line in an open editor window (like Notepad).
+    Uses UIAutomation ValuePattern directly on the active document, falling back to keyboard navigation.
+    """
+    import uiautomation as auto
+    import time
+    
+    clean_text = str(text).strip()
+    idx = int(line_number)
+    
+    # 1. Search candidate windows specifically for document/editor controls
+    candidates = []
+    fg = auto.GetForegroundControl()
+    if fg and fg.ControlType == auto.ControlType.WindowControl:
+        candidates.append(fg)
+    for w in auto.GetRootControl().GetChildren():
+        if w.ControlType == auto.ControlType.WindowControl and w not in candidates:
+            candidates.append(w)
+
+    def _get_doc_len(w):
+        try:
+            for ctrl, depth in auto.WalkControl(w, maxDepth=6):
+                if ctrl.ControlType in (auto.ControlType.DocumentControl, auto.ControlType.EditControl) or ctrl.ClassName in ("RichEditD2DPT", "Edit"):
+                    vp = ctrl.GetValuePattern()
+                    if vp:
+                        return len(vp.Value.strip())
+        except Exception:
+            pass
+        return 0
+
+    candidates.sort(key=_get_doc_len, reverse=True)
+
+    for win in candidates:
+        for ctrl, depth in auto.WalkControl(win, maxDepth=6):
+            if ctrl.ControlType in (auto.ControlType.DocumentControl, auto.ControlType.EditControl) or ctrl.ClassName in ("RichEditD2DPT", "Edit"):
+                try:
+                    vp = ctrl.GetValuePattern()
+                    if vp:
+                        orig = vp.Value.replace("\r\n", "\n").replace("\r", "\n")
+                        lines = orig.splitlines() if orig else []
+                        
+                        while len(lines) < idx:
+                            lines.append("")
+                            
+                        if lines[idx - 1].strip():
+                            lines[idx - 1] = f"{lines[idx - 1]} {clean_text}"
+                        else:
+                            lines[idx - 1] = clean_text
+                            
+                        new_content = "\r\n".join(lines)
+                        vp.SetValue(new_content)
+                        speak(f"Added '{clean_text}' on line {idx}.")
+                        return f"Added '{clean_text}' on line {idx}."
+                except Exception as e:
+                    logger.debug(f"UIAutomation ValuePattern set failed: {e}")
+                    
+    # 2. Fallback: keyboard navigation
+    try:
+        pyautogui = _get_pyautogui()
+        pyautogui.hotkey('ctrl', 'home')
+        time.sleep(0.1)
+        for _ in range(idx - 1):
+            pyautogui.press('down')
+        pyautogui.press('end')
+        pyautogui.write(f" {clean_text}", interval=0.01)
+        speak(f"Added '{clean_text}' on line {idx}.")
+        return f"Added '{clean_text}' on line {idx}."
+    except Exception as e:
+        logger.warning(f"Keyboard fallback write failed: {e}")
+        speak(f"Could not add text to line {idx}.")
+        return f"Could not add text to line {idx}: {e}"
 
 def analyze_screen(prompt, image_path=None):
     """Takes a screenshot and uses a local Vision AI to answer a question about the screen."""

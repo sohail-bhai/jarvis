@@ -113,7 +113,8 @@ AVAILABLE_FUNCTIONS = {
     "enable_speech_output": system_tasks.enable_speech_output,
     "start_overwatch": __import__('assistant.overwatch', fromlist=['']).start_overwatch,
     "stop_overwatch": __import__('assistant.overwatch', fromlist=['']).stop_overwatch,
-    "send_telegram_update": system_tasks.send_telegram_update
+    "send_telegram_update": system_tasks.send_telegram_update,
+    "write_to_screen_line": system_tasks.write_to_screen_line
 }
 
 # The JSON schema describing our tools to the LLM
@@ -759,6 +760,27 @@ LLM_TOOLS = [
                         "description": "Optional 1-indexed line number to read (e.g. 2 for 2nd line, 10 for 10th line). If omitted, reads all text."
                     }
                 }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "write_to_screen_line",
+            "description": "Writes, adds, or appends text onto a specific line in an open document or editor window (such as Notepad, Word, or code editor).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "line_number": {
+                        "type": "integer",
+                        "description": "The 1-indexed line number to write or append text to."
+                    },
+                    "text": {
+                        "type": "string",
+                        "description": "The text to write or add onto the line."
+                    }
+                },
+                "required": ["line_number", "text"]
             }
         }
     },

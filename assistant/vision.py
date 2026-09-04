@@ -92,6 +92,19 @@ def read_screen_text():
             if w.ControlType == auto.ControlType.WindowControl and w not in candidates:
                 candidates.append(w)
 
+        def _get_doc_len(w):
+            try:
+                for ctrl, depth in auto.WalkControl(w, maxDepth=6):
+                    if ctrl.ControlType in (auto.ControlType.DocumentControl, auto.ControlType.EditControl) or ctrl.ClassName in ("RichEditD2DPT", "Edit"):
+                        tp = ctrl.GetTextPattern()
+                        if tp:
+                            return len(tp.DocumentRange.GetText(-1).strip())
+            except Exception:
+                pass
+            return 0
+
+        candidates.sort(key=_get_doc_len, reverse=True)
+
         # 1. First search all candidate windows specifically for real document/editor controls (Notepad, Word, editors)
         for win in candidates:
             for ctrl, depth in auto.WalkControl(win, maxDepth=6):
