@@ -687,7 +687,12 @@ def find_and_click_text(target_text):
     Uses UIAutomation to find a button/text on the screen and clicks it.
     Returns True if found and clicked, False otherwise.
     """
-    import uiautomation as auto
+    try:
+        import uiautomation as auto
+    except ImportError:
+        speak("The UI Automation module is missing. Please run pip install uiautomation.")
+        return False
+        
     import time
     
     logger.info(f"[JARVIS Vision] Searching entire desktop for '{target_text}'...")
@@ -1011,7 +1016,10 @@ def get_clickable_elements():
     """
     try:
         import uiautomation as auto
+    except ImportError:
+        return "ERROR: The 'uiautomation' module is missing. Please tell the user to run 'pip install uiautomation' to enable screen reading capabilities."
         
+    try:
         current_pid = os.getpid()
         active_window = auto.GetForegroundControl()
         if not active_window or active_window.ProcessId == current_pid or "jarvis" in active_window.Name.lower():

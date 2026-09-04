@@ -77,7 +77,6 @@ AVAILABLE_FUNCTIONS = {
     "click_at": system_tasks.click_at,
     "type_text": system_tasks.type_text,
     "press_key": system_tasks.press_key,
-    "find_and_click_text": system_tasks.find_and_click_text,
     "remember_fact": memory.remember_fact,
     "search_web": system_tasks.search_web,
     "read_unread_emails": email_tasks.read_unread_emails,
@@ -634,20 +633,6 @@ LLM_TOOLS = [
                     "key": {"type": "string", "description": "The key to press"}
                 },
                 "required": ["key"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "find_and_click_text",
-            "description": "Scans the screen for specific text and clicks it. Use this to click buttons like 'Save', 'Submit', etc.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "target_text": {"type": "string", "description": "The exact text to look for and click"}
-                },
-                "required": ["target_text"]
             }
         }
     },
