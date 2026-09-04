@@ -750,7 +750,7 @@ LLM_TOOLS = [
         "type": "function",
         "function": {
             "name": "read_screen",
-            "description": "Reads raw text from the screen using OCR. Useful if the user asks you to read a specific document, email, or webpage that is currently open.",
+            "description": "Reads all visible text and document content from the active window and screen. Use this when the user asks you to read, find, or inspect text, lines, documents, or content in an open application like Notepad, Word, browser, or screen.",
             "parameters": {
                 "type": "object",
                 "properties": {}
@@ -796,9 +796,10 @@ def get_system_prompt():
         "Keep your text answers brief and to the point (no markdown).\n\n"
         "CRITICAL RULE: NEVER ask for permission to use tools. When the user asks you to do something, IMMEDIATELY output the JSON tool call to execute it! Do NOT ask 'shall I proceed?' or 'should I pull the trigger?'. Just DO IT.\n\n"
         "CRITICAL AUTONOMY RULE: If the user asks you to do a computer task that you don't have a direct 'app' tool for, BE RESOURCEFUL. "
-        "You have a vast array of atomic tools like `get_clickable_elements`, `scroll`, `read_clipboard`, `run_terminal_command`, `read_file`, `list_directory`, `click_at`, `type_text`, and `press_key`. "
+        "You have a vast array of atomic tools like `get_clickable_elements`, `scroll`, `read_clipboard`, `run_terminal_command`, `read_file`, `list_directory`, `click_at`, `type_text`, `read_screen`, and `press_key`. "
         "You can chain these together to achieve ANYTHING! For example, to open an unknown app, you can use `press_key('win')`, wait a second, use `type_text('app_name')`, and then `press_key('enter')`. "
-        "To click a button you don't know the coordinates for, use `get_clickable_elements` to retrieve the exact X/Y of every button on screen, then `click_at` the correct one.\n\n"
+        "To click a button you don't know the coordinates for, use `get_clickable_elements` to retrieve the exact X/Y of every button on screen, then `click_at` the correct one. "
+        "To read text, lines, or content from an open window or document (such as Notepad, Word, editor, or screen), use the `read_screen` tool directly.\n\n"
         "You have configurable settings that you can change using the update_setting tool. The main settings are:\n"
         "- 'voice_rate': Reading speed (default 170. Higher is faster).\n"
         "- 'voice_volume': Audio volume (default 1.0. Range 0.0 to 1.0).\n\n"

@@ -91,21 +91,36 @@ def read_screen_text():
                     break
         if active:
             extracted = []
-            for ctrl, depth in auto.WalkControl(active, maxDepth=4):
-                if ctrl.Name and len(ctrl.Name.strip()) > 1 and ctrl.ControlType in (
+            for ctrl, depth in auto.WalkControl(active, maxDepth=6):
+                # 1. Check for document/editor text pattern (Notepad, Word, editors)
+                doc_text = None
+                try:
+                    tp = ctrl.GetTextPattern()
+                    if tp:
+                        doc_text = tp.DocumentRange.GetText(-1)
+                except Exception:
+                    pass
+                if not doc_text:
+                    try:
+                        vp = ctrl.GetValuePattern()
+                        if vp:
+                            doc_text = vp.Value
+                    except Exception:
+                        pass
+                if doc_text and doc_text.strip():
+                    extracted.append(doc_text.strip())
+                elif ctrl.Name and len(ctrl.Name.strip()) > 1 and ctrl.ControlType in (
                     auto.ControlType.TextControl,
-                    auto.ControlType.EditControl,
-                    auto.ControlType.DocumentControl,
                     auto.ControlType.ButtonControl,
                     auto.ControlType.MenuItemControl,
                     auto.ControlType.ListItemControl,
                     auto.ControlType.HeaderItemControl,
                 ):
-                    extracted.append(ctrl.Name.strip())
+                    val = ctrl.Name.strip()
+                    if not (len(val) == 1 and ord(val) > 0xE000):
+                        extracted.append(val)
             if extracted:
-                seen = set()
-                deduped = [x for x in extracted if not (x in seen or seen.add(x))]
-                return "\n".join(deduped)
+                return "\n".join(extracted)
     except Exception as e:
         logger.info(f"[Vision Error] UIAutomation text extraction failed: {e}")
 

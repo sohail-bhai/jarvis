@@ -194,22 +194,22 @@ def open_app(app_name):
             windows_apps = {
                 "chrome": "start chrome",
                 "google chrome": "start chrome",
-                "notepad": "notepad",
-                "calculator": "calc",
-                "calc": "calc",
-                "vscode": "code",
-                "vs code": "code",
-                "code": "code",
-                "file_explorer": "explorer",
-                "file explorer": "explorer",
-                "explorer": "explorer",
+                "notepad": "start notepad",
+                "calculator": "start calc",
+                "calc": "start calc",
+                "vscode": "start code",
+                "vs code": "start code",
+                "code": "start code",
+                "file_explorer": "start explorer",
+                "file explorer": "start explorer",
+                "explorer": "start explorer",
                 "cmd": "start cmd",
                 "terminal": "start cmd",
                 "command prompt": "start cmd",
                 "powershell": "start powershell",
-                "paint": "mspaint",
-                "task manager": "taskmgr",
-                "taskmgr": "taskmgr",
+                "paint": "start mspaint",
+                "task manager": "start taskmgr",
+                "taskmgr": "start taskmgr",
                 "settings": "start ms-settings:",
                 "edge": "start msedge",
                 "microsoft edge": "start msedge",
@@ -219,7 +219,10 @@ def open_app(app_name):
             }
             if query in windows_apps:
                 speak(f"Opening {display_name}")
-                os.system(windows_apps[query])
+                cmd = windows_apps[query]
+                if not cmd.startswith("start "):
+                    cmd = f"start {cmd}"
+                os.system(cmd)
                 return True
 
         elif system == "darwin":

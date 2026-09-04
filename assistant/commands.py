@@ -148,22 +148,29 @@ def handle_volume_command(command):
     return False
 
 def open_website(command):
-    command_lower = command.lower()
+    command_lower = command.lower().strip()
     websites = get_setting("websites", {})
 
     for site_name, url in websites.items():
-        if f"open {site_name.lower()}" in command_lower:
-            speak(f"Opening {site_name}")
-            webbrowser.open(url)
-            return True
+        for prefix in ["open ", "launch ", "start "]:
+            if command_lower == f"{prefix}{site_name.lower()}" or command_lower == f"{prefix}{site_name.lower()} please":
+                speak(f"Opening {site_name}")
+                webbrowser.open(url)
+                return True
 
     return False
 
 def handle_app_command(command):
     """
     Handles opening desktop applications and websites via smart launcher.
+    Does not intercept compound or multi-action commands.
     """
     command_lower = command.lower().strip()
+
+    compound_markers = [" and ", " then ", " after that ", " also ", " & ", ", "]
+    if any(marker in command_lower for marker in compound_markers):
+        return False
+
     app_aliases = {
         "notepad": "notepad",
         "google chrome": "chrome",
@@ -179,15 +186,18 @@ def handle_app_command(command):
         "cmd": "cmd",
     }
     for alias, app_name in app_aliases.items():
-        if f"open {alias}" in command_lower:
-            open_app(app_name)
-            return True
+        for prefix in ["open ", "launch ", "start ", "run "]:
+            if command_lower == f"{prefix}{alias}" or command_lower == f"{prefix}{alias} please":
+                open_app(app_name)
+                return True
 
     # Generic "open <target>" routing through smart launcher
     if command_lower.startswith("open "):
         target = command_lower[5:].strip()
         reserved = ["notes", "my notes", "file", "the door", "link"]
-        if target and target not in reserved:
+        action_words = ["read", "write", "type", "check", "find", "search", "click", "tell", "summarize", "copy"]
+        target_words = target.split()
+        if target and target not in reserved and not any(w in target_words for w in action_words):
             open_app(target)
             return True
 
@@ -283,6 +293,13 @@ def execute_command(command, auto_confirm=False):
         return True
         
     if check_routines(command):
+        return True
+
+    # Compound multi-action task check (e.g. "open notepad and read the 10th line")
+    # Multi-action instructions must be planned and chained by the AI Brain rather than intercepted by single-action handlers.
+    compound_markers = [" and ", " then ", " after that ", " also "]
+    if any(marker in command.lower() for marker in compound_markers):
+        ask_ai(command, auto_confirm=auto_confirm)
         return True
 
     if handle_volume_command(command):
