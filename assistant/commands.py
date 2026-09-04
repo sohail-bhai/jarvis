@@ -302,80 +302,6 @@ def check_routines(command):
             
     return False
 
-def _split_compound_single(text: str) -> list[str]:
-    clean = text.strip()
-    if not clean:
-        return [clean]
-
-    clean_lower = clean.lower()
-
-    # 1. Non-splittable command intents (searches, questions, notes, memory facts)
-    non_split_prefixes = (
-        "search ", "google ", "youtube ", "add note ", "note ", "take note ",
-        "write note ", "remember ", "ask ", "what is the difference", "difference between",
-        "tell me about ", "explain ", "how to ", "why is ", "where is "
-    )
-    if any(clean_lower.startswith(prefix) for prefix in non_split_prefixes):
-        return [clean]
-
-    conjunctions = [
-        " and then ",
-        " and after that ",
-        " after that ",
-        " then ",
-        " also ",
-        " and "
-    ]
-
-    action_verbs = {
-        "open", "launch", "start", "run", "close", "read", "type", "write",
-        "press", "click", "scroll", "take", "tell", "mute", "unmute", "set",
-        "volume", "increase", "decrease", "raise", "lower", "lock", "shutdown",
-        "restart", "search", "google", "youtube", "check", "summarize",
-        "send", "show", "switch", "find", "drag", "list", "save", "clear",
-        "add", "insert", "put", "append"
-    }
-
-    for conj in conjunctions:
-        if conj in clean_lower:
-            parts = clean.split(conj, 1)
-            head = parts[0].strip()
-            tail = parts[1].strip()
-            if not head or not tail:
-                continue
-
-            tail_lower = tail.lower()
-            first_word = tail_lower.split()[0] if tail_lower.split() else ""
-            first_verb = head.lower().split()[0] if head.lower().split() else ""
-
-            if first_word in action_verbs:
-                return [head, tail]
-            elif first_verb in ("open", "launch", "close", "tell") and len(tail.split()) <= 2:
-                return [head, f"{first_verb} {tail}"]
-
-    return [clean]
-
-def split_compound_command(command: str) -> list[str]:
-    """
-    Recursively splits compound commands containing multiple conjunctions
-    (e.g. 'open notepad then read 3rd line and add a hahaha on the 5th line')
-    into distinct sequential sub-tasks.
-    """
-    tasks = [command.strip()]
-    changed = True
-    while changed:
-        changed = False
-        new_tasks = []
-        for t in tasks:
-            parts = _split_compound_single(t)
-            if len(parts) > 1:
-                new_tasks.extend(parts)
-                changed = True
-            else:
-                new_tasks.append(t)
-        tasks = new_tasks
-    return tasks
-
 def handle_atomic_gui_command(command: str) -> bool:
     """Directly executes atomic GUI actions like typing or key presses without LLM overhead."""
     clean = command.strip()
@@ -473,24 +399,17 @@ def handle_line_write_command(command: str) -> bool:
 def execute_command(command, auto_confirm=False):
     """
     Main command router for JARVIS Version 1.2.
-    Supports compound multi-task sequencing and individual command dispatch.
+    Routes simple commands to fast-paths, and compound/multi-step commands directly to the AI brain.
     """
     if any(word in command for word in ["stop", "exit", "quit", "goodbye"]):
         speak(f"Goodbye {get_setting('user_name', 'Sir')}.")
         return False
 
-    # Check for compound multi-action instructions (e.g. "open notepad and read 10th line")
-    tasks = split_compound_command(command)
-    if len(tasks) >= 2:
-        logger.info(f"[JARVIS Multi-Task] Decomposed '{command}' into {len(tasks)} tasks: {tasks}")
-        speak(f"Executing {len(tasks)} tasks.")
-        for i, task in enumerate(tasks):
-            if i > 0:
-                time.sleep(1.2)
-            call_context.set_origin("routine" if auto_confirm else "user")
-            res = execute_single_command(task, auto_confirm=auto_confirm)
-            if not res:
-                return False
+    c = command.lower()
+    # Route multi-step instructions straight to the AI brain for intelligent orchestration
+    if " and " in c or " then " in c or " after " in c:
+        logger.info(f"[JARVIS] Routing compound command to AI brain: '{command}'")
+        ask_ai(command, auto_confirm=auto_confirm)
         return True
 
     return execute_single_command(command, auto_confirm=auto_confirm)
