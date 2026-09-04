@@ -29,10 +29,26 @@ def build_parser():
         action="store_true",
         help="Launch the CustomTkinter desktop dashboard."
     )
+    mode.add_argument(
+        "--server",
+        action="store_true",
+        help="Run the control plane API so a paired phone can send remote tasks."
+    )
     parser.add_argument(
         "--no-speech",
         action="store_true",
         help="Print responses without using pyttsx3 text-to-speech."
+    )
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="API bind address for --server. Use 0.0.0.0 for phone access."
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8765,
+        help="API port for --server."
     )
     return parser
 
@@ -49,6 +65,23 @@ def main(argv=None):
     if args.gui:
         from jarvis_gui import main as gui_main
         return gui_main()
+
+    if args.server:
+        try:
+            from assistant.api.app import main as api_main
+        except ModuleNotFoundError as error:
+            if error.name in {"fastapi", "uvicorn", "python_multipart"}:
+                print(
+                    "JARVIS API dependencies are missing in this Python environment.\n"
+                    "Use the project venv or install requirements:\n\n"
+                    "    source venv/bin/activate\n"
+                    "    python main.py --server --host 0.0.0.0 --port 8765\n\n"
+                    "or:\n\n"
+                    "    python -m pip install -r requirements.txt"
+                )
+                return 1
+            raise
+        return api_main(["--host", args.host, "--port", str(args.port)])
 
     bus = events.EventBus(maxsize=2000)
     events.set_global_event_bus(bus)

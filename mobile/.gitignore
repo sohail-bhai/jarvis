@@ -2,6 +2,8 @@
 
 # dependencies
 node_modules/
+.android-sdk/
+.jdk/
 
 # Expo
 .expo/
@@ -39,3 +41,4 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+JARVIS.apk

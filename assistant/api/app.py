@@ -914,6 +914,15 @@ def request_pairing_code(port):
         response = requests.post(f"http://127.0.0.1:{port}/api/pair/code", timeout=5)
         response.raise_for_status()
     except requests.RequestException as error:
+        status = getattr(getattr(error, "response", None), "status_code", None)
+        if status == 404:
+            print(
+                f"Something is listening on port {port}, but it is not the current "
+                "JARVIS pairing API.\n"
+                "Stop that process, then start this server again:\n\n"
+                f"    python main.py --server --host 0.0.0.0 --port {port}"
+            )
+            return 1
         print(f"Could not reach JARVIS on port {port}. Is it running?  ({error})")
         return 1
 
@@ -942,6 +951,23 @@ def _print_welcome(host, port):
     print()
 
 
+def _port_available(host, port):
+    """Return False when another process already owns this bind address."""
+    import socket
+
+    probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        probe.bind((host, port))
+        return True
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    finally:
+        probe.close()
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Run the JARVIS control plane API.")
     parser.add_argument("--host", default="127.0.0.1",
@@ -964,6 +990,14 @@ def main(argv=None):
         logger.warning(
             "Listening on %s. Anything on your network can control this computer. "
             "Only do this on a network you trust.", args.host)
+
+    if not _port_available(args.host, args.port):
+        print(
+            f"Port {args.port} is already in use. Stop the existing process or choose "
+            f"another port:\n\n"
+            f"    python main.py --server --host {args.host} --port {args.port + 1}"
+        )
+        return 1
 
     _print_welcome(args.host, args.port)
 

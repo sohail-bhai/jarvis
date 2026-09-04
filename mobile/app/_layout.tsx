@@ -44,10 +44,10 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (checked && !paired) {
+    if (loaded && checked && !paired) {
       router.replace('/connect');
     }
-  }, [checked, paired]);
+  }, [loaded, checked, paired]);
 
   useEffect(() => {
     if (error) throw error;
