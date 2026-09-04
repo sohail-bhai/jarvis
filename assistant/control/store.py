@@ -164,6 +164,11 @@ MIGRATIONS = [
     ("0007_permission_agent", [
         ("permissions", "agent_id", "ALTER TABLE permissions ADD COLUMN agent_id TEXT"),
     ]),
+    ("0008_step_graph", [
+        ("task_steps", "depends_on", "ALTER TABLE task_steps ADD COLUMN depends_on TEXT"),
+        ("task_steps", "agent_id", "ALTER TABLE task_steps ADD COLUMN agent_id TEXT"),
+        ("task_steps", "capability", "ALTER TABLE task_steps ADD COLUMN capability TEXT"),
+    ]),
 ]
 
 DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "control.db"
@@ -345,12 +350,15 @@ class ControlStore:
 
     def save_step(self, step):
         self._write(
-            "INSERT INTO task_steps (id, task_id, position, label, status, detail) "
-            "VALUES (?, ?, ?, ?, ?, ?) "
+            "INSERT INTO task_steps (id, task_id, position, label, status, detail, "
+            "depends_on, agent_id, capability) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(id) DO UPDATE SET label=excluded.label, "
-            "status=excluded.status, detail=excluded.detail",
+            "status=excluded.status, detail=excluded.detail, "
+            "depends_on=excluded.depends_on, agent_id=excluded.agent_id, "
+            "capability=excluded.capability",
             (step.id, step.task_id, step.position, step.label,
-             step.status.value, step.detail),
+             step.status.value, step.detail, dumps(step.depends_on),
+             step.agent_id, step.capability),
         )
         return step
 
@@ -528,9 +536,13 @@ def _to_task(row):
 def _to_step(row):
     if row is None:
         return None
+    keys = row.keys()
     return TaskStep(id=row["id"], task_id=row["task_id"], position=row["position"],
                     label=row["label"], status=StepStatus(row["status"]),
-                    detail=row["detail"] or "")
+                    detail=row["detail"] or "",
+                    depends_on=loads(row["depends_on"] if "depends_on" in keys else None, []),
+                    agent_id=(row["agent_id"] or "") if "agent_id" in keys else "",
+                    capability=(row["capability"] or "") if "capability" in keys else "")
 
 
 def _to_permission(row):

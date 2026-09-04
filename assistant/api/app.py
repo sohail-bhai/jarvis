@@ -42,13 +42,26 @@ API_VERSION = "1"
 
 # -- request bodies ---------------------------------------------------------
 
+class PlannedStep(BaseModel):
+    label: str = Field(..., min_length=1, description="What JARVIS will do.")
+    depends_on: list[int] = Field(default_factory=list,
+                                  description="Positions that must finish first.")
+    agent_id: str = Field("", description="Which agent should do it.")
+    capability: str = Field("", description="Access this step needs.")
+
+
 class CreateTaskRequest(BaseModel):
     goal: str = Field(..., min_length=1, description="What the user asked for.")
     steps: list[str] = Field(default_factory=list,
-                             description="Observable steps, in plain language.")
+                             description="Observable steps, run in order.")
+    plan: list[PlannedStep] = Field(
+        default_factory=list,
+        description="Steps as a graph. Steps with no dependencies run together.")
     capability: str = Field("", description="Capability needed, e.g. 'research'.")
     run: bool = Field(False,
                       description="Start working the steps immediately.")
+    autoplan: bool = Field(False,
+                           description="Let JARVIS break the goal into steps.")
 
 
 class ResolveApprovalRequest(BaseModel):
@@ -265,8 +278,12 @@ def create_app(control=None, executor=None, security=None):
 
     @app.post("/api/tasks", status_code=201, tags=["tasks"])
     def create_task(request: CreateTaskRequest):
+        steps = [step.model_dump() for step in request.plan] or request.steps
+        if not steps and request.autoplan:
+            steps = runner.planner.plan(request.goal)
+
         try:
-            task = plane.create_task(request.goal, steps=request.steps,
+            task = plane.create_task(request.goal, steps=steps,
                                      capability=request.capability or None)
         except RuntimeError as error:
             # Raised while an emergency stop is latched.
@@ -328,10 +345,16 @@ def create_app(control=None, executor=None, security=None):
 
     @app.post("/api/tasks/{task_id}/cancel", tags=["tasks"])
     def cancel_task(task_id: str):
-        task = plane.cancel_task(task_id)
-        if task is None:
+        """Stop a task. A step already running is interrupted, not waited on."""
+        if plane.get_task(task_id) is None:
             raise HTTPException(status_code=404, detail="No such task.")
+        runner.stop(task_id)
         return plane.task_detail(task_id)
+
+    @app.post("/api/tasks/plan", tags=["tasks"])
+    def plan_goal(request: CreateTaskRequest):
+        """Break a goal into steps without committing to running them."""
+        return {"goal": request.goal, "steps": runner.planner.plan(request.goal)}
 
     # -- capabilities and policy -------------------------------------------
 

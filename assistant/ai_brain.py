@@ -672,18 +672,33 @@ STEP_SYSTEM_NOTE = (
 )
 
 
-def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps=5):
+class StepCancelled(Exception):
+    """The control plane stopped this step part-way through."""
+
+
+def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps=5,
+                should_continue=None, authorize=None):
     """Run the tool-calling loop over `conversation`, which is mutated in place.
 
     `extra_messages` are injected into the payload just before the latest user
     message without being stored in the caller's history, so retrieved memories
     never accumulate in short-term memory.
 
+    `should_continue` is checked between model turns and before every tool
+    call, so a long task can be stopped without waiting for it to finish.
+    `authorize(tool_name)` returns `(allowed, reason)`; a refused tool is
+    reported back to the model rather than run.
+
     Returns the model's final text, or None if the local brain is unreachable.
     """
     previous_tool_calls_repr = None
 
+    def _keep_going():
+        if should_continue is not None and not should_continue:
+            raise StepCancelled("Stopped part-way.")
+
     for step in range(max_steps):
+        _keep_going()
         model_name = get_setting("llm_model", "qwen2.5:3b")
 
         # Inject dynamic context into the payload without mutating history
@@ -716,6 +731,19 @@ def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps
             for tool_call in message["tool_calls"]:
                 func_name = tool_call["function"]["name"]
                 args_dict = tool_call["function"].get("arguments", {})
+
+                _keep_going()
+
+                if authorize is not None:
+                    allowed, refusal = authorize(func_name)
+                    if not allowed:
+                        logger.info(f"Tool {func_name} not authorised: {refusal}")
+                        conversation.append({
+                            "role": "tool",
+                            "content": f"Not allowed: {refusal}",
+                            "name": func_name
+                        })
+                        continue
 
                 if func_name in AVAILABLE_FUNCTIONS:
                     func_to_call = AVAILABLE_FUNCTIONS[func_name]
@@ -810,7 +838,8 @@ def ask_ai(command, auto_confirm=False):
     return reply
 
 
-def run_task_step(instruction, context="", auto_confirm=True):
+def run_task_step(instruction, context="", auto_confirm=True,
+                  should_continue=None, authorize=None):
     """Carry out one control plane step with the same tools as the voice loop.
 
     The control plane calls this. It runs in its own short conversation so a
@@ -834,7 +863,8 @@ def run_task_step(instruction, context="", auto_confirm=True):
 
     reply = _agent_loop(conversation,
                         extra_messages=[_memory_message(instruction)],
-                        auto_confirm=auto_confirm)
+                        auto_confirm=auto_confirm,
+                        should_continue=should_continue, authorize=authorize)
 
     if reply is None:
         raise RuntimeError("Could not reach the local model. Is Ollama running?")

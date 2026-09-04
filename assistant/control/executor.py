@@ -13,9 +13,12 @@ the control plane.
 import logging
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from assistant.control.adapters import AdapterRegistry, NativeAdapter
+from assistant.control.capabilities import capability_for_tool
 from assistant.control.models import StepStatus, TaskStatus
+from assistant.control.planner import Planner
 from assistant.control.service import get_control_plane
 
 logger = logging.getLogger(__name__)
@@ -29,18 +32,51 @@ POLL_SECONDS = 0.1
 # Steps carry their predecessors' outcomes forward, but not without limit.
 MAX_CONTEXT_CHARS = 2000
 
+# How many independent steps may run at once. Small on purpose: these steps
+# drive one computer, and a local model is the bottleneck anyway.
+MAX_PARALLEL_STEPS = 3
+
+
+class Cancelled(Exception):
+    """The work was stopped part-way, by the user or by an emergency stop."""
+
+
+class CancelToken:
+    """A flag a running step checks so it can stop between tool calls."""
+
+    def __init__(self):
+        self._event = threading.Event()
+
+    def cancel(self):
+        self._event.set()
+
+    @property
+    def cancelled(self):
+        return self._event.is_set()
+
+    def check(self):
+        if self._event.is_set():
+            raise Cancelled("Stopped part-way.")
+
+    def __bool__(self):
+        return not self._event.is_set()
+
 
 class TaskExecutor:
     """Runs tasks step by step and keeps the control plane honest about it."""
 
     def __init__(self, plane=None, runner=None,
-                 approval_timeout=DEFAULT_APPROVAL_TIMEOUT, adapters=None):
+                 approval_timeout=DEFAULT_APPROVAL_TIMEOUT, adapters=None,
+                 planner=None, max_parallel=MAX_PARALLEL_STEPS):
         self.plane = plane or get_control_plane()
         self._runner = runner
         self.adapters = adapters or AdapterRegistry(
             default=NativeAdapter(runner=runner))
+        self.planner = planner or Planner()
+        self.max_parallel = max(1, max_parallel)
         self.approval_timeout = approval_timeout
         self._threads = {}
+        self._tokens = {}
         self._lock = threading.RLock()
 
     # -- running ------------------------------------------------------------
@@ -63,11 +99,26 @@ class TaskExecutor:
         thread.start()
         return task
 
-    def start(self, goal, steps=None, capability=None):
-        """Create a task and immediately begin working it."""
+    def start(self, goal, steps=None, capability=None, plan=None):
+        """Create a task and immediately begin working it.
+
+        With no steps given, the planner turns the goal into steps first, so a
+        caller can hand over a sentence and still get observable progress.
+        """
+        if steps is None and (plan or (plan is None and self.planner is not None)):
+            steps = self.planner.plan(goal)
+
         task = self.plane.create_task(goal, steps=steps, capability=capability)
         self.submit(task.id)
         return task
+
+    def stop(self, task_id, reason="You stopped this."):
+        """Stop a running task now, without waiting for the current step."""
+        with self._lock:
+            token = self._tokens.get(task_id)
+        if token is not None:
+            token.cancel()
+        return self.plane.cancel_task(task_id, reason)
 
     def wait(self, task_id, timeout=60):
         """Block until a submitted task's thread finishes. Returns the task."""
@@ -89,9 +140,10 @@ class TaskExecutor:
     def run(self, task_id):
         """Work a task to completion on the calling thread.
 
-        Every exit path is recorded: completion with a summary, an honest
-        failure with the real reason, or cancellation when the user or an
-        emergency stop says so.
+        Steps form a graph: everything whose dependencies are done runs, up to
+        `max_parallel` at a time. Every exit path is recorded - completion with
+        a summary, an honest failure with the real reason, or cancellation when
+        the user or an emergency stop says so.
         """
         task = self.plane.get_task(task_id)
         if task is None:
@@ -102,55 +154,113 @@ class TaskExecutor:
         if self.plane.is_stopped:
             return self.plane.cancel_task(task_id, "JARVIS is stopped.")
 
-        steps = self.plane.store.list_steps(task_id)
-        if not steps:
-            # A goal with no plan is still work: treat the goal as the step.
-            return self._run_single(task)
+        token = CancelToken()
+        with self._lock:
+            self._tokens[task_id] = token
 
-        agent = self.plane.get_helper(task.helper_id) if task.helper_id else None
+        try:
+            steps = self.plane.store.list_steps(task_id)
+            if not steps:
+                # A goal with no plan is still work: treat the goal as the step.
+                return self._run_single(task, token)
+            return self._run_graph(task, steps, token)
+        finally:
+            with self._lock:
+                self._tokens.pop(task_id, None)
 
+    def _run_graph(self, task, steps, token):
+        """Run the step graph, widest first, until it finishes or stops."""
+        task_id = task.id
         outcomes = []
-        for step in steps:
-            if step.status in (StepStatus.DONE, StepStatus.SKIPPED):
-                continue
+        done = {step.position for step in steps if step.is_finished}
+        remaining = [step for step in steps if not step.is_finished]
 
-            halted = self._halt_reason(task_id)
-            if halted:
-                return self.plane.cancel_task(task_id, halted)
+        with ThreadPoolExecutor(max_workers=self.max_parallel,
+                                thread_name_prefix=f"step-{task_id[:6]}") as pool:
+            while remaining:
+                halted = self._halt_reason(task_id)
+                if halted:
+                    token.cancel()
+                    return self.plane.cancel_task(task_id, halted)
 
-            if not self._wait_for_approvals(task_id):
-                return self.plane.get_task(task_id)
+                if not self._wait_for_approvals(task_id):
+                    return self.plane.get_task(task_id)
 
-            self.plane.start_step(task_id, step.position)
-            started = time.monotonic()
-            try:
-                outcome = self._call_runner(step.label, self._context(outcomes),
-                                            agent=agent)
-            except Exception as error:
-                logger.exception("Step %s of task %s failed", step.position, task_id)
-                self._report_health(agent, started, ok=False)
-                self.plane.finish_step(task_id, step.position,
-                                       detail=f"Couldn't do this: {error}", failed=True)
-                return self.plane.fail_task(
-                    task_id, f"Stopped at '{step.label}'. {error}")
+                ready = [step for step in remaining
+                         if all(position in done for position in step.depends_on)]
+                if not ready:
+                    # Every remaining step waits on something that never ran.
+                    return self.plane.fail_task(
+                        task_id, "These steps depend on work that never finished.")
 
-            outcomes.append((step.label, outcome))
-            self._report_health(agent, started, ok=True)
-            self.plane.finish_step(task_id, step.position, detail=outcome)
-            self.plane.save_checkpoint(task_id, {
-                "completed_through": step.position,
-                "outcomes": [{"step": label, "outcome": text}
-                             for label, text in outcomes],
-            })
+                batch = ready[:self.max_parallel]
+                results = list(pool.map(
+                    lambda step: self._run_step(task_id, step, outcomes, token),
+                    batch))
+
+                for step, (ok, outcome) in zip(batch, results):
+                    if not ok:
+                        token.cancel()
+                        if isinstance(outcome, Cancelled):
+                            return self.plane.get_task(task_id)
+                        return self.plane.fail_task(
+                            task_id, f"Stopped at '{step.label}'. {outcome}")
+
+                    done.add(step.position)
+                    outcomes.append((step.label, outcome))
+
+                remaining = [step for step in remaining if step.position not in done]
+                self.plane.save_checkpoint(task_id, {
+                    "completed": sorted(done),
+                    "outcomes": [{"step": label, "outcome": text}
+                                 for label, text in outcomes],
+                })
 
         return self.plane.complete_task(task_id, outcomes[-1][1] if outcomes else "Done.")
 
-    def _run_single(self, task):
+    def _run_step(self, task_id, step, outcomes, token):
+        """Run one step. Returns (ok, outcome) rather than raising into a pool."""
+        agent = self._agent_for(task_id, step)
+        self.plane.start_step(task_id, step.position)
+        started = time.monotonic()
+
+        try:
+            token.check()
+            outcome = self._call_runner(step.label, self._context(outcomes),
+                                        agent=agent, token=token, task_id=task_id)
+        except Cancelled as stopped:
+            self.plane.finish_step(task_id, step.position,
+                                   detail="Stopped part-way.", failed=True)
+            return False, stopped
+        except Exception as error:
+            logger.exception("Step %s of task %s failed", step.position, task_id)
+            self._report_health(agent, started, ok=False)
+            self.plane.finish_step(task_id, step.position,
+                                   detail=f"Couldn't do this: {error}", failed=True)
+            return False, error
+
+        self._report_health(agent, started, ok=True)
+        self.plane.finish_step(task_id, step.position, detail=outcome)
+        return True, outcome
+
+    def _agent_for(self, task_id, step):
+        """The agent that should do this step: the step's own, or the task's."""
+        if step.agent_id:
+            return self.plane.get_helper(step.agent_id)
+        task = self.plane.get_task(task_id)
+        if task is not None and task.helper_id:
+            return self.plane.get_helper(task.helper_id)
+        return None
+
+    def _run_single(self, task, token):
         """Work a task whose goal was never broken into steps."""
         agent = self.plane.get_helper(task.helper_id) if task.helper_id else None
         started = time.monotonic()
         try:
-            outcome = self._call_runner(task.goal, "", agent=agent)
+            outcome = self._call_runner(task.goal, "", agent=agent, token=token,
+                                        task_id=task.id)
+        except Cancelled:
+            return self.plane.cancel_task(task.id, "Stopped part-way.")
         except Exception as error:
             logger.exception("Task %s failed", task.id)
             self._report_health(agent, started, ok=False)
@@ -161,10 +271,48 @@ class TaskExecutor:
 
     # -- collaborators ------------------------------------------------------
 
-    def _call_runner(self, instruction, context, agent=None):
+    def _call_runner(self, instruction, context, agent=None, token=None,
+                     task_id=""):
         """Hand one step to whichever adapter can drive this agent."""
         adapter = self.adapters.for_agent(agent)
-        return adapter.run_step(instruction, context=context, agent=agent)
+
+        try:
+            return adapter.run_step(instruction, context=context, agent=agent,
+                                    token=token,
+                                    authorize=self._authorizer(task_id, agent))
+        except TypeError:
+            # An adapter that predates cancellation still works, it just
+            # cannot be interrupted part-way.
+            return adapter.run_step(instruction, context=context, agent=agent)
+
+    def _authorizer(self, task_id, agent):
+        """Decides, per tool, whether the running step may use it.
+
+        This is where a brokered capability stops being advice: a tool whose
+        capability was never granted is refused at the moment it is called.
+        """
+        agent_id = agent.id if agent is not None else ""
+
+        def authorize(tool_name):
+            capability = capability_for_tool(tool_name)
+            if not capability:
+                return True, ""
+
+            if self.plane.has_capability(capability, task_id=task_id):
+                return True, ""
+
+            result = self.plane.request_capability(
+                capability, agent_id=agent_id, task_id=task_id,
+                reason="A running step needs this.")
+
+            if result["status"] == "granted":
+                return True, ""
+            if result["status"] == "waiting":
+                return False, (f"{capability} needs your approval first. "
+                               "Ask again once it is approved.")
+            return False, f"{capability} is not allowed. {result['judgement']['reason']}"
+
+        return authorize
 
     def _report_health(self, agent, started, ok):
         """Health comes from work that actually ran, not from guesses."""
@@ -183,6 +331,11 @@ class TaskExecutor:
         return text
 
     # -- interruptions ------------------------------------------------------
+
+    def cancel_token(self, task_id):
+        """The token for a running task, if one is running."""
+        with self._lock:
+            return self._tokens.get(task_id)
 
     def _halt_reason(self, task_id):
         """Why this task should stop now, or an empty string to keep going."""

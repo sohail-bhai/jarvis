@@ -92,7 +92,7 @@ class StepExecutionTests(ExecutorTestCase):
         self.executor().run(task.id)
 
         checkpoint = self.plane.get_task(task.id).checkpoint
-        self.assertEqual(1, checkpoint["completed_through"])
+        self.assertEqual([0, 1], checkpoint["completed"])
         self.assertEqual(2, len(checkpoint["outcomes"]))
 
     def test_already_finished_steps_are_not_repeated(self):

@@ -48,8 +48,8 @@ Primary user-facing capabilities:
 - `assistant/system_tasks.py`: OS and hardware actions, including app launch, time/date/battery, screenshot, volume, lock, shutdown, and restart.
 - `assistant/config.py`: config defaults, JSON loading/merging, and setting updates.
 - `assistant/notes.py`: note capture, readback, and clearing.
-- `assistant/ai_brain.py`: Ollama-backed agent loop (`_agent_loop`), the voice entry point `ask_ai()`, the control plane entry point `run_task_step()`, the tool-calling schema, and the `AVAILABLE_FUNCTIONS` tool registry.
-- `assistant/control/`: the control plane. `models.py` (data model), `store.py` (SQLite), `service.py` (`ControlPlane` coordination logic), `executor.py` (`TaskExecutor`, which runs task steps through `ai_brain.run_task_step`), `capabilities.py` (namespaced capability catalog with risk levels), `policy.py` (`PolicyEngine`: allow, ask or deny), `adapters.py` (`NativeAdapter`, `HttpAdapter`, `AdapterRegistry`).
+- `assistant/ai_brain.py`: Ollama-backed agent loop (`_agent_loop`, which takes optional `should_continue` and `authorize` hooks), the voice entry point `ask_ai()`, the control plane entry point `run_task_step()`, the tool-calling schema, and the `AVAILABLE_FUNCTIONS` tool registry.
+- `assistant/control/`: the control plane. `models.py` (data model), `store.py` (SQLite), `service.py` (`ControlPlane` coordination logic), `executor.py` (`TaskExecutor`, which runs task steps through `ai_brain.run_task_step`), `capabilities.py` (namespaced capability catalog with risk levels), `policy.py` (`PolicyEngine`: allow, ask or deny), `adapters.py` (`NativeAdapter`, `HttpAdapter`, `AdapterRegistry`), `planner.py` (goal to steps).
 - `assistant/api/`: HTTP + WebSocket boundary over the control plane. `app.py` (routes), `auth.py` (device pairing, tokens, rate limiting), `errors.py` (one error envelope). Run with `python -m assistant.api`.
 - `assistant/memory.py`: persistent vector memory backed by ChromaDB.
 - `assistant/swarm.py`: parallel sub-agents and actor-critic research.
@@ -228,18 +228,19 @@ Known limits in Version 1.2:
 - The API authenticates remote clients with paired device tokens, but tokens
   never expire and rate limit buckets reset when the process restarts. See
   `docs/control-plane.md` for the full list of known gaps.
-- Control plane steps run through `ai_brain.run_task_step()`, but a step that
-  is already executing cannot be interrupted. Cancellation and emergency stop
-  take effect between steps.
-- Steps must be supplied by the caller. Nothing plans them from a goal yet.
-- Capabilities are brokered but not yet enforced at the call site: an agent
-  that ignores `request_capability` and calls a tool directly is not stopped.
+- Control plane steps run through `ai_brain.run_task_step()` and can be
+  interrupted between tool calls by a cancel token.
+- A running step is interrupted between tool calls, not inside one. A shell
+  command already running finishes first.
+- A new tool must be added to `TOOL_CAPABILITIES` in `capabilities.py`, or it
+  is treated as needing no capability.
+- Failure fails the whole task: no per-step retry yet.
 - Agent and device health is swept on read, not by a background timer, and
   agents have no credential of their own - they call through a paired device.
 
 Likely future work:
 
-- Plan steps from a goal automatically instead of requiring the caller to list them.
+- Add per-step retry and checkpoint replay so an interrupted task resumes.
 - Give `system_tasks.py` real cross-platform implementations.
 - Add token expiry and rotation to the API.
 - Make command routing more structured to reduce accidental matches.

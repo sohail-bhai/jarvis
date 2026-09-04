@@ -37,6 +37,7 @@ Putting it behind an API means:
 | `assistant/control/models.py` | The data model: `Task`, `TaskStep`, `Helper`, `Device`, `Permission`, `Approval`, `ActivityEvent`, plus their status enums. Plain dataclasses with no framework dependency. |
 | `assistant/control/store.py` | SQLite persistence. The only module that knows SQL, so moving to PostgreSQL later means rewriting this file alone. |
 | `assistant/control/service.py` | `ControlPlane` — the coordination logic and the only thing clients need. |
+| `assistant/control/planner.py` | Turns a goal into steps, with a model call that can be injected. |
 | `assistant/control/adapters.py` | How the control plane talks to an agent: in-process, over HTTP, or something added later. |
 | `assistant/control/capabilities.py` | The catalog of namespaced capabilities and the risk each one carries. |
 | `assistant/control/policy.py` | `PolicyEngine` - allow, ask or deny, from risk defaults and stored rules. |
@@ -47,9 +48,25 @@ Putting it behind an API means:
 
 ## Core concepts
 
-**Task** — a goal in the user's own words, with ordered **steps** phrased so a
-person can read them ("Finding relevant files"). Progress is derived from how
-many steps are done, so no client has to compute it.
+**Task** — a goal in the user's own words, with **steps** phrased so a person
+can read them ("Finding relevant files"). Progress is derived from how many
+steps are done, so no client has to compute it.
+
+Steps form a graph. A plain list of labels is a sequence, because that is what
+a caller listing steps means; a step that names `depends_on` opts into running
+alongside its siblings:
+
+```python
+plane.create_task("Prepare the weekly report", steps=[
+    {"label": "Fetch the data", "depends_on": []},
+    {"label": "Fetch the template", "depends_on": []},
+    {"label": "Write the report", "depends_on": [0, 1]},
+])
+```
+
+The two fetches run at the same time; the write waits for both. At most three
+steps run at once by default - these steps drive one computer, and a local
+model is the bottleneck.
 
 **Agent** (`Helper` in the code, `/api/agents` over HTTP) — an AI worker that
 advertises capabilities and reports how it is doing. Callers ask for a
@@ -185,6 +202,30 @@ can also target one agent or one task.
 `TOOL_CAPABILITIES` maps the tools in `ai_brain.py` onto the same names, so the
 voice path and an agent calling over HTTP are judged by one set of rules.
 
+## Planning a goal
+
+`Planner` turns a sentence into steps. The model call is injectable, so
+planning is tested without a local model and swapped later without touching
+the orchestrator:
+
+```python
+executor.start("Summarise my notes")        # plans, then runs
+```
+
+```bash
+curl -X POST localhost:8765/api/tasks/plan \
+     -H 'Content-Type: application/json' \
+     -d '{"goal": "Summarise my notes"}'    # steps, without committing to them
+
+curl -X POST localhost:8765/api/tasks \
+     -H 'Content-Type: application/json' \
+     -d '{"goal": "Summarise my notes", "autoplan": true, "run": true}'
+```
+
+A dependency may only point backwards, so a bad plan cannot produce a cycle.
+An unreadable answer, or an unreachable model, falls back to one step holding
+the goal - planning never blocks the work.
+
 ## Running a task
 
 `TaskExecutor` works the steps for you. It stops for a pending approval,
@@ -212,9 +253,24 @@ curl -X POST localhost:8765/api/tasks \
      -d '{"goal": "Summarise my notes", "steps": ["Reading notes"], "run": true}'
 ```
 
-Steps run one at a time on a background thread. An emergency stop cancels the
-task at the next step boundary; it does not interrupt a tool call already in
-flight.
+Work runs on background threads. `POST /api/tasks/{id}/cancel` and an
+emergency stop interrupt a running step rather than waiting for it: the step
+carries a cancel token that the agent loop checks between tool calls, and the
+step is then recorded as stopped part-way.
+
+### Capabilities are enforced, not just brokered
+
+While a step runs, every tool it calls is checked against the catalog. A tool
+with no capability behind it runs; a tool whose capability is already granted
+runs; anything else goes through the broker, and the model is told why it was
+refused:
+
+```
+Not allowed: google.gmail.send needs your approval first.
+```
+
+This is what makes `request_capability` more than advice. `TOOL_CAPABILITIES`
+in `capabilities.py` is the mapping.
 
 ## Running the API
 
@@ -289,7 +345,8 @@ carries `fields`, naming what was wrong.
 | `GET` | `/health` | Liveness check. |
 | `GET` | `/api/status` | Counts for a home or security screen. |
 | `GET` | `/api/tasks` | List tasks. `?active_only=true` hides finished ones. |
-| `POST` | `/api/tasks` | Create a task from a goal and its steps. |
+| `POST` | `/api/tasks` | Create a task. Takes `steps` (a sequence), `plan` (a graph), or `autoplan`. |
+| `POST` | `/api/tasks/plan` | Break a goal into steps without running them. |
 | `GET` | `/api/tasks/{id}` | One task with steps, progress and current step. |
 | `POST` | `/api/tasks/{id}/run` | Work the task's steps through the AI brain. Returns `202` as soon as work starts. |
 | `POST` | `/api/tasks/{id}/steps/start` | Mark a step as being worked on. |
@@ -369,21 +426,22 @@ These are known gaps, not oversights:
 - **Tokens do not expire.** A paired device stays paired until it is revoked.
   There is no refresh or rotation yet.
 - **Rate limiting is per process.** Restarting the API resets every bucket.
-- **Capabilities are brokered, not enforced at the call site.** An agent that
-  ignores the answer and calls a tool directly is not stopped yet; wiring the
-  broker into the tool loop is WP5.
+- **Enforcement covers the tools JARVIS knows.** A tool missing from
+  `TOOL_CAPABILITIES` is treated as needing no capability, so new tools must be
+  added there as they are written.
 - **Agent selection is a first match, not a scheduler.** It prefers idle then
   least-recently-used. There is no load balancing or cost awareness.
 - **Health is swept on read, not by a timer.** An agent flips to `offline` the
   next time agents, devices or status are listed, not the moment it goes quiet.
 - **Agents are not authenticated separately.** An agent calls through a paired
   device's token; there is no per-agent credential yet.
-- **Steps are not planned automatically.** The caller supplies the steps. A
-  goal with no steps is run as a single piece of work.
-- **A running step cannot be interrupted.** Cancellation and emergency stop
-  are honoured between steps, not inside a tool call that is already running.
-- **Helpers are selected but not marked busy.** Execution does not yet set a
-  helper to `working` or release it afterwards.
+- **A running step is interrupted between tool calls, not inside one.** A tool
+  that has already started - a long shell command - finishes before the step
+  notices it was stopped.
+- **Failure fails the whole task.** There is no per-step retry and no
+  alternative branch yet; that is task recovery work.
+- **Agents are selected but not marked busy.** Execution does not yet set an
+  agent to `working` or release it afterwards.
 - **Checkpoints are stored but not yet replayed.** `save_checkpoint` persists
   state; automatic recovery onto another helper is not implemented.
 - **Permission expiry is checked on read**, not by a background timer. A grant
@@ -396,10 +454,12 @@ These are known gaps, not oversights:
 python -m unittest discover -s tests
 ```
 
-207 tests cover the task lifecycle, capability matching, permission expiry and
+236 tests cover the task lifecycle, capability matching, permission expiry and
 revocation, the approval flow, emergency stop, step execution, failure and
 cancellation paths, pairing and token authentication, rate limiting, schema
 migrations, the capability catalog, policy precedence, the broker's grant,
 hold and refuse paths, agent registration, heartbeats and staleness, the kill
-switch, the HTTP and native adapters, and the HTTP and WebSocket surface. The executor tests use an
+switch, the HTTP and native adapters, planning and its fallbacks, the step
+graph and its parallelism, cancellation part-way through a step, capability
+enforcement at the call site, and the HTTP and WebSocket surface. The executor tests use an
 injected runner, so none of them need Ollama.

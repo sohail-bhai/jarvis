@@ -325,8 +325,8 @@ class ControlPlane:
 
         self.store.save_task(task)
 
-        for position, label in enumerate(steps or []):
-            self.store.save_step(TaskStep(task_id=task.id, position=position, label=label))
+        for position, entry in enumerate(steps or []):
+            self.store.save_step(self._build_step(task.id, position, entry))
 
         self.record(f"Started working on: {goal}", EventType.TASK_CREATED, task_id=task.id)
 
@@ -335,6 +335,25 @@ class ControlPlane:
                         task_id=task.id)
 
         return task
+
+    @staticmethod
+    def _build_step(task_id, position, entry):
+        """A step is either a label or a dict describing the graph node.
+
+        A plain list of labels is a sequence, which is what a caller listing
+        steps means. Only a caller (or the planner) that says `depends_on`
+        opts into steps running at the same time.
+        """
+        if isinstance(entry, str):
+            return TaskStep(task_id=task_id, position=position, label=entry,
+                            depends_on=[position - 1] if position else [])
+
+        return TaskStep(task_id=task_id, position=position,
+                        label=entry.get("label", ""),
+                        depends_on=[int(value) for value in
+                                    entry.get("depends_on", []) or []],
+                        agent_id=entry.get("agent_id", ""),
+                        capability=entry.get("capability", ""))
 
     def get_task(self, task_id):
         return self.store.get_task(task_id)

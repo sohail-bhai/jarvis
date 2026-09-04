@@ -23,14 +23,19 @@ class AgentUnavailable(Exception):
 
 
 class NativeAdapter:
-    """Runs the step in this process, through the JARVIS agent loop."""
+    """Runs the step in this process, through the JARVIS agent loop.
+
+    `token` lets the step stop between tool calls, and `authorize` decides per
+    tool whether the capability behind it was actually granted.
+    """
 
     framework = "native"
 
     def __init__(self, runner=None):
         self._runner = runner
 
-    def run_step(self, instruction, context="", agent=None):
+    def run_step(self, instruction, context="", agent=None, token=None,
+                 authorize=None):
         if self._runner is not None:
             return self._runner(instruction, context)
 
@@ -38,7 +43,8 @@ class NativeAdapter:
         # assistant's heavier runtime dependencies.
         from assistant import ai_brain
 
-        return ai_brain.run_task_step(instruction, context=context)
+        return ai_brain.run_task_step(instruction, context=context,
+                                      should_continue=token, authorize=authorize)
 
 
 class HttpAdapter:
@@ -54,7 +60,11 @@ class HttpAdapter:
         self._transport = transport or _post_json
         self.timeout = timeout
 
-    def run_step(self, instruction, context="", agent=None):
+    def run_step(self, instruction, context="", agent=None, token=None,
+                 authorize=None):
+        if token is not None and token.cancelled:
+            raise AgentUnavailable("Stopped before the agent was called.")
+
         endpoint = getattr(agent, "endpoint", "")
         if not endpoint:
             raise AgentUnavailable("This agent has no endpoint to call.")

@@ -454,5 +454,62 @@ class AgentTests(ApiTestCase):
         self.assertEqual(404, response.status_code)
 
 
+class PlanningTests(ApiTestCase):
+    def setUp(self):
+        super().setUp()
+        # A planner that needs no local model.
+        self.executor.planner = _FixedPlanner([
+            {"label": "Reading the notes", "depends_on": []},
+            {"label": "Writing the summary", "depends_on": [0]},
+        ])
+
+    def test_a_goal_can_be_planned_without_running_it(self):
+        body = self.client.post("/api/tasks/plan",
+                                json={"goal": "Summarise my notes"}).json()
+
+        self.assertEqual(["Reading the notes", "Writing the summary"],
+                         [step["label"] for step in body["steps"]])
+        self.assertEqual([], self.client.get("/api/tasks").json())
+
+    def test_autoplan_creates_the_steps(self):
+        detail = self.client.post("/api/tasks",
+                                  json={"goal": "Summarise my notes",
+                                        "autoplan": True}).json()
+
+        self.assertEqual(["Reading the notes", "Writing the summary"],
+                         [step["label"] for step in detail["steps"]])
+
+    def test_a_graph_can_be_posted_directly(self):
+        detail = self.client.post("/api/tasks", json={
+            "goal": "Two parts",
+            "plan": [{"label": "Fetch the data", "depends_on": []},
+                     {"label": "Write it up", "depends_on": [0]}],
+        }).json()
+
+        self.assertEqual([0], detail["steps"][1]["depends_on"])
+
+    def test_cancelling_stops_the_task(self):
+        created = self.client.post("/api/tasks",
+                                   json={"goal": "Tidy my notes",
+                                         "steps": ["Reading notes"]}).json()
+
+        body = self.client.post(f"/api/tasks/{created['id']}/cancel").json()
+
+        self.assertEqual("cancelled", body["status"])
+
+    def test_cancelling_an_unknown_task_is_a_404(self):
+        self.assertEqual(404, self.client.post("/api/tasks/nope/cancel").status_code)
+
+
+class _FixedPlanner:
+    """A planner that returns a known plan, so tests need no model."""
+
+    def __init__(self, steps):
+        self.steps = steps
+
+    def plan(self, goal):
+        return list(self.steps)
+
+
 if __name__ == "__main__":
     unittest.main()

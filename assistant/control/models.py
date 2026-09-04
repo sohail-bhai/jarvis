@@ -239,13 +239,25 @@ class Helper:
 
 @dataclass
 class TaskStep:
-    """One observable step, phrased for a person: 'Finding relevant files'."""
+    """One observable step, phrased for a person: 'Finding relevant files'.
+
+    Steps form a graph rather than a straight line: `depends_on` holds the
+    positions that must finish first, so independent steps can run at the same
+    time without the caller having to say so.
+    """
     id: str = field(default_factory=new_id)
     task_id: str = ""
     position: int = 0
     label: str = ""
     status: StepStatus = StepStatus.PENDING
     detail: str = ""
+    depends_on: list = field(default_factory=list)   # positions, not ids
+    agent_id: str = ""              # who should do it, when it matters
+    capability: str = ""            # what access it needs, if any
+
+    @property
+    def is_finished(self):
+        return self.status in (StepStatus.DONE, StepStatus.SKIPPED)
 
     def to_dict(self):
         return _serialise(self)
