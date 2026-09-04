@@ -218,12 +218,12 @@ def handle_app_command(command):
 def google_search(command):
     query = ""
 
-    if "search google for" in command:
-        query = command.replace("search google for", "", 1).strip()
-    elif "google search" in command:
-        query = command.replace("google search", "", 1).strip()
+    if command.startswith("search google for "):
+        query = command[len("search google for "):].strip()
+    elif command.startswith("google search "):
+        query = command[len("google search "):].strip()
     elif command.startswith("search "):
-        query = command.replace("search", "", 1).strip()
+        query = command[len("search "):].strip()
 
     if query:
         speak(f"Searching Google for {query}")
@@ -257,17 +257,17 @@ def youtube_search(command):
 
     return False
 
-def handle_youtube_ai_command(command):
+def handle_web_interact_ai_command(command):
     """
-    Routes YouTube compound commands (search + interact) to the AI brain.
+    Routes compound commands (search + interact) for Web/YouTube to the AI brain.
     Examples: 'open youtube search for hasini and play the 3rd video'
-              'search youtube for lo-fi and play the first result'
-    The AI brain chains: search_youtube → wait → get_clickable_elements → click_at.
+              'search google for weather and click the first link'
+    The AI brain chains: search_youtube/google → wait → get_clickable_elements → click_at.
     """
     c = command.lower()
-    has_yt = "youtube" in c
-    has_interact = any(w in c for w in ["play", "click", "select", "watch", "open the video", "open the first"])
-    if has_yt and has_interact:
+    has_web = "youtube" in c or "google" in c or "search" in c
+    has_interact = any(w in c for w in ["play", "click", "select", "watch", "open the video", "open the first", "open the link"])
+    if has_web and has_interact:
         ask_ai(command, auto_confirm=True)
         return True
     return False
@@ -526,7 +526,7 @@ def execute_single_command(command, auto_confirm=False):
     if open_website(command):
         return True
 
-    if handle_youtube_ai_command(command):
+    if handle_web_interact_ai_command(command):
         return True
 
     if youtube_search(command):

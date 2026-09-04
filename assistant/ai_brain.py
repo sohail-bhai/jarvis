@@ -833,12 +833,12 @@ def get_system_prompt():
         "- 'voice_rate': Reading speed (default 170. Higher is faster).\n"
         "- 'voice_volume': Audio volume (default 1.0. Range 0.0 to 1.0).\n\n"
         "CRITICAL RULE: Always use the provided tools to accomplish the user's tasks, chaining them if necessary. "
-        "YOUTUBE PLAY EXAMPLE: If asked 'search youtube for hasini and play the 3rd video', do this EXACTLY: "
-        "Step 1: call search_youtube(query='hasini') to open YouTube search results. "
+        "WEB INTERACT EXAMPLE: If asked 'search youtube for hasini and play the 3rd video' OR 'search google for weather and click the 1st link', do this EXACTLY: "
+        "Step 1: call search_youtube(query=...) or search_google(query=...) to open the browser search results. "
         "Step 2: call get_clickable_elements() to get all clickable items on screen with their (x,y) coordinates. "
-        "Step 3: Find the 3rd video thumbnail or link in the elements list (skip ads, header buttons, and sidebar items — focus on video title links in the main results grid). "
+        "Step 3: Find the correct link/thumbnail in the elements list (skip ads, header buttons, and sidebar items — focus on main results grid). "
         "Step 4: call click_at(x=<x>, y=<y>) on that element. "
-        "NEVER open a URL directly with the video index. ALWAYS use get_clickable_elements then click_at."
+        "NEVER open a URL directly with the index. ALWAYS use get_clickable_elements then click_at."
     )
 
 conversation_history = []
