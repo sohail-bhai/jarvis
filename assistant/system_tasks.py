@@ -808,9 +808,12 @@ def read_file(path):
 def write_file(path, content):
     """Writes text content to a local file (overwrites if exists)."""
     try:
-        with open(path, "w", encoding="utf-8") as f:
+        from pathlib import Path
+        target_path = Path(path)
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(target_path, "w", encoding="utf-8") as f:
             f.write(content)
-        return f"Successfully wrote to {path}"
+        return f"Successfully wrote to {target_path}"
     except Exception as e:
         return f"Failed to write file: {e}"
 

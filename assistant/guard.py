@@ -65,8 +65,14 @@ def _evaluate_policy(tool_name: str, args: dict, origin: str) -> bool:
 
 def coerce_args(func: Callable, kwargs: dict) -> dict:
     import inspect
-    sig = inspect.signature(func)
-    coerced = {}
+    try:
+        sig = inspect.signature(func)
+    except (ValueError, TypeError):
+        return kwargs
+
+    has_var_keyword = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
+    coerced = dict(kwargs) if has_var_keyword else {}
+
     for name, param in sig.parameters.items():
         if name in kwargs:
             val = kwargs[name]
