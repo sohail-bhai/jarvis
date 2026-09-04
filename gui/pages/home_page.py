@@ -20,6 +20,13 @@ from gui.store import store
 from gui.widgets.card import Card
 
 
+def _today() -> str:
+    """Today's date, without %-d: that is a glibc extension and Windows
+    raises on it."""
+    now = datetime.datetime.now()
+    return now.strftime(f"%A, {now.day} %B")
+
+
 class HomePage(ctk.CTkScrollableFrame):
     # Room down either side of the page. Generous on purpose: whitespace is
     # most of what separates a considered interface from a dense one.
@@ -82,7 +89,7 @@ class HomePage(ctk.CTkScrollableFrame):
 
         ctk.CTkLabel(
             header,
-            text=datetime.datetime.now().strftime("%A, %-d %B"),
+            text=_today(),
             font=theme.font(theme.SIZE_SMALL),
             text_color=theme.TEXT_MUTED,
         ).pack(side="right", pady=(18, 0))
