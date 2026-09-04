@@ -5,11 +5,17 @@ from assistant.browser.actions import (
     browser_ask_site,
     browser_click,
     browser_elements,
+    browser_fill_form,
+    browser_new_tab,
     browser_press,
     browser_read,
     browser_screenshot,
+    browser_switch_tab,
+    browser_tabs,
     browser_type,
     browser_wait_for,
+    browser_wait_for_login,
+    remember_about_site,
 )
 from assistant.browser.session import (
     BrowserSession,
@@ -21,7 +27,8 @@ from assistant.browser.session import (
 
 __all__ = [
     "BrowserSession", "BrowserUnavailable", "browse", "browser_ask_site",
-    "browser_click", "browser_elements", "browser_press", "browser_read",
-    "browser_screenshot", "browser_type", "browser_wait_for",
-    "get_session", "reset_session", "set_session",
+    "browser_click", "browser_elements", "browser_fill_form", "browser_new_tab",
+    "browser_press", "browser_read", "browser_screenshot", "browser_switch_tab",
+    "browser_tabs", "browser_type", "browser_wait_for", "browser_wait_for_login",
+    "remember_about_site", "get_session", "reset_session", "set_session",
 ]

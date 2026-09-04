@@ -9,6 +9,7 @@ actually on screen rather than from what was expected.
 import logging
 
 from assistant.browser.session import BrowserUnavailable, get_session
+from assistant.site_memory import get_site_memory
 
 logger = logging.getLogger(__name__)
 
@@ -53,10 +54,88 @@ def _guarded(action, *args, **kwargs):
 # -- the tools --------------------------------------------------------------
 
 def browse(url):
-    """Open a web page and report what is on it."""
+    """Open a web page and report what is on it.
+
+    Anything learned about this site before is handed back with the page, so
+    the second visit does not start from nothing.
+    """
     def run():
         _session().goto(url)
+        hint = get_site_memory().as_hint(url)
+        parts = [_page_summary(), _element_list()]
+        if hint:
+            parts.insert(0, hint)
+        if _session().looks_like_login():
+            parts.append(
+                "This page is asking for a sign-in. Do not try to type a "
+                "password. Call browser_wait_for_login and let the user do it "
+                "in the window.")
+        return "\n\n".join(parts)
+    return _guarded(run)
+
+
+def browser_fill_form(fields):
+    """Fill several boxes in one go: {"Email": "...", "3": "..."}."""
+    def run():
+        parsed = _as_dict(fields)
+        if not parsed:
+            return ("Send the fields as an object, like "
+                    '{"Email": "me@example.com", "Password": "secret://my_password"}.')
+        filled = _session().fill_form(parsed)
+        return f"Filled: {', '.join(filled)}.\n\n{_page_summary()}"
+    return _guarded(run)
+
+
+def browser_tabs():
+    """List the open tabs."""
+    def run():
+        tabs = _session().tabs()
+        lines = [f"[{tab['index']}] {tab['title']} ({tab['url']})" for tab in tabs]
+        return "Open tabs:\n" + "\n".join(lines)
+    return _guarded(run)
+
+
+def browser_new_tab(url=""):
+    """Open another tab, so a side trip does not lose the page you were on."""
+    def run():
+        _session().new_tab(url or None)
+        return f"Opened a new tab.\n\n{_page_summary()}\n\n{_element_list()}"
+    return _guarded(run)
+
+
+def browser_switch_tab(index):
+    """Go back to a tab by its number."""
+    def run():
+        _session().switch_tab(index)
         return f"{_page_summary()}\n\n{_element_list()}"
+    return _guarded(run)
+
+
+def browser_wait_for_login(seconds=180):
+    """Hand the window to the user to sign in, then carry on.
+
+    JARVIS never types a password. This waits for the page to stop asking for
+    one, which is what a person doing it themselves looks like from here.
+    """
+    def run():
+        session = _session()
+        if not session.looks_like_login():
+            return f"That page is not asking for a sign-in.\n\n{_page_summary()}"
+
+        signed_in = session.wait_until_signed_in(timeout_ms=int(seconds) * 1000)
+        if not signed_in:
+            return ("Still on the sign-in page. Tell the user to sign in in the "
+                    "browser window, then ask me to continue.")
+        return f"Signed in.\n\n{_page_summary()}\n\n{_element_list()}"
+    return _guarded(run)
+
+
+def remember_about_site(url, note):
+    """Write down something that worked, for the next visit to this site."""
+    def run():
+        notes = get_site_memory().remember(url, note)
+        return (f"Noted for {url}: {note}\n"
+                f"I now know {len(notes)} thing(s) about that site.")
     return _guarded(run)
 
 
@@ -147,6 +226,21 @@ def browser_ask_site(url, prompt, answer_appears_within=90):
 
 
 # -- helpers ----------------------------------------------------------------
+
+def _as_dict(value):
+    """Models send objects as objects, or as JSON in a string. Accept both."""
+    import json
+
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, dict) else None
+        except ValueError:
+            return None
+    return None
+
 
 def _as_bool(value):
     if isinstance(value, bool):

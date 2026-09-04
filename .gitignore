@@ -23,3 +23,6 @@ data/secret.key
 # The logged-in browser profile. Treat it like a password store.
 data/browser_profile/
 data/browser_last.png
+
+# What JARVIS learned about sites you visit
+data/site_notes.json

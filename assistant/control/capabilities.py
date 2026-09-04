@@ -29,6 +29,8 @@ CATALOG = {
     "browser.upload": (RiskLevel.HIGH, "Upload your files to a website"),
     "browser.purchase": (RiskLevel.CRITICAL, "Buy something"),
     "browser.interact": (RiskLevel.HIGH, "Click and type on a website as you"),
+    "web.api.read": (RiskLevel.MEDIUM, "Read from a service's API as you"),
+    "web.api.write": (RiskLevel.HIGH, "Change something through a service's API"),
 
     # -- This computer ----------------------------------------------------
     "filesystem.read": (RiskLevel.MEDIUM, "Read files on this computer"),
@@ -102,6 +104,14 @@ TOOL_CAPABILITIES = {
     "browser_press": "browser.interact",
     "browser_wait_for": "browser.read",
     "browser_ask_site": "browser.interact",
+    "browser_fill_form": "browser.interact",
+    "browser_new_tab": "browser.navigate",
+    "browser_switch_tab": "browser.navigate",
+    "browser_tabs": "browser.read",
+    "browser_wait_for_login": "browser.read",
+    "remember_about_site": "memory.write",
+    "web_api_get": "web.api.read",
+    "web_api_call": "web.api.write",
 
     # GitLab. Proposing a change and merging it are deliberately different.
     "gitlab_list_issues": "gitlab.read",

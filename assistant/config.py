@@ -30,6 +30,12 @@ DEFAULT_CONFIG = {
     # phone's own connection.
     "notify_telegram": False,
 
+    # Web work is many small tool calls, so one task step gets a longer loop.
+    "agent_max_steps": 15,
+    # Seeing the browser matters: some sites serve an empty page to a headless
+    # one, and a login has to be done by a person in a window they can see.
+    "browser_headless": False,
+
     "default_volume_step": 5,
     "listen_timeout_seconds": 8,
     "listen_phrase_time_limit_seconds": 25,

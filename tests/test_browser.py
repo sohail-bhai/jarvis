@@ -7,8 +7,13 @@ what the page became, decide again.
 
 import unittest
 
+import shutil
+import tempfile
+from pathlib import Path
+
 from assistant.browser import actions
 from assistant.browser.session import BrowserUnavailable, set_session, reset_session
+from assistant.site_memory import SiteMemory, set_site_memory
 
 
 class FakePage:
@@ -32,6 +37,10 @@ class FakeSession:
         self.pressed = []
         self.waited = []
         self.screenshots = 0
+        self.filled = []
+        self.login_page = False
+        self.sign_in_calls = 0
+        self.open_tabs = [start_url]
 
     @property
     def page(self):
@@ -84,6 +93,39 @@ class FakeSession:
         self.screenshots += 1
         return "/tmp/shot.png"
 
+    def fill_form(self, fields):
+        labels = []
+        for target, value in fields.items():
+            match = self.find(target)
+            self.filled.append((match["label"], value))
+            labels.append(match["label"])
+        return labels
+
+    def looks_like_login(self):
+        return self.login_page
+
+    def wait_until_signed_in(self, timeout_ms=None, poll_ms=None):
+        self.sign_in_calls += 1
+        self.login_page = False
+        return True
+
+    def tabs(self):
+        return [{"index": index + 1, "title": self.pages[url].title, "url": url}
+                for index, url in enumerate(self.open_tabs)]
+
+    def new_tab(self, url=None):
+        self.open_tabs.append(url or self.current)
+        if url:
+            self.current = url
+        return self.describe()
+
+    def switch_tab(self, index):
+        position = int(index) - 1
+        if not 0 <= position < len(self.open_tabs):
+            raise LookupError(f"There is no tab {index}.")
+        self.current = self.open_tabs[position]
+        return self.describe()
+
 
 class BrowserTestCase(unittest.TestCase):
     def setUp(self):
@@ -103,9 +145,15 @@ class BrowserTestCase(unittest.TestCase):
         self.session = FakeSession(self.pages, "https://example.com")
         set_session(self.session)
 
+        self.notes_dir = tempfile.mkdtemp(prefix="jarvis-browser-notes-")
+        self.notes = SiteMemory(Path(self.notes_dir) / "site_notes.json")
+        set_site_memory(self.notes)
+
     def tearDown(self):
         set_session(None)
         reset_session()
+        set_site_memory(None)
+        shutil.rmtree(self.notes_dir, ignore_errors=True)
 
 
 class LookingTests(BrowserTestCase):
@@ -206,6 +254,85 @@ class FailureTests(BrowserTestCase):
         set_session(Broken())
 
         self.assertIn("tab crashed", actions.browser_read())
+
+
+class SiteMemoryTests(BrowserTestCase):
+    def test_what_was_learned_before_comes_back_with_the_page(self):
+        actions.remember_about_site("https://example.com", "the docs link is [1]")
+
+        result = actions.browse("https://example.com")
+
+        self.assertIn("What you learned about example.com before", result)
+        self.assertIn("the docs link is [1]", result)
+
+    def test_a_site_with_no_notes_just_shows_the_page(self):
+        result = actions.browse("https://example.com")
+
+        self.assertNotIn("What you learned", result)
+
+    def test_a_note_is_confirmed_back_to_the_model(self):
+        result = actions.remember_about_site("https://example.com", "needs a login")
+
+        self.assertIn("Noted for https://example.com", result)
+        self.assertEqual(["needs a login"], self.notes.recall("https://example.com"))
+
+
+class SignInTests(BrowserTestCase):
+    def test_a_login_page_is_pointed_out_rather_than_guessed_at(self):
+        self.session.login_page = True
+
+        result = actions.browse("https://example.com")
+
+        self.assertIn("asking for a sign-in", result)
+        self.assertIn("Do not try to type a password", result)
+
+    def test_waiting_hands_the_window_to_the_person(self):
+        self.session.login_page = True
+
+        result = actions.browser_wait_for_login(seconds=1)
+
+        self.assertEqual(1, self.session.sign_in_calls)
+        self.assertIn("Signed in", result)
+
+    def test_waiting_on_a_page_that_is_not_a_login_says_so(self):
+        result = actions.browser_wait_for_login(seconds=1)
+
+        self.assertIn("not asking for a sign-in", result)
+        self.assertEqual(0, self.session.sign_in_calls)
+
+
+class FormAndTabTests(BrowserTestCase):
+    def test_a_form_is_filled_in_one_call(self):
+        actions.browse("https://chat.example.com")
+
+        result = actions.browser_fill_form({"Message the assistant": "hello"})
+
+        self.assertEqual([("Message the assistant", "hello")], self.session.filled)
+        self.assertIn("Filled: Message the assistant", result)
+
+    def test_fields_sent_as_json_text_are_understood(self):
+        actions.browse("https://chat.example.com")
+
+        actions.browser_fill_form('{"Message the assistant": "typed as json"}')
+
+        self.assertEqual([("Message the assistant", "typed as json")],
+                         self.session.filled)
+
+    def test_something_that_is_not_an_object_is_explained(self):
+        self.assertIn("Send the fields as an object",
+                      actions.browser_fill_form("just a string"))
+
+    def test_a_side_trip_can_open_and_return(self):
+        actions.browser_new_tab("https://example.com/docs")
+
+        listed = actions.browser_tabs()
+        back = actions.browser_switch_tab(1)
+
+        self.assertIn("[2] Docs", listed)
+        self.assertIn("Example Domain", back)
+
+    def test_switching_to_a_tab_that_is_not_there_says_so(self):
+        self.assertIn("There is no tab 9", actions.browser_switch_tab(9))
 
 
 if __name__ == "__main__":

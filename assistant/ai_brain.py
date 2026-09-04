@@ -16,6 +16,8 @@ import assistant.dev_tools as dev_tools
 import assistant.calendar_sync as calendar_sync
 import assistant.browser as browser
 import assistant.gitlab_agent as gitlab_agent
+import assistant.web_api as web_api
+import assistant.site_memory as site_memory
 import assistant.workspace as workspace
 import webbrowser
 import urllib.parse
@@ -126,6 +128,16 @@ AVAILABLE_FUNCTIONS = {
     "browser_wait_for": browser.browser_wait_for,
     "browser_screenshot": browser.browser_screenshot,
     "browser_ask_site": browser.browser_ask_site,
+    "browser_fill_form": browser.browser_fill_form,
+    "browser_tabs": browser.browser_tabs,
+    "browser_new_tab": browser.browser_new_tab,
+    "browser_switch_tab": browser.browser_switch_tab,
+    "browser_wait_for_login": browser.browser_wait_for_login,
+    "remember_about_site": browser.remember_about_site,
+
+    # Any service with an API, without a module per service.
+    "web_api_get": web_api.web_api_get,
+    "web_api_call": web_api.web_api_call,
 
     # GitLab, through its API rather than by clicking.
     "gitlab_list_issues": gitlab_agent.gitlab_list_issues,
@@ -188,6 +200,43 @@ WEB_TOOLS = [
            "answer_appears_within": {"type": "number",
                                      "description": "Seconds to wait. Default 90."}},
           ["url", "prompt"]),
+
+    _tool("browser_fill_form", "Fill several boxes on the page at once. Send an "
+          "object of label or number to value.",
+          {"fields": {"type": "object", "description": '{"Email": "me@x.com"}'}},
+          ["fields"]),
+    _tool("browser_tabs", "List the open browser tabs.", {}),
+    _tool("browser_new_tab", "Open another tab, so a side trip does not lose the "
+          "page you were on.", {"url": {"type": "string"}}),
+    _tool("browser_switch_tab", "Go back to a tab by its number.",
+          {"index": {"type": "number"}}, ["index"]),
+    _tool("browser_wait_for_login", "When a site asks for a sign-in, call this and "
+          "wait. The user signs in themselves in the window. NEVER type a password.",
+          {"seconds": {"type": "number", "description": "How long to wait. Default 180."}}),
+    _tool("remember_about_site", "Write down something you worked out about a site "
+          "- where a page lives, which element is the search box, that it needs a "
+          "login - so the next visit is faster.",
+          {"url": {"type": "string"}, "note": {"type": "string"}},
+          ["url", "note"]),
+
+    _tool("web_api_get", "Read from any service's API. Use this instead of the "
+          "browser whenever the service has an API - the answer is exact and it "
+          "either worked or it did not. Name a stored credential with auth_secret; "
+          "you never handle the value.",
+          {"url": {"type": "string", "description": "Full https:// address."},
+           "params": {"type": "object", "description": "Query parameters."},
+           "auth_secret": {"type": "string",
+                           "description": "Name of a stored credential, e.g. github_token."},
+           "auth_style": {"type": "string",
+                          "description": "bearer, token, private-token, x-api-key or basic."}},
+          ["url"]),
+    _tool("web_api_call", "Change something through a service's API: POST, PUT, "
+          "PATCH or DELETE. Same credential handling as web_api_get.",
+          {"method": {"type": "string"}, "url": {"type": "string"},
+           "body": {"type": "object", "description": "JSON body to send."},
+           "params": {"type": "object"},
+           "auth_secret": {"type": "string"}, "auth_style": {"type": "string"}},
+          ["method", "url"]),
 
     _tool("gitlab_list_issues", "List issues on a GitLab project, so you can pick "
           "one to work on. The project looks like 'group/repository'.",
@@ -863,6 +912,21 @@ def get_system_prompt():
         "Perplexity, a search engine - `browser_ask_site` does the whole "
         "round trip in one call and brings the answer back.\n\n"
 
+        "SERVICES WITH AN API: prefer `web_api_get` and `web_api_call` over "
+        "clicking whenever the service has an API - GitHub, Jira, Linear, "
+        "Notion, Slack, a home server, anything. Name the credential with "
+        "`auth_secret` (for example 'github_token') and JARVIS resolves it; you "
+        "never see or send the value itself. If the credential is missing, say "
+        "which one to store rather than trying the browser instead.\n\n"
+
+        "SIGNING IN: you never type a password and never read one. If a page "
+        "asks for a sign-in, call `browser_wait_for_login` and let the user do "
+        "it in the window, then carry on where you left off.\n\n"
+
+        "LEARNING A SITE: when you work out where something lives or how a "
+        "site behaves, call `remember_about_site`. Those notes come back the "
+        "next time you open that domain, so the second visit is faster.\n\n"
+
         "WORKING ON GITLAB: use the GitLab tools, not the browser, because they "
         "make a real commit instead of a click that might have missed. The "
         "order that works: `gitlab_list_issues` to see what is open, "
@@ -1113,7 +1177,8 @@ def ask_ai(command, auto_confirm=False):
 
 
 def run_task_step(instruction, context="", auto_confirm=True,
-                  should_continue=None, authorize=None, resolve_secrets=None):
+                  should_continue=None, authorize=None, resolve_secrets=None,
+                  max_steps=None):
     """Carry out one control plane step with the same tools as the voice loop.
 
     The control plane calls this. It runs in its own short conversation so a
@@ -1138,6 +1203,7 @@ def run_task_step(instruction, context="", auto_confirm=True,
     reply = _agent_loop(conversation,
                         extra_messages=[_memory_message(instruction)],
                         auto_confirm=auto_confirm,
+                        max_steps=max_steps or get_setting("agent_max_steps", 15),
                         should_continue=should_continue, authorize=authorize,
                         resolve_secrets=resolve_secrets)
 

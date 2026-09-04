@@ -289,6 +289,80 @@ class BrowserSession:
             arg=text, timeout=timeout_ms or self.timeout_ms)
         return True
 
+    def fill_form(self, fields):
+        """Fill several boxes at once. `fields` is {label or number: value}."""
+        filled = []
+        for target, value in fields.items():
+            match = self.find(target)
+            handle = match["handle"]
+            handle.click()
+            try:
+                handle.fill(str(value))
+            except Exception:
+                self._page.keyboard.type(str(value))
+            filled.append(match["label"])
+            self._elements = []
+            self.elements()
+        return filled
+
+    def tabs(self):
+        """Every open tab, so a flow that opens one can come back."""
+        self.start()
+        return [{"index": index + 1, "title": page.title(), "url": page.url}
+                for index, page in enumerate(self._context.pages)]
+
+    def new_tab(self, url=None):
+        self.start()
+        page = self._context.new_page()
+        self._page = page
+        self._elements = []
+        if url:
+            return self.goto(url)
+        return self.describe()
+
+    def switch_tab(self, index):
+        self.start()
+        pages = self._context.pages
+        position = int(index) - 1
+        if not 0 <= position < len(pages):
+            raise LookupError(f"There is no tab {index}. There are {len(pages)}.")
+        self._page = pages[position]
+        self._page.bring_to_front()
+        self._elements = []
+        return self.describe()
+
+    def looks_like_login(self):
+        """Whether this page is asking a person to sign in."""
+        page = self.start()
+        try:
+            has_password = page.query_selector("input[type=password]") is not None
+        except Exception:
+            has_password = False
+
+        if has_password:
+            return True
+
+        words = ("sign in", "log in", "login", "continue with google",
+                 "two-factor", "verify it's you")
+        text = self.read_text(limit=1500).lower()
+        return any(word in text for word in words)
+
+    def wait_until_signed_in(self, timeout_ms=180_000, poll_ms=2000):
+        """Wait for a person to finish signing in, in the window they can see.
+
+        JARVIS never types a password. It waits, and carries on once the page
+        stops asking for one.
+        """
+        import time
+
+        deadline = time.monotonic() + timeout_ms / 1000
+        while time.monotonic() < deadline:
+            if not self.looks_like_login():
+                self._elements = []
+                return True
+            time.sleep(poll_ms / 1000)
+        return False
+
     def screenshot(self, path=None):
         page = self.start()
         target = Path(path or (PROJECT_ROOT / "data" / "browser_last.png"))

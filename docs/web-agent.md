@@ -1,8 +1,45 @@
-# Using the web, and working on GitLab
+# Doing work on the internet
+
+JARVIS drives a real browser, calls any service that has an API, and remembers
+what it learned about a site for next time. GitLab has a module of its own
+because a code fix deserves exact operations, but nothing else does - and
+nothing else needs one.
 
 JARVIS drives a real browser and talks to GitLab's API. This is what makes
 "go and look at the issues on that repo" or "ask ChatGPT where to eat" real
 work rather than a canned answer.
+
+## Three ways to work, in order of preference
+
+| The service has… | Use | Why |
+| --- | --- | --- |
+| A REST API | `web_api_get` / `web_api_call` | Exact, and it either worked or it did not |
+| Only a website | `browse` and the browser tools | The same thing a person would do |
+| A code fix to land | the GitLab tools | A real commit on a real branch |
+
+A new service usually needs **no new code**. Store a credential, and the API
+tools reach it:
+
+```bash
+curl -X PUT localhost:8765/api/secrets/github_token \
+     -H 'Content-Type: application/json' -d '{"value": "ghp_..."}'
+```
+
+```python
+web_api_get("https://api.github.com/repos/you/app/issues",
+            params={"state": "open"}, auth_secret="github_token")
+
+web_api_call("POST", "https://api.github.com/repos/you/app/issues/12/comments",
+             body={"body": "Looking at this now."}, auth_secret="github_token")
+```
+
+The model names the credential; it never sees the value. `auth_style` covers
+how each service expects it: `bearer` (GitHub, most), `private-token`
+(GitLab), `token`, `x-api-key`, `basic`. Reading is medium risk and runs;
+changing something is high risk and asks you first.
+
+That one pair of tools covers Jira, Linear, Notion, Slack, Home Assistant, a
+home server, your own backend - anything with HTTP and a token.
 
 ## The browser
 
@@ -71,6 +108,36 @@ after the page itself has loaded.
 | `browser_wait_for(text, seconds)` | Wait for text to appear |
 | `browser_screenshot()` | Save a picture when text is not enough |
 | `browser_ask_site(url, prompt)` | Ask a question on a site and return the answer |
+| `browser_fill_form(fields)` | Fill several boxes at once |
+| `browser_tabs()` / `browser_new_tab(url)` / `browser_switch_tab(n)` | Work in more than one place |
+| `browser_wait_for_login(seconds)` | Hand the window over so the user signs in |
+| `remember_about_site(url, note)` | Write down what you worked out |
+
+### Signing in
+
+JARVIS never types a password and never reads one. When a page asks for a
+sign-in, `browse` says so and the model calls `browser_wait_for_login`, which
+waits for the page to stop asking - which is what a person signing in
+themselves looks like from here. The profile remembers it afterwards, so it
+happens once per site.
+
+### Learning a site
+
+Whatever the model works out - where a page lives, which element is the search
+box, that a site is slow - it can write down with `remember_about_site`. Those
+notes are keyed by domain in `data/site_notes.json` and handed back
+automatically the next time that domain is opened:
+
+```
+What you learned about news.ycombinator.com before:
+- front page stories are the numbered links; comments are 'N comments'
+
+Page: New Links | Hacker News (https://news.ycombinator.com/newest)
+...
+```
+
+Eight notes per site, trimmed to keep them promptable. No model and no network
+needed to read or write them.
 
 ### Headless or watched
 
@@ -124,6 +191,14 @@ capability: the task stops, your phone asks, and approving is what grants the
 access. Reading a page is low risk and just runs; clicking and typing as you
 (`browser.interact`) is high, because on the web those are the same thing.
 
+## How many steps a task gets
+
+A web flow is many small tool calls - open, look, click, look again - so a
+control plane step runs the loop up to `agent_max_steps` times (15 by default,
+set it in `config.json`). Repeated identical calls break out early, and the
+cancel token is checked before every one, so a long flow can still be stopped
+mid-way.
+
 ## What this does not do yet
 
 - **No local checkout.** Fixes are written against the file as read from
@@ -131,8 +206,15 @@ access. Reading a page is low risk and just runs; clicking and typing as you
   the merge request is opened.
 - **One file per fix.** `gitlab_propose_fix` commits a single file. A change
   spanning several files needs several calls, or a task per file.
-- **GitHub is not covered.** The same shape would work; only GitLab is built.
-- **Login is manual.** The first time a site needs a password, log in yourself
-  in the window JARVIS opened. The profile remembers it after that.
+- **GitHub has no dedicated module,** but `web_api_get` and `web_api_call`
+  reach its API today, which covers issues, comments, pull requests and
+  reviews. Only GitLab has purpose-built tools, for the propose-a-fix flow.
+- **Login is manual, on purpose.** The first time a site needs a password, log
+  in yourself in the window JARVIS opened. The profile remembers it after that.
+- **Site notes are written by the model,** so they are as good as the model
+  that wrote them. They are plain text in `data/site_notes.json`, and easy to
+  correct or delete by hand.
+- **No captcha handling.** A site that challenges automation needs you to take
+  over in the window.
 - **A small model will struggle with real code.** `qwen2.5:3b` reads issues and
   navigates well; for an actual code fix, switch to a larger local model first.
