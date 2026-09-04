@@ -1,5 +1,5 @@
 """
-Sidebar component for the JARVIS desktop interface.
+Sidebar component for the VAVE desktop interface.
 
 Text-only navigation on a neutral dark surface. No icons: seven short labels
 read faster than seven labels plus seven pictures.
@@ -31,7 +31,7 @@ class Sidebar(ctk.CTkFrame):
 
         title_lbl = ctk.CTkLabel(
             brand_frame,
-            text="JARVIS",
+            text="VAVE",
             font=theme.font(18, "bold"),
             text_color=theme.SIDEBAR_TEXT,
             anchor="w",
@@ -94,7 +94,7 @@ class Sidebar(ctk.CTkFrame):
 
         self.status_title = ctk.CTkLabel(
             status_row,
-            text="  JARVIS Online",
+            text="  VAVE Online",
             font=theme.font(12, "bold"),
             text_color=theme.SIDEBAR_TEXT,
         )

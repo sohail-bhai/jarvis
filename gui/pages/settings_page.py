@@ -1,7 +1,7 @@
 """
 Settings screen.
 Minimal, non-technical configuration including Security, Emergency Stop,
-What JARVIS Remembers (Memory), and AI Helpers.
+What VAVE Remembers (Memory), and AI Helpers.
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ class SettingsPage(ctk.CTkScrollableFrame):
 
         ctk.CTkLabel(
             header,
-            text="Customize your JARVIS preferences, connected accounts, and privacy.",
+            text="Customize your VAVE preferences, connected accounts, and privacy.",
             font=theme.font(12),
             text_color=theme.TEXT_SECONDARY,
             anchor="w",
@@ -121,7 +121,7 @@ class SettingsPage(ctk.CTkScrollableFrame):
         c1 = ctk.CTkFrame(row1, fg_color="transparent")
         c1.pack(side="left", fill="both", expand=True)
         ctk.CTkLabel(c1, text="Spoken Voice Responses", font=theme.font(12, "bold"), text_color=theme.TEXT_PRIMARY, anchor="w").pack(anchor="w")
-        ctk.CTkLabel(c1, text="JARVIS speaks aloud when completing tasks", font=theme.font(11), text_color=theme.TEXT_MUTED, anchor="w").pack(anchor="w")
+        ctk.CTkLabel(c1, text="VAVE speaks aloud when completing tasks", font=theme.font(11), text_color=theme.TEXT_MUTED, anchor="w").pack(anchor="w")
         switch1 = ctk.CTkSwitch(row1, text="", onvalue=True, offvalue=False)
         switch1.select()
         switch1.pack(side="right")
@@ -157,7 +157,7 @@ class SettingsPage(ctk.CTkScrollableFrame):
         inner.pack(fill="x", padx=16, pady=14)
 
         ctk.CTkLabel(inner, text="You're protected", font=theme.font(14, "bold"), text_color=theme.TEXT_PRIMARY, anchor="w").pack(anchor="w")
-        ctk.CTkLabel(inner, text="● JARVIS is working normally within safe boundaries.", font=theme.font(11), text_color=theme.SUCCESS, anchor="w").pack(anchor="w", pady=(2, 10))
+        ctk.CTkLabel(inner, text="● VAVE is working normally within safe boundaries.", font=theme.font(11), text_color=theme.SUCCESS, anchor="w").pack(anchor="w", pady=(2, 10))
 
         stat_row = ctk.CTkFrame(inner, fg_color="transparent")
         stat_row.pack(fill="x")
@@ -181,7 +181,7 @@ class SettingsPage(ctk.CTkScrollableFrame):
         p_text = ctk.CTkFrame(p_inner, fg_color="transparent")
         p_text.pack(side="left", fill="both", expand=True)
         ctk.CTkLabel(p_text, text="Hackwave Project Access", font=theme.font(12, "bold"), text_color=theme.TEXT_PRIMARY, anchor="w").pack(anchor="w")
-        ctk.CTkLabel(p_text, text="JARVIS can edit files · Expires in 24 minutes", font=theme.font(11), text_color=theme.TEXT_MUTED, anchor="w").pack(anchor="w")
+        ctk.CTkLabel(p_text, text="VAVE can edit files · Expires in 24 minutes", font=theme.font(11), text_color=theme.TEXT_MUTED, anchor="w").pack(anchor="w")
 
         ctk.CTkButton(
             p_inner,
@@ -214,7 +214,7 @@ class SettingsPage(ctk.CTkScrollableFrame):
 
         ctk.CTkButton(
             stop_inner,
-            text="Stop JARVIS",
+            text="Stop VAVE",
             font=theme.font(12, "bold"),
             fg_color=theme.DANGER,
             hover_color=theme.DANGER_HOVER,
@@ -226,7 +226,7 @@ class SettingsPage(ctk.CTkScrollableFrame):
 
     def _confirm_emergency_stop(self):
         modal = ctk.CTkToplevel(self)
-        modal.title("Stop JARVIS?")
+        modal.title("Stop VAVE?")
         modal.geometry("380x260")
         modal.resizable(False, False)
         modal.configure(fg_color=theme.CARD_BG)
@@ -236,7 +236,7 @@ class SettingsPage(ctk.CTkScrollableFrame):
         inner = ctk.CTkFrame(modal, fg_color=theme.CARD_BG)
         inner.pack(fill="both", expand=True, padx=20, pady=20)
 
-        ctk.CTkLabel(inner, text="Stop JARVIS?", font=theme.font(16, "bold"), text_color=theme.DANGER).pack(anchor="w")
+        ctk.CTkLabel(inner, text="Stop VAVE?", font=theme.font(16, "bold"), text_color=theme.DANGER).pack(anchor="w")
         
         info = (
             "This will:\n\n"
@@ -280,8 +280,8 @@ class SettingsPage(ctk.CTkScrollableFrame):
         card = ctk.CTkFrame(self.content_container, fg_color=theme.CARD_BG, corner_radius=14, border_width=1, border_color=theme.CARD_BORDER)
         card.pack(fill="x", pady=4)
 
-        ctk.CTkLabel(card, text="What JARVIS Remembers", font=theme.font(14, "bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=16, pady=(14, 4))
-        ctk.CTkLabel(card, text="JARVIS learns your preferences so you don't have to repeat yourself.", font=theme.font(11), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=16, pady=(0, 12))
+        ctk.CTkLabel(card, text="What VAVE Remembers", font=theme.font(14, "bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=16, pady=(14, 4))
+        ctk.CTkLabel(card, text="VAVE learns your preferences so you don't have to repeat yourself.", font=theme.font(11), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=16, pady=(0, 12))
 
         for mem in store.memories:
             row = ctk.CTkFrame(card, fg_color=theme.MAIN_BG, corner_radius=10)
@@ -318,7 +318,7 @@ class SettingsPage(ctk.CTkScrollableFrame):
         card.pack(fill="x", pady=4)
 
         ctk.CTkLabel(card, text="Connected Services", font=theme.font(14, "bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=16, pady=(14, 4))
-        ctk.CTkLabel(card, text="Third-party platforms and integrations connected to JARVIS.", font=theme.font(11), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=16, pady=(0, 12))
+        ctk.CTkLabel(card, text="Third-party platforms and integrations connected to VAVE.", font=theme.font(11), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=16, pady=(0, 12))
 
         # Every line is checked rather than assumed, so this page can be
         # trusted to say when something is not actually connected.
@@ -362,7 +362,7 @@ class SettingsPage(ctk.CTkScrollableFrame):
         card.pack(fill="x", pady=4)
 
         ctk.CTkLabel(card, text="Your AI Helpers", font=theme.font(14, "bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=16, pady=(14, 4))
-        ctk.CTkLabel(card, text="JARVIS coordinates specialized internal helpers for you behind the scenes.", font=theme.font(11), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=16, pady=(0, 12))
+        ctk.CTkLabel(card, text="VAVE coordinates specialized internal helpers for you behind the scenes.", font=theme.font(11), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=16, pady=(0, 12))
 
         for helper in store.ai_helpers:
             row = ctk.CTkFrame(card, fg_color=theme.MAIN_BG, corner_radius=10)

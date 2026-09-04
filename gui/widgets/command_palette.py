@@ -15,7 +15,7 @@ class CommandPalette(ctk.CTkToplevel):
         super().__init__(parent)
         self.on_execute = on_execute
 
-        self.title("Ask JARVIS")
+        self.title("Ask VAVE")
         self.geometry("540x380")
         self.resizable(False, False)
         self.configure(fg_color=theme.CARD_BG)

@@ -1,7 +1,7 @@
 """
 Home screen.
 
-Three things only: what you can ask, what is connected, and what JARVIS is
+Three things only: what you can ask, what is connected, and what VAVE is
 doing right now. Navigation lives in the sidebar, so it is not repeated here.
 """
 from __future__ import annotations
@@ -279,7 +279,7 @@ class HomePage(ctk.CTkScrollableFrame):
 
         self.task_sub_lbl = ctk.CTkLabel(
             title_col,
-            text=store.current_task.get("subtitle", "JARVIS is researching, organizing files and writing a draft for you."),
+            text=store.current_task.get("subtitle", "VAVE is researching, organizing files and writing a draft for you."),
             font=theme.font(12),
             text_color=theme.TEXT_SECONDARY,
             anchor="w",

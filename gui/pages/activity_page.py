@@ -1,6 +1,6 @@
 """
 Activity Screen component.
-Displays human-readable timeline of past events and what JARVIS has been doing.
+Displays human-readable timeline of past events and what VAVE has been doing.
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ class ActivityPage(ctk.CTkScrollableFrame):
 
         ctk.CTkLabel(
             header,
-            text="What JARVIS has been doing",
+            text="What VAVE has been doing",
             font=theme.font(20, "bold"),
             text_color=theme.TEXT_PRIMARY,
             anchor="w",

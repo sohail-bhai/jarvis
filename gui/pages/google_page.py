@@ -113,7 +113,7 @@ class GooglePage(ctk.CTkScrollableFrame):
 
         ctk.CTkLabel(
             header,
-            text="JARVIS connects to your Google ecosystem so you never have to juggle tabs.",
+            text="VAVE connects to your Google ecosystem so you never have to juggle tabs.",
             font=theme.font(12),
             text_color=theme.TEXT_SECONDARY,
             anchor="w",
@@ -353,7 +353,7 @@ class GooglePage(ctk.CTkScrollableFrame):
             ctk.CTkLabel(content, text=icon, font=theme.font(18)).pack(anchor="w")
             ctk.CTkLabel(content, text=title, font=theme.font(11, "bold"),
                          text_color=theme.TEXT_PRIMARY).pack(anchor="w", pady=(2, 0))
-            # No invented counts: JARVIS has not read these accounts yet.
+            # No invented counts: VAVE has not read these accounts yet.
             ctk.CTkLabel(content,
                          text=services.get(key, {}).get("status", "unknown").title(),
                          font=theme.font(10),
@@ -364,7 +364,7 @@ class GooglePage(ctk.CTkScrollableFrame):
                                     border_color=theme.CARD_BORDER)
         actions_card.pack(fill="x", pady=8)
 
-        ctk.CTkLabel(actions_card, text="Quick Google Actions with JARVIS",
+        ctk.CTkLabel(actions_card, text="Quick Google Actions with VAVE",
                      font=theme.font(13, "bold"),
                      text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=16, pady=(14, 8))
 
@@ -629,7 +629,7 @@ class GooglePage(ctk.CTkScrollableFrame):
                      font=theme.font(13, "bold"),
                      text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=16, pady=(14, 4))
         ctk.CTkLabel(card,
-                     text="JARVIS writes the document or deck in your Drive. "
+                     text="VAVE writes the document or deck in your Drive. "
                           "Nothing is shared with anyone by creating it.",
                      font=theme.font(11), text_color=theme.TEXT_SECONDARY,
                      anchor="w").pack(anchor="w", padx=16)

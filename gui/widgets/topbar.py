@@ -1,5 +1,5 @@
 """
-TopBar component for the JARVIS desktop interface.
+TopBar component for the VAVE desktop interface.
 Contains global search trigger (Ctrl+K), notification bell, and user avatar.
 """
 from __future__ import annotations
@@ -96,7 +96,7 @@ class TopBar(ctk.CTkFrame):
 
         self.search_btn = ctk.CTkButton(
             center_frame,
-            text="Ask JARVIS anything...",
+            text="Ask VAVE anything...",
             font=theme.font(12),
             fg_color=theme.CARD_BG,
             hover_color=theme.CARD_HOVER,

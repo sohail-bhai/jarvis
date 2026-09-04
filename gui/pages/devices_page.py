@@ -36,7 +36,7 @@ class DevicesPage(ctk.CTkScrollableFrame):
 
         ctk.CTkLabel(
             header,
-            text="These are the devices JARVIS can work with.",
+            text="These are the devices VAVE can work with.",
             font=theme.font(12),
             text_color=theme.TEXT_SECONDARY,
             anchor="w",
@@ -59,7 +59,7 @@ class DevicesPage(ctk.CTkScrollableFrame):
     def _build_phone_card(self):
         """Start the local server, and show what to type on the phone.
 
-        The phone talks to this app, not to a second copy of JARVIS: the server
+        The phone talks to this app, not to a second copy of VAVE: the server
         runs inside this process, so a task started on the phone appears here.
         """
         card = ctk.CTkFrame(
@@ -280,7 +280,7 @@ class DevicesPage(ctk.CTkScrollableFrame):
         # Capabilities list
         ctk.CTkLabel(
             inner,
-            text="\nJARVIS can:",
+            text="\nVAVE can:",
             font=theme.font(11, "bold"),
             text_color=theme.TEXT_MUTED,
             anchor="w",

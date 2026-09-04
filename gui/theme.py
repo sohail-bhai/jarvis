@@ -1,5 +1,5 @@
 """
-Theme definitions for the JARVIS Desktop UI.
+Theme definitions for the VAVE Desktop UI.
 
 One neutral base, one accent, and muted semantic colors that are only used
 to say something the user needs to know (success, attention, danger).

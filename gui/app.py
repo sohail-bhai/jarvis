@@ -1,5 +1,5 @@
 """
-JARVIS Desktop Assistant Frontend Application.
+VAVE Desktop Assistant Frontend Application.
 Production-quality CustomTkinter desktop interface designed for normal, non-technical users.
 """
 from __future__ import annotations
@@ -48,7 +48,7 @@ class JarvisDashboardApp(ctk.CTk):
         theme.configure_theme(ctk)
         super().__init__()
 
-        self.title("JARVIS — Your AI, Everywhere")
+        self.title("VAVE — Your AI, Everywhere")
         self.geometry("1240x740")
         self.minsize(1050, 640)
         self.configure(fg_color=theme.MAIN_BG)
@@ -176,7 +176,7 @@ class JarvisDashboardApp(ctk.CTk):
             "activity": "Activity History",
             "settings": "Settings",
         }
-        self.topbar.set_title(title_map.get(page_id, "JARVIS"))
+        self.topbar.set_title(title_map.get(page_id, "VAVE"))
         store.set_page(page_id)
 
     def open_drawer(self, drawer_type: str, data: any):

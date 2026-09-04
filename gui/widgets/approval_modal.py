@@ -45,7 +45,7 @@ class ApprovalModal(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             hdr,
-            text=approval_data.get("title", "JARVIS needs your approval"),
+            text=approval_data.get("title", "VAVE needs your approval"),
             font=theme.font(16, "bold"),
             text_color=theme.TEXT_PRIMARY,
         ).pack(side="left")

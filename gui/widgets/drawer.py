@@ -94,7 +94,7 @@ class DetailDrawer(ctk.CTkFrame):
         # Capabilities section
         ctk.CTkLabel(
             self.content_area,
-            text="JARVIS can use this device to:",
+            text="VAVE can use this device to:",
             font=theme.font(12, "bold"),
             text_color=theme.TEXT_PRIMARY,
             anchor="w",
@@ -188,7 +188,7 @@ class DetailDrawer(ctk.CTkFrame):
         actions = [
             ("Open File", theme.ACCENT, "#FFFFFF"),
             ("Send to Phone", theme.CARD_BG, theme.TEXT_PRIMARY),
-            ("Give to JARVIS to analyze", theme.CARD_BG, theme.TEXT_PRIMARY),
+            ("Give to VAVE to analyze", theme.CARD_BG, theme.TEXT_PRIMARY),
             ("Share File", theme.CARD_BG, theme.TEXT_PRIMARY),
         ]
         for act_text, bg, fg in actions:
@@ -249,7 +249,7 @@ class DetailDrawer(ctk.CTkFrame):
         # Helper attribution
         ctk.CTkLabel(
             self.content_area,
-            text=f"\n{data.get('helper', 'Handled by JARVIS')}",
+            text=f"\n{data.get('helper', 'Handled by VAVE')}",
             font=theme.font(11, "bold"),
             text_color=theme.TEXT_MUTED,
             anchor="w",
@@ -308,7 +308,7 @@ class DetailDrawer(ctk.CTkFrame):
 
         ctk.CTkLabel(
             card,
-            text=data.get("title", "JARVIS needs your approval"),
+            text=data.get("title", "VAVE needs your approval"),
             font=theme.font(14, "bold"),
             text_color=theme.TEXT_PRIMARY,
             wraplength=240,

@@ -1,6 +1,6 @@
 """
 System Log component for the right panel.
-Displays transparent, human-friendly timeline of what JARVIS is doing behind the scenes.
+Displays transparent, human-friendly timeline of what VAVE is doing behind the scenes.
 """
 from __future__ import annotations
 

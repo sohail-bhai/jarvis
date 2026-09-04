@@ -1,6 +1,6 @@
 """Keeps credentials out of anything the desktop UI shows.
 
-The System Log is a record of what JARVIS is doing, not a place a token
+The System Log is a record of what VAVE is doing, not a place a token
 should ever appear. This lives in its own module, free of tkinter, so it can
 be tested without a display and reused by any panel that renders text.
 """

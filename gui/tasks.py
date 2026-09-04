@@ -38,7 +38,7 @@ def start_web_task(goal, on_progress=None, plane=None, executor=None):
     `on_progress(event)` is called from a worker thread for each step, so the
     caller is responsible for hopping back onto the UI thread.
 
-    Returns the task, or None when JARVIS is stopped.
+    Returns the task, or None when VAVE is stopped.
     """
     if plane is None:
         remote = get_remote_plane()

@@ -131,7 +131,7 @@ class FilesPage(ctk.CTkScrollableFrame):
             empty_box.pack(fill="x", pady=20, padx=4)
             ctk.CTkLabel(
                 empty_box,
-                text="No matching files found.\nAsk JARVIS to search for something else.",
+                text="No matching files found.\nAsk VAVE to search for something else.",
                 font=theme.font(12),
                 text_color=theme.TEXT_MUTED,
                 pady=30,
