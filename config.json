@@ -1,0 +1,93 @@
+{
+    "user_name": "Sohail",
+    "assistant_name": "Jarvis",
+    "voice_rate": 170,
+    "voice_volume": 1.0,
+    "llm_model": "qwen2.5:3b",
+    "telegram_bot_token": "8447232874:AAFN-K_8_vhZ5m87gXJ0JWoxCFzetOmg_YQ",
+    "telegram_chat_id": "8751256134",
+    "email_address": "sohailahmedwork87@gmail.com",
+    "email_app_password": "ecvm elya ijxj hlth",
+    "default_volume_step": 5,
+    "listen_timeout_seconds": 8,
+    "listen_phrase_time_limit_seconds": 25,
+    "listen_pause_threshold_seconds": 2.0,
+    "normal_pause_seconds": 2.0,
+    "notes_pause_seconds": 3.0,
+    "normal_max_phrase_time": 25,
+    "notes_max_phrase_time": 60,
+    "websites": {
+        "youtube": "https://www.youtube.com",
+        "google": "https://www.google.com",
+        "gmail": "https://mail.google.com",
+        "github": "https://github.com",
+        "chatgpt": "https://chatgpt.com",
+        "whatsapp": "https://web.whatsapp.com",
+        "whatsapp web": "https://web.whatsapp.com",
+        "instagram": "https://www.instagram.com"
+    },
+    "routines": {
+        "good morning": [
+            "what time is it",
+            "what is the battery percentage",
+            "read my emails"
+        ],
+        "focus mode": [
+            "set volume to 20",
+            "open chatgpt"
+        ]
+    },
+    "test_key": true,
+    "wake_word_enabled": true,
+    "speech_enabled": false,
+    "safety": {
+        "voice": {
+            "mode": "allow",
+            "allow_safe": true,
+            "allow_sensitive": true,
+            "allow_destructive": false,
+            "confirm_sensitive": false,
+            "confirm_destructive": true
+        },
+        "telegram": {
+            "mode": "allow",
+            "allow_safe": true,
+            "allow_sensitive": false,
+            "allow_destructive": false,
+            "confirm_sensitive": true,
+            "confirm_destructive": true
+        },
+        "routine": {
+            "mode": "allow",
+            "allow_safe": true,
+            "allow_sensitive": true,
+            "allow_destructive": true,
+            "confirm_sensitive": false,
+            "confirm_destructive": false
+        }
+    },
+    "overwatch": {
+        "max_z_order": 3,
+        "scan_interval": 1.0,
+        "rules": [
+            {
+                "target_text": "submit",
+                "auto_click": true,
+                "require_focus": false,
+                "pattern": "exact"
+            },
+            {
+                "target_text": "proceed",
+                "auto_click": true,
+                "require_focus": false,
+                "pattern": "exact"
+            },
+            {
+                "target_text": "yes",
+                "auto_click": true,
+                "require_focus": false,
+                "pattern": "exact"
+            }
+        ]
+    }
+}
