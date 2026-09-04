@@ -9,3 +9,11 @@ dist/
 *.spec
 assets/screenshots/*.png
 logs/
+
+# Control plane runtime database
+data/control.db
+data/control.db-wal
+data/control.db-shm
+
+# Generated speech audio
+temp_speech_*.mp3

@@ -1,3 +1,9 @@
+# Control plane service boundary. Serves the desktop app and the mobile
+# client from one place, so both see the same tasks, approvals and activity.
+fastapi
+uvicorn
+websockets
+
 # Core assistant dependencies (cross-platform)
 SpeechRecognition>=3.16.1
 standard-aifc

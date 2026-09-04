@@ -66,6 +66,28 @@ pip install -r requirements.txt
 python main.py
 ```
 
+## Control Plane API
+
+JARVIS coordinates work through a control plane: goals become tasks with
+readable steps, AI helpers are chosen by what they can do, access is
+time-limited, and consequential actions wait for your approval.
+
+It is exposed over HTTP and WebSockets so the desktop app (Windows, macOS and
+Linux) and the mobile client share one source of truth.
+
+```bash
+python -m assistant.api                 # localhost only
+python -m assistant.api --host 0.0.0.0  # reachable from a phone
+```
+
+Interactive API documentation: `http://127.0.0.1:8765/docs`
+
+> `--host 0.0.0.0` lets anything on your network control this computer, and
+> there is no authentication yet. Only use it on a network you trust.
+
+See [docs/control-plane.md](docs/control-plane.md) for the data model,
+the full endpoint list, and known limitations.
+
 ## Safe Development Modes
 
 Normal live voice assistant:
