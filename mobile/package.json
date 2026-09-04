@@ -6,6 +6,7 @@
     "@expo/vector-icons": "^15.0.2",
     "expo": "~57.0.20",
     "expo-blur": "~57.0.2",
+    "expo-build-properties": "~57.0.17",
     "expo-constants": "~57.0.17",
     "expo-document-picker": "~57.0.1",
     "expo-font": "~57.0.3",
@@ -38,7 +39,8 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "build:apk": "powershell -ExecutionPolicy Bypass -File .\\build-apk.ps1"
+    "build:apk": "bash ./build-apk.sh",
+    "build:apk:windows": "powershell -ExecutionPolicy Bypass -File .\\build-apk.ps1"
   },
   "private": true
 }

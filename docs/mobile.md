@@ -42,13 +42,32 @@ It prints the address to type on the phone:
 > why reaching it is not the same as being allowed to use it: a client still
 > has to pair. Use it on a network you trust.
 
-## Connect the phone
+## Install the phone app
+
+Build a standalone APK once and sideload it. It needs no USB debugging, no
+Expo Go and no Metro dev server on your laptop:
 
 ```bash
 cd mobile
 npm install
-npx expo start          # then open it with Expo Go, or run a dev build
+npm run build:apk       # Windows: npm run build:apk:windows
 ```
+
+The APK lands at `mobile/JARVIS.apk`. Copy it to the phone and install it.
+
+It is the **release** variant, which is the whole point: the debug variant has
+no JavaScript bundled into it and looks for a dev server at startup, so it only
+runs while your computer is serving it. The release APK carries the bundle
+inside, and `app.json` turns on `usesCleartextTraffic` so it may talk to your
+computer over plain HTTP on the local network - without that the phone can
+reach the port and still fail every request.
+
+It is signed with the debug keystore that ships with the Android project, which
+is fine for sideloading and demos, and is not the key to publish to Play with.
+
+For development instead, `npx expo start` with Expo Go still works.
+
+## Connect the phone
 
 The app opens on **Connect to your computer**, and asks for two things in the
 order you can actually supply them:
