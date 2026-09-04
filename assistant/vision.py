@@ -83,27 +83,27 @@ def read_screen_text():
     # Tier 2: UIAutomation structural text extraction from active and candidate windows
     try:
         import uiautomation as auto
+        import os
+        current_pid = os.getpid()
         candidates = []
+
+        # Priority 1: Check known document/editor windows directly (Notepad, etc.)
+        for target_class in ("Notepad", "Notepad_Desktop_Old"):
+            np = auto.WindowControl(searchDepth=1, ClassName=target_class)
+            if np.Exists(0.2) and np.ProcessId != current_pid and np not in candidates:
+                candidates.append(np)
+
+        # Priority 2: Check current foreground window if not JARVIS
         fg = auto.GetForegroundControl()
         if fg and fg.ControlType == auto.ControlType.WindowControl:
-            candidates.append(fg)
+            if fg.ProcessId != current_pid and "jarvis" not in fg.Name.lower() and fg not in candidates:
+                candidates.append(fg)
 
+        # Priority 3: Desktop windows excluding JARVIS
         for w in auto.GetRootControl().GetChildren():
-            if w.ControlType == auto.ControlType.WindowControl and w not in candidates:
-                candidates.append(w)
-
-        def _get_doc_len(w):
-            try:
-                for ctrl, depth in auto.WalkControl(w, maxDepth=6):
-                    if ctrl.ControlType in (auto.ControlType.DocumentControl, auto.ControlType.EditControl) or ctrl.ClassName in ("RichEditD2DPT", "Edit"):
-                        tp = ctrl.GetTextPattern()
-                        if tp:
-                            return len(tp.DocumentRange.GetText(-1).strip())
-            except Exception:
-                pass
-            return 0
-
-        candidates.sort(key=_get_doc_len, reverse=True)
+            if w.ControlType == auto.ControlType.WindowControl:
+                if w.ProcessId != current_pid and "jarvis" not in w.Name.lower() and w not in candidates:
+                    candidates.append(w)
 
         # 1. First search all candidate windows specifically for real document/editor controls (Notepad, Word, editors)
         for win in candidates:
@@ -116,17 +116,16 @@ def read_screen_text():
                             doc_text = tp.DocumentRange.GetText(-1)
                     except Exception:
                         pass
-                    if not doc_text:
+                    if doc_text is None:
                         try:
                             vp = ctrl.GetValuePattern()
                             if vp:
                                 doc_text = vp.Value
                         except Exception:
                             pass
-                    if doc_text and doc_text.strip():
+                    if doc_text is not None:
                         normalized = doc_text.replace("\r\n", "\n").replace("\r", "\n").strip()
-                        if normalized:
-                            return normalized
+                        return normalized
 
         # 2. If no dedicated document control found, collect meaningful UI element text, ignoring icon glyphs
         if candidates:

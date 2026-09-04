@@ -29,6 +29,32 @@ def get_os():
 def clamp_number(value, minimum=0, maximum=100):
     return max(minimum, min(maximum, int(value)))
 
+def activate_window(hwnd):
+    """Brings a window by HWND to the foreground and restores it if minimized."""
+    if not hwnd or get_os() != "windows":
+        return False
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        kernel32 = ctypes.windll.kernel32
+        user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+        current_fg = user32.GetForegroundWindow()
+        if current_fg != hwnd:
+            cur_thread = kernel32.GetCurrentThreadId()
+            fg_thread = user32.GetWindowThreadProcessId(current_fg, None)
+            if cur_thread != fg_thread and fg_thread != 0:
+                user32.AttachThreadInput(cur_thread, fg_thread, True)
+                user32.SetForegroundWindow(hwnd)
+                user32.BringWindowToTop(hwnd)
+                user32.AttachThreadInput(cur_thread, fg_thread, False)
+            else:
+                user32.SetForegroundWindow(hwnd)
+                user32.BringWindowToTop(hwnd)
+        return True
+    except Exception as e:
+        logger.debug(f"activate_window failed for hwnd {hwnd}: {e}")
+        return False
+
 _STARTAPPS_CACHE = None
 _STARTAPPS_CACHE_TIME = 0
 
@@ -221,6 +247,7 @@ def open_app(app_name):
                 # If window is already open, activate it instead of launching a duplicate blank window
                 try:
                     import uiautomation as auto
+                    import time
                     app_classes = {"notepad": "Notepad", "calculator": "ApplicationFrameWindow", "calc": "ApplicationFrameWindow"}
                     target_cls = app_classes.get(query)
                     if target_cls:
@@ -228,6 +255,8 @@ def open_app(app_name):
                         if existing.Exists(0.3):
                             speak(f"Opening {display_name}")
                             existing.SetActive()
+                            if existing.NativeWindowHandle:
+                                activate_window(existing.NativeWindowHandle)
                             return True
                 except Exception:
                     pass
@@ -237,6 +266,20 @@ def open_app(app_name):
                 if not cmd.startswith("start "):
                     cmd = f"start {cmd}"
                 os.system(cmd)
+
+                # Wait for the launched window to appear and bring it to foreground
+                if target_cls:
+                    for _ in range(30):
+                        time.sleep(0.1)
+                        try:
+                            new_win = auto.WindowControl(searchDepth=1, ClassName=target_cls)
+                            if new_win.Exists(0.1):
+                                new_win.SetActive()
+                                if new_win.NativeWindowHandle:
+                                    activate_window(new_win.NativeWindowHandle)
+                                break
+                        except Exception:
+                            pass
                 return True
 
         elif system == "darwin":
@@ -661,8 +704,12 @@ def read_screen(line_number=None, **kwargs):
     from assistant.vision import read_screen_text
     
     text = read_screen_text()
-    if not text or not text.strip():
-        return "No readable text found on the screen."
+    if text is None or not text.strip():
+        if line_number is not None:
+            msg = f"The active document is currently blank. Cannot read line {line_number}."
+            speak(msg)
+            return msg
+        return "No readable text found on the screen or the active document is blank."
         
     lines = text.splitlines()
     if line_number is not None:
@@ -683,75 +730,104 @@ def read_screen(line_number=None, **kwargs):
 def write_to_screen_line(line_number: int, text: str):
     """
     Writes or appends text to a specific line in an open editor window (like Notepad).
-    Uses UIAutomation ValuePattern directly on the active document, falling back to keyboard navigation.
+    Uses UIAutomation ValuePattern directly on the active document, falling back to keyboard navigation on the target window only.
     """
     import uiautomation as auto
     import time
     
     clean_text = str(text).strip()
     idx = int(line_number)
+    current_pid = os.getpid()
     
-    # 1. Search candidate windows specifically for document/editor controls
+    # 1. Search candidate windows specifically for document/editor controls (EXCLUDING JARVIS GUI)
     candidates = []
+
+    # Priority 1: Check known document/editor windows directly (Notepad, etc.)
+    for target_class in ("Notepad", "Notepad_Desktop_Old"):
+        np = auto.WindowControl(searchDepth=1, ClassName=target_class)
+        if np.Exists(0.2) and np.ProcessId != current_pid and np not in candidates:
+            candidates.append(np)
+
+    # Priority 2: Check current foreground window if not JARVIS
     fg = auto.GetForegroundControl()
     if fg and fg.ControlType == auto.ControlType.WindowControl:
-        candidates.append(fg)
+        if fg.ProcessId != current_pid and "jarvis" not in fg.Name.lower() and fg not in candidates:
+            candidates.append(fg)
+
+    # Priority 3: Desktop windows excluding JARVIS
     for w in auto.GetRootControl().GetChildren():
-        if w.ControlType == auto.ControlType.WindowControl and w not in candidates:
-            candidates.append(w)
+        if w.ControlType == auto.ControlType.WindowControl:
+            if w.ProcessId != current_pid and "jarvis" not in w.Name.lower() and w not in candidates:
+                candidates.append(w)
 
-    def _get_doc_len(w):
-        try:
-            for ctrl, depth in auto.WalkControl(w, maxDepth=6):
-                if ctrl.ControlType in (auto.ControlType.DocumentControl, auto.ControlType.EditControl) or ctrl.ClassName in ("RichEditD2DPT", "Edit"):
-                    vp = ctrl.GetValuePattern()
-                    if vp:
-                        return len(vp.Value.strip())
-        except Exception:
-            pass
-        return 0
-
-    candidates.sort(key=_get_doc_len, reverse=True)
+    target_win = None
+    target_doc_ctrl = None
 
     for win in candidates:
         for ctrl, depth in auto.WalkControl(win, maxDepth=6):
             if ctrl.ControlType in (auto.ControlType.DocumentControl, auto.ControlType.EditControl) or ctrl.ClassName in ("RichEditD2DPT", "Edit"):
-                try:
-                    vp = ctrl.GetValuePattern()
-                    if vp:
-                        orig = vp.Value.replace("\r\n", "\n").replace("\r", "\n")
-                        lines = orig.splitlines() if orig else []
-                        
-                        while len(lines) < idx:
-                            lines.append("")
-                            
-                        if lines[idx - 1].strip():
-                            lines[idx - 1] = f"{lines[idx - 1]} {clean_text}"
-                        else:
-                            lines[idx - 1] = clean_text
-                            
-                        new_content = "\r\n".join(lines)
-                        vp.SetValue(new_content)
-                        speak(f"Added '{clean_text}' on line {idx}.")
-                        return f"Added '{clean_text}' on line {idx}."
-                except Exception as e:
-                    logger.debug(f"UIAutomation ValuePattern set failed: {e}")
+                target_doc_ctrl = ctrl
+                target_win = win
+                break
+        if target_doc_ctrl:
+            break
+
+    if target_doc_ctrl:
+        # First attempt: ValuePattern SetValue directly on the document control
+        try:
+            vp = target_doc_ctrl.GetValuePattern()
+            if vp:
+                orig = vp.Value.replace("\r\n", "\n").replace("\r", "\n")
+                lines = orig.splitlines() if orig else []
+                
+                while len(lines) < idx:
+                    lines.append("")
                     
-    # 2. Fallback: keyboard navigation
-    try:
-        pyautogui = _get_pyautogui()
-        pyautogui.hotkey('ctrl', 'home')
-        time.sleep(0.1)
-        for _ in range(idx - 1):
-            pyautogui.press('down')
-        pyautogui.press('end')
-        pyautogui.write(f" {clean_text}", interval=0.01)
-        speak(f"Added '{clean_text}' on line {idx}.")
-        return f"Added '{clean_text}' on line {idx}."
-    except Exception as e:
-        logger.warning(f"Keyboard fallback write failed: {e}")
-        speak(f"Could not add text to line {idx}.")
-        return f"Could not add text to line {idx}: {e}"
+                if lines[idx - 1].strip():
+                    lines[idx - 1] = f"{lines[idx - 1]} {clean_text}"
+                else:
+                    lines[idx - 1] = clean_text
+                    
+                new_content = "\r\n".join(lines)
+                vp.SetValue(new_content)
+                speak(f"Added '{clean_text}' on line {idx}.")
+                return f"Added '{clean_text}' on line {idx}."
+        except Exception as e:
+            logger.debug(f"UIAutomation ValuePattern set failed: {e}")
+
+        # Fallback: Keyboard navigation ON THE TARGET EDITOR WINDOW ONLY
+        try:
+            if target_win:
+                target_win.SetActive()
+                if target_win.NativeWindowHandle:
+                    activate_window(target_win.NativeWindowHandle)
+                time.sleep(0.2)
+
+            # Ensure keyboard focus is inside the target document control
+            try:
+                target_doc_ctrl.Click(simulateMove=False)
+                time.sleep(0.1)
+            except Exception:
+                pass
+
+            pyautogui = _get_pyautogui()
+            pyautogui.hotkey('ctrl', 'home')
+            time.sleep(0.1)
+            for _ in range(idx - 1):
+                pyautogui.press('down')
+            pyautogui.press('end')
+            pyautogui.write(f" {clean_text}", interval=0.01)
+            speak(f"Added '{clean_text}' on line {idx}.")
+            return f"Added '{clean_text}' on line {idx}."
+        except Exception as e:
+            logger.warning(f"Keyboard fallback write failed: {e}")
+            speak(f"Could not add text to line {idx}.")
+            return f"Could not add text to line {idx}: {e}"
+
+    # If no target editor control was found, DO NOT BLINDLY TYPE INTO WHATEVER IS ACTIVE!
+    msg = f"Could not find an open editor window to add text on line {idx}."
+    speak(msg)
+    return msg
 
 def analyze_screen(prompt, image_path=None):
     """Takes a screenshot and uses a local Vision AI to answer a question about the screen."""
@@ -930,13 +1006,15 @@ def get_clickable_elements():
     try:
         import uiautomation as auto
         
-        # We'll just scan the current active window to keep it fast
+        current_pid = os.getpid()
         active_window = auto.GetForegroundControl()
-        if not active_window:
+        if not active_window or active_window.ProcessId == current_pid or "jarvis" in active_window.Name.lower():
+            active_window = None
             for w in auto.GetRootControl().GetChildren():
                 if w.ControlType == auto.ControlType.WindowControl and w.BoundingRectangle.width() > 100:
-                    active_window = w
-                    break
+                    if w.ProcessId != current_pid and "jarvis" not in w.Name.lower():
+                        active_window = w
+                        break
         if not active_window:
             active_window = auto.GetRootControl()
             
