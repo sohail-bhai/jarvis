@@ -65,7 +65,31 @@ class GrantRequest(BaseModel):
 class RegisterHelperRequest(BaseModel):
     name: str
     capabilities: list[str]
-    framework: str = "native"
+    framework: str = Field("native", description="native, http, mcp, langgraph, crewai.")
+    version: str = ""
+    endpoint: str = Field("", description="Where a remote agent is reached.")
+    metadata: dict = Field(default_factory=dict)
+
+
+class HeartbeatRequest(BaseModel):
+    status: str = Field("", description="idle, working or offline.")
+    latency_ms: int | None = Field(None, ge=0, description="How long the last work took.")
+    ok: bool | None = Field(None, description="Whether the last work succeeded.")
+
+
+class KillAgentRequest(BaseModel):
+    reason: str = ""
+
+
+class RegisterDeviceRequest(BaseModel):
+    name: str
+    kind: str = "computer"
+    platform: str = ""
+    capabilities: list[str] = Field(default_factory=list)
+
+
+class DeviceHeartbeatRequest(BaseModel):
+    capabilities: list[str] | None = None
 
 
 class StepUpdateRequest(BaseModel):
@@ -357,14 +381,85 @@ def create_app(control=None, executor=None, security=None):
     def list_devices():
         return [device.to_dict() for device in plane.list_devices()]
 
+    @app.post("/api/devices", status_code=201, tags=["devices"])
+    def register_device(request: RegisterDeviceRequest):
+        device = plane.register_device(request.name, kind=request.kind,
+                                       platform_name=request.platform,
+                                       capabilities=request.capabilities)
+        return device.to_dict()
+
+    @app.post("/api/devices/{device_id}/heartbeat", tags=["devices"])
+    def device_heartbeat(device_id: str, request: DeviceHeartbeatRequest):
+        """A device says it is still here, and what it can do."""
+        device = plane.device_heartbeat(device_id, capabilities=request.capabilities)
+        if device is None:
+            raise HTTPException(status_code=404, detail="No such device.")
+        return device.to_dict()
+
+    # -- agents -------------------------------------------------------------
+    # /api/helpers is the older name for the same thing and still works.
+
+    @app.get("/api/agents", tags=["agents"])
     @app.get("/api/helpers", tags=["helpers"])
-    def list_helpers():
+    def list_agents():
         return [helper.to_dict() for helper in plane.list_helpers()]
 
+    @app.post("/api/agents", status_code=201, tags=["agents"])
     @app.post("/api/helpers", status_code=201, tags=["helpers"])
-    def register_helper(request: RegisterHelperRequest):
+    def register_agent(request: RegisterHelperRequest):
         helper = plane.register_helper(request.name, request.capabilities,
-                                       framework=request.framework)
+                                       framework=request.framework,
+                                       version=request.version,
+                                       endpoint=request.endpoint,
+                                       metadata=request.metadata)
+        return helper.to_dict()
+
+    @app.get("/api/agents/health", tags=["agents"])
+    def agent_health():
+        """One row per agent: status, error rate and slow-end latency."""
+        return plane.agent_health()
+
+    @app.get("/api/agents/{agent_id}", tags=["agents"])
+    def get_agent(agent_id: str):
+        helper = plane.get_helper(agent_id)
+        if helper is None:
+            raise HTTPException(status_code=404, detail="No such agent.")
+        return helper.to_dict()
+
+    @app.post("/api/agents/{agent_id}/heartbeat", tags=["agents"])
+    def agent_heartbeat(agent_id: str, request: HeartbeatRequest):
+        """An agent reports that it is alive, and how its last work went."""
+        try:
+            helper = plane.heartbeat(agent_id, latency_ms=request.latency_ms,
+                                     ok=request.ok, status=request.status or None)
+        except ValueError:
+            raise HTTPException(status_code=422,
+                                detail="Status must be idle, working or offline.")
+        if helper is None:
+            raise HTTPException(status_code=404, detail="No such agent.")
+        return helper.to_dict()
+
+    @app.post("/api/agents/{agent_id}/enable", tags=["agents"])
+    def enable_agent(agent_id: str):
+        helper = plane.set_helper_enabled(agent_id, True)
+        if helper is None:
+            raise HTTPException(status_code=404, detail="No such agent.")
+        return helper.to_dict()
+
+    @app.post("/api/agents/{agent_id}/disable", tags=["agents"])
+    def disable_agent(agent_id: str):
+        """Stop giving this agent work, without forgetting what it did."""
+        helper = plane.set_helper_enabled(agent_id, False)
+        if helper is None:
+            raise HTTPException(status_code=404, detail="No such agent.")
+        return helper.to_dict()
+
+    @app.post("/api/agents/{agent_id}/kill", tags=["security"])
+    def kill_agent(agent_id: str, request: KillAgentRequest):
+        """Stop an agent now: its work, its access, and any future request."""
+        helper = plane.kill_helper(agent_id, reason=request.reason)
+        if helper is None:
+            raise HTTPException(status_code=404, detail="No such agent.")
         return helper.to_dict()
 
     # -- approvals ---------------------------------------------------------

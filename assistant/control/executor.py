@@ -14,6 +14,7 @@ import logging
 import threading
 import time
 
+from assistant.control.adapters import AdapterRegistry, NativeAdapter
 from assistant.control.models import StepStatus, TaskStatus
 from assistant.control.service import get_control_plane
 
@@ -33,9 +34,11 @@ class TaskExecutor:
     """Runs tasks step by step and keeps the control plane honest about it."""
 
     def __init__(self, plane=None, runner=None,
-                 approval_timeout=DEFAULT_APPROVAL_TIMEOUT):
+                 approval_timeout=DEFAULT_APPROVAL_TIMEOUT, adapters=None):
         self.plane = plane or get_control_plane()
         self._runner = runner
+        self.adapters = adapters or AdapterRegistry(
+            default=NativeAdapter(runner=runner))
         self.approval_timeout = approval_timeout
         self._threads = {}
         self._lock = threading.RLock()
@@ -104,6 +107,8 @@ class TaskExecutor:
             # A goal with no plan is still work: treat the goal as the step.
             return self._run_single(task)
 
+        agent = self.plane.get_helper(task.helper_id) if task.helper_id else None
+
         outcomes = []
         for step in steps:
             if step.status in (StepStatus.DONE, StepStatus.SKIPPED):
@@ -117,16 +122,20 @@ class TaskExecutor:
                 return self.plane.get_task(task_id)
 
             self.plane.start_step(task_id, step.position)
+            started = time.monotonic()
             try:
-                outcome = self._call_runner(step.label, self._context(outcomes))
+                outcome = self._call_runner(step.label, self._context(outcomes),
+                                            agent=agent)
             except Exception as error:
                 logger.exception("Step %s of task %s failed", step.position, task_id)
+                self._report_health(agent, started, ok=False)
                 self.plane.finish_step(task_id, step.position,
                                        detail=f"Couldn't do this: {error}", failed=True)
                 return self.plane.fail_task(
                     task_id, f"Stopped at '{step.label}'. {error}")
 
             outcomes.append((step.label, outcome))
+            self._report_health(agent, started, ok=True)
             self.plane.finish_step(task_id, step.position, detail=outcome)
             self.plane.save_checkpoint(task_id, {
                 "completed_through": step.position,
@@ -138,24 +147,31 @@ class TaskExecutor:
 
     def _run_single(self, task):
         """Work a task whose goal was never broken into steps."""
+        agent = self.plane.get_helper(task.helper_id) if task.helper_id else None
+        started = time.monotonic()
         try:
-            outcome = self._call_runner(task.goal, "")
+            outcome = self._call_runner(task.goal, "", agent=agent)
         except Exception as error:
             logger.exception("Task %s failed", task.id)
+            self._report_health(agent, started, ok=False)
             return self.plane.fail_task(task.id, str(error))
+
+        self._report_health(agent, started, ok=True)
         return self.plane.complete_task(task.id, outcome)
 
     # -- collaborators ------------------------------------------------------
 
-    def _call_runner(self, instruction, context):
-        if self._runner is not None:
-            return self._runner(instruction, context)
+    def _call_runner(self, instruction, context, agent=None):
+        """Hand one step to whichever adapter can drive this agent."""
+        adapter = self.adapters.for_agent(agent)
+        return adapter.run_step(instruction, context=context, agent=agent)
 
-        # Imported here so the control plane and the API stay importable
-        # without the assistant's heavier runtime dependencies.
-        from assistant import ai_brain
-
-        return ai_brain.run_task_step(instruction, context=context)
+    def _report_health(self, agent, started, ok):
+        """Health comes from work that actually ran, not from guesses."""
+        if agent is None:
+            return
+        latency_ms = int((time.monotonic() - started) * 1000)
+        self.plane.heartbeat(agent.id, latency_ms=latency_ms, ok=ok)
 
     def _context(self, outcomes):
         """What earlier steps produced, trimmed so the model's context survives."""

@@ -371,5 +371,88 @@ class CapabilityTests(ApiTestCase):
         self.assertEqual(404, self.client.delete("/api/policies/nope").status_code)
 
 
+class AgentTests(ApiTestCase):
+    def register(self, name="Research agent", **extra):
+        body = {"name": name, "capabilities": ["research"]}
+        body.update(extra)
+        return self.client.post("/api/agents", json=body).json()
+
+    def test_an_agent_registers_with_its_version_and_endpoint(self):
+        agent = self.register(version="1.4.0", framework="http",
+                              endpoint="http://localhost:9000/run")
+
+        self.assertEqual("1.4.0", agent["version"])
+        self.assertEqual("http://localhost:9000/run", agent["endpoint"])
+
+    def test_the_older_helpers_path_still_works(self):
+        self.register()
+
+        self.assertEqual(1, len(self.client.get("/api/helpers").json()))
+
+    def test_a_heartbeat_records_how_the_last_work_went(self):
+        agent = self.register()
+
+        self.client.post(f"/api/agents/{agent['id']}/heartbeat",
+                         json={"latency_ms": 250, "ok": True})
+
+        health = self.client.get("/api/agents/health").json()[0]
+        self.assertEqual(1, health["success_count"])
+        self.assertEqual(250, health["p95_latency_ms"])
+
+    def test_an_unknown_status_is_rejected(self):
+        agent = self.register()
+
+        response = self.client.post(f"/api/agents/{agent['id']}/heartbeat",
+                                    json={"status": "sleepy"})
+
+        self.assertEqual(422, response.status_code)
+
+    def test_an_agent_can_be_disabled_and_enabled(self):
+        agent = self.register()
+
+        disabled = self.client.post(f"/api/agents/{agent['id']}/disable").json()
+        enabled = self.client.post(f"/api/agents/{agent['id']}/enable").json()
+
+        self.assertFalse(disabled["enabled"])
+        self.assertTrue(enabled["enabled"])
+
+    def test_killing_an_agent_quarantines_it(self):
+        agent = self.register()
+
+        killed = self.client.post(f"/api/agents/{agent['id']}/kill",
+                                  json={"reason": "It kept clicking Buy."}).json()
+
+        self.assertEqual("quarantined", killed["status"])
+        self.assertFalse(killed["enabled"])
+
+    def test_an_unknown_agent_is_a_404(self):
+        for path in ("/api/agents/nope", "/api/agents/nope/enable"):
+            self.assertEqual(404, self.client.get(path).status_code
+                             if path.endswith("nope")
+                             else self.client.post(path).status_code)
+
+    def test_a_device_registers_with_its_capabilities(self):
+        device = self.client.post("/api/devices",
+                                  json={"name": "Rav's phone", "kind": "phone",
+                                        "capabilities": ["notify"]}).json()
+
+        self.assertEqual(["notify"], device["capabilities"])
+
+    def test_a_device_heartbeat_keeps_it_online(self):
+        device = self.client.post("/api/devices",
+                                  json={"name": "Rav's phone", "kind": "phone"}).json()
+
+        body = self.client.post(f"/api/devices/{device['id']}/heartbeat",
+                                json={"capabilities": ["notify", "approve"]}).json()
+
+        self.assertEqual("online", body["status"])
+        self.assertEqual(["notify", "approve"], body["capabilities"])
+
+    def test_a_heartbeat_for_an_unknown_device_is_a_404(self):
+        response = self.client.post("/api/devices/nope/heartbeat", json={})
+
+        self.assertEqual(404, response.status_code)
+
+
 if __name__ == "__main__":
     unittest.main()

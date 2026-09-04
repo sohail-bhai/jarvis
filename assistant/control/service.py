@@ -43,6 +43,13 @@ logger = logging.getLogger(__name__)
 # How long task-scoped access lasts unless the caller says otherwise.
 DEFAULT_PERMISSION_SECONDS = 30 * 60
 
+# An agent that has sent heartbeats and then goes quiet for this long is
+# treated as gone. Silence from an agent that never sent one proves nothing.
+AGENT_STALE_SECONDS = 90
+
+# Devices report less often than agents; a phone is asleep most of the day.
+DEVICE_STALE_SECONDS = 5 * 60
+
 
 class ControlPlane:
     """Coordinates goals across helpers and devices, and keeps the user in control."""
@@ -98,25 +105,181 @@ class ControlPlane:
                         status=DeviceStatus.ONLINE)
         return self.store.save_device(device)
 
-    def register_device(self, name, kind="computer", platform_name=""):
-        device = Device(name=name, kind=kind, platform=platform_name)
-        return self.store.save_device(device)
+    def register_device(self, name, kind="computer", platform_name="",
+                        capabilities=None):
+        device = Device(name=name, kind=kind, platform=platform_name,
+                        capabilities=list(capabilities or []))
+        self.store.save_device(device)
+        self.record(f"{device.name} connected.", EventType.DEVICE_CONNECTED,
+                    metadata={"device_id": device.id})
+        return device
+
+    def device_heartbeat(self, device_id, capabilities=None):
+        """A device says it is still here, and what it can do."""
+        device = self.store.get_device(device_id)
+        if device is None:
+            return None
+
+        was_offline = device.status == DeviceStatus.OFFLINE
+        device.last_seen = now()
+        device.status = DeviceStatus.ONLINE
+        if capabilities is not None:
+            device.capabilities = list(capabilities)
+        self.store.save_device(device)
+
+        if was_offline:
+            self.record(f"{device.name} is back.", EventType.DEVICE_CONNECTED,
+                        metadata={"device_id": device.id})
+        return device
 
     def list_devices(self):
+        self.sweep()
         return self.store.list_devices()
 
     # -- helpers ------------------------------------------------------------
 
-    def register_helper(self, name, capabilities, framework="native", device_id=None):
-        """Add an AI helper and advertise what it can do."""
+    def register_helper(self, name, capabilities, framework="native", device_id=None,
+                        version="", endpoint="", metadata=None):
+        """Add an AI agent and advertise what it can do."""
         helper = Helper(name=name, framework=framework,
                         device_id=device_id or self.local_device.id,
-                        capabilities=list(capabilities))
+                        capabilities=list(capabilities), version=version,
+                        endpoint=endpoint, metadata=dict(metadata or {}),
+                        last_heartbeat=now())
         self.store.save_helper(helper)
+        self.record(f"{helper.name} is available"
+                    + (f" ({version})." if version else "."),
+                    EventType.AGENT_REGISTERED, metadata={"agent_id": helper.id})
         return helper
 
     def list_helpers(self):
+        self.sweep()
         return self.store.list_helpers()
+
+    def get_helper(self, helper_id):
+        return self.store.get_helper(helper_id)
+
+    def heartbeat(self, helper_id, latency_ms=None, ok=None, status=None):
+        """An agent reports that it is alive, and how its last work went."""
+        helper = self.store.get_helper(helper_id)
+        if helper is None:
+            return None
+
+        was_offline = helper.status == HelperStatus.OFFLINE
+        helper.last_heartbeat = now()
+        helper.last_active = now()
+
+        if ok is not None:
+            helper.record_result(ok, latency_ms)
+
+        if helper.status != HelperStatus.QUARANTINED:
+            if status is not None:
+                helper.status = HelperStatus(status)
+            elif was_offline:
+                helper.status = HelperStatus.IDLE
+
+        self.store.save_helper(helper)
+
+        if was_offline and helper.status != HelperStatus.OFFLINE:
+            self.record(f"{helper.name} is back.", EventType.AGENT_REGISTERED,
+                        metadata={"agent_id": helper.id})
+        return helper
+
+    def set_helper_enabled(self, helper_id, enabled):
+        """Switch an agent off without forgetting it or losing its history."""
+        helper = self.store.get_helper(helper_id)
+        if helper is None:
+            return None
+
+        helper.enabled = bool(enabled)
+        self.store.save_helper(helper)
+        self.record(f"{helper.name} was turned {'on' if enabled else 'off'}.",
+                    EventType.NOTE, metadata={"agent_id": helper.id})
+        return helper
+
+    def sweep(self, at=None):
+        """Mark agents and devices offline once they have gone quiet.
+
+        Health is observed, not assumed: this only acts on things that used to
+        report and then stopped.
+        """
+        at = at if at is not None else now()
+        gone = []
+
+        for helper in self.store.list_helpers():
+            if helper.status in (HelperStatus.OFFLINE, HelperStatus.QUARANTINED):
+                continue
+            if helper.is_stale(AGENT_STALE_SECONDS, at=at):
+                helper.status = HelperStatus.OFFLINE
+                helper.current_task_id = ""
+                self.store.save_helper(helper)
+                self.record(f"{helper.name} stopped responding.",
+                            EventType.AGENT_OFFLINE, metadata={"agent_id": helper.id})
+                gone.append(helper)
+
+        for device in self.store.list_devices():
+            if device.status == DeviceStatus.OFFLINE:
+                continue
+            if device.id == self.local_device.id:
+                continue
+            if device.is_stale(DEVICE_STALE_SECONDS, at=at):
+                device.status = DeviceStatus.OFFLINE
+                self.store.save_device(device)
+                self.record(f"{device.name} went offline.",
+                            EventType.DEVICE_DISCONNECTED,
+                            metadata={"device_id": device.id})
+                gone.append(device)
+
+        return gone
+
+    def agent_health(self):
+        """One row per agent for a monitoring screen."""
+        self.sweep()
+        return [helper.health() for helper in self.store.list_helpers()]
+
+    def kill_helper(self, helper_id, reason=""):
+        """Stop an agent now: its work, its access, and any future request.
+
+        Quarantine is deliberate rather than automatic. Nothing is deleted, so
+        the timeline still shows what the agent did before it was stopped.
+        """
+        helper = self.store.get_helper(helper_id)
+        if helper is None:
+            return None
+
+        cancelled = ""
+        if helper.current_task_id:
+            task = self.store.get_task(helper.current_task_id)
+            if task is not None and not task.status.is_terminal:
+                self.cancel_task(task.id, f"{helper.name} was stopped.")
+                cancelled = task.id
+
+        revoked = self._revoke_agent_permissions(helper_id, "the agent was stopped")
+
+        helper.status = HelperStatus.QUARANTINED
+        helper.enabled = False
+        helper.current_task_id = ""
+        self.store.save_helper(helper)
+
+        self.record(f"Stopped {helper.name} and removed its access."
+                    + (f" {reason}" if reason else ""),
+                    EventType.AGENT_QUARANTINED,
+                    metadata={"agent_id": helper.id, "cancelled_task": cancelled,
+                              "permissions_revoked": revoked})
+        return helper
+
+    def _revoke_agent_permissions(self, agent_id, reason):
+        revoked = 0
+        for permission in self.store.list_permissions(active_only=True,
+                                                      agent_id=agent_id):
+            permission.status = PermissionStatus.REVOKED
+            self.store.save_permission(permission)
+            revoked += 1
+        if revoked:
+            self.record(f"Removed {revoked} temporary permission"
+                        f"{'s' if revoked != 1 else ''} because {reason}.",
+                        EventType.PERMISSION_REVOKED, metadata={"agent_id": agent_id})
+        return revoked
 
     def find_helper_for(self, capability):
         """Pick an available helper that advertises `capability`.
@@ -124,10 +287,10 @@ class ControlPlane:
         The user asks for an outcome; this is what turns that into a worker.
         Quarantined and offline helpers are never selected.
         """
+        self.sweep()
         candidates = [
             helper for helper in self.store.list_helpers()
-            if helper.can(capability)
-            and helper.status in (HelperStatus.IDLE, HelperStatus.WORKING)
+            if helper.can(capability) and helper.is_available
         ]
         if not candidates:
             return None
@@ -287,11 +450,11 @@ class ControlPlane:
     # -- permissions --------------------------------------------------------
 
     def grant(self, resource, actions, task_id="", seconds=DEFAULT_PERMISSION_SECONDS,
-              device_id=""):
+              device_id="", agent_id=""):
         """Grant narrow, time-limited access for one task."""
         permission = Permission(
             task_id=task_id, resource=resource, actions=list(actions),
-            device_id=device_id or self.local_device.id,
+            device_id=device_id or self.local_device.id, agent_id=agent_id,
             expires_at=now() + seconds,
         )
         self.store.save_permission(permission)
@@ -389,7 +552,7 @@ class ControlPlane:
                     "permission": None, "approval": approval.to_dict()}
 
         permission = self.grant(target, [capability], task_id=task_id,
-                                seconds=seconds)
+                                seconds=seconds, agent_id=agent_id)
         return {"status": "granted", "judgement": judgement.to_dict(),
                 "permission": permission.to_dict(), "approval": None}
 
@@ -458,7 +621,8 @@ class ControlPlane:
         if approved and approval.capability:
             self.grant(approval.resource or approval.capability,
                        [approval.capability], task_id=approval.task_id,
-                       seconds=approval.seconds or DEFAULT_PERMISSION_SECONDS)
+                       seconds=approval.seconds or DEFAULT_PERMISSION_SECONDS,
+                       agent_id=approval.agent_id)
 
         if approval.task_id:
             task = self.store.get_task(approval.task_id)
@@ -546,10 +710,15 @@ class ControlPlane:
     def status(self):
         """A small snapshot for a home screen or security page."""
         self.expire_permissions()
+        self.sweep()
         return {
             "stopped": self._stopped,
             "devices": len(self.store.list_devices()),
             "helpers": len(self.store.list_helpers()),
+            "agents_offline": sum(1 for helper in self.store.list_helpers()
+                                  if helper.status == HelperStatus.OFFLINE),
+            "agents_quarantined": sum(1 for helper in self.store.list_helpers()
+                                      if helper.status == HelperStatus.QUARANTINED),
             "active_tasks": len(self.store.list_tasks(limit=500, active_only=True)),
             "pending_approvals": len(self.store.list_approvals(pending_only=True)),
             "temporary_access": len(self.store.list_permissions(active_only=True)),

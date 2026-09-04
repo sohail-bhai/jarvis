@@ -148,6 +148,22 @@ MIGRATIONS = [
         ("approvals", "agent_id", "ALTER TABLE approvals ADD COLUMN agent_id TEXT"),
         ("approvals", "seconds", "ALTER TABLE approvals ADD COLUMN seconds INTEGER"),
     ]),
+    ("0005_agent_health", [
+        ("helpers", "version", "ALTER TABLE helpers ADD COLUMN version TEXT"),
+        ("helpers", "endpoint", "ALTER TABLE helpers ADD COLUMN endpoint TEXT"),
+        ("helpers", "metadata", "ALTER TABLE helpers ADD COLUMN metadata TEXT"),
+        ("helpers", "enabled", "ALTER TABLE helpers ADD COLUMN enabled INTEGER DEFAULT 1"),
+        ("helpers", "last_heartbeat", "ALTER TABLE helpers ADD COLUMN last_heartbeat REAL"),
+        ("helpers", "success_count", "ALTER TABLE helpers ADD COLUMN success_count INTEGER DEFAULT 0"),
+        ("helpers", "error_count", "ALTER TABLE helpers ADD COLUMN error_count INTEGER DEFAULT 0"),
+        ("helpers", "latencies", "ALTER TABLE helpers ADD COLUMN latencies TEXT"),
+    ]),
+    ("0006_device_capabilities", [
+        ("devices", "capabilities", "ALTER TABLE devices ADD COLUMN capabilities TEXT"),
+    ]),
+    ("0007_permission_agent", [
+        ("permissions", "agent_id", "ALTER TABLE permissions ADD COLUMN agent_id TEXT"),
+    ]),
 ]
 
 DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "control.db"
@@ -239,14 +255,14 @@ class ControlStore:
     def save_device(self, device):
         self._write(
             "INSERT INTO devices (id, name, kind, platform, status, last_seen, "
-            "token_hash, paired_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+            "token_hash, paired_at, capabilities) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(id) DO UPDATE SET name=excluded.name, kind=excluded.kind, "
             "platform=excluded.platform, status=excluded.status, "
             "last_seen=excluded.last_seen, token_hash=excluded.token_hash, "
-            "paired_at=excluded.paired_at",
+            "paired_at=excluded.paired_at, capabilities=excluded.capabilities",
             (device.id, device.name, device.kind, device.platform,
              device.status.value, device.last_seen, device.token_hash,
-             device.paired_at),
+             device.paired_at, dumps(device.capabilities)),
         )
         return device
 
@@ -269,14 +285,23 @@ class ControlStore:
     def save_helper(self, helper):
         self._write(
             "INSERT INTO helpers (id, name, framework, device_id, status, capabilities, "
-            "current_task_id, last_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+            "current_task_id, last_active, version, endpoint, metadata, enabled, "
+            "last_heartbeat, success_count, error_count, latencies) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(id) DO UPDATE SET name=excluded.name, framework=excluded.framework, "
             "device_id=excluded.device_id, status=excluded.status, "
             "capabilities=excluded.capabilities, current_task_id=excluded.current_task_id, "
-            "last_active=excluded.last_active",
+            "last_active=excluded.last_active, version=excluded.version, "
+            "endpoint=excluded.endpoint, metadata=excluded.metadata, "
+            "enabled=excluded.enabled, last_heartbeat=excluded.last_heartbeat, "
+            "success_count=excluded.success_count, error_count=excluded.error_count, "
+            "latencies=excluded.latencies",
             (helper.id, helper.name, helper.framework, helper.device_id,
              helper.status.value, dumps(helper.capabilities),
-             helper.current_task_id, helper.last_active),
+             helper.current_task_id, helper.last_active, helper.version,
+             helper.endpoint, dumps(helper.metadata), int(helper.enabled),
+             helper.last_heartbeat, helper.success_count, helper.error_count,
+             dumps(helper.latencies)),
         )
         return helper
 
@@ -341,12 +366,14 @@ class ControlStore:
     def save_permission(self, permission):
         self._write(
             "INSERT INTO permissions (id, task_id, resource, actions, device_id, "
-            "status, granted_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+            "status, granted_at, expires_at, agent_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(id) DO UPDATE SET status=excluded.status, "
             "expires_at=excluded.expires_at",
             (permission.id, permission.task_id, permission.resource,
              dumps(permission.actions), permission.device_id,
-             permission.status.value, permission.granted_at, permission.expires_at),
+             permission.status.value, permission.granted_at, permission.expires_at,
+             permission.agent_id),
         )
         return permission
 
@@ -354,7 +381,7 @@ class ControlStore:
         return _to_permission(
             self._row("SELECT * FROM permissions WHERE id = ?", (permission_id,)))
 
-    def list_permissions(self, active_only=False, task_id=None):
+    def list_permissions(self, active_only=False, task_id=None, agent_id=None):
         sql = "SELECT * FROM permissions"
         clauses, params = [], []
         if active_only:
@@ -363,6 +390,9 @@ class ControlStore:
         if task_id:
             clauses.append("task_id = ?")
             params.append(task_id)
+        if agent_id:
+            clauses.append("agent_id = ?")
+            params.append(agent_id)
         if clauses:
             sql += " WHERE " + " AND ".join(clauses)
         sql += " ORDER BY granted_at DESC"
@@ -456,6 +486,7 @@ def _to_device(row):
         return None
     keys = row.keys()
     return Device(id=row["id"], name=row["name"], kind=row["kind"],
+                  capabilities=loads(row["capabilities"] if "capabilities" in keys else None, []),
                   platform=row["platform"] or "",
                   status=DeviceStatus(row["status"]), last_seen=row["last_seen"],
                   token_hash=(row["token_hash"] or "") if "token_hash" in keys else "",
@@ -465,12 +496,24 @@ def _to_device(row):
 def _to_helper(row):
     if row is None:
         return None
+    keys = row.keys()
+
+    def value(name, fallback=None):
+        return row[name] if name in keys and row[name] is not None else fallback
+
     return Helper(id=row["id"], name=row["name"], framework=row["framework"],
                   device_id=row["device_id"] or "",
                   status=HelperStatus(row["status"]),
                   capabilities=loads(row["capabilities"], []),
                   current_task_id=row["current_task_id"] or "",
-                  last_active=row["last_active"])
+                  last_active=row["last_active"],
+                  version=value("version", ""), endpoint=value("endpoint", ""),
+                  metadata=loads(value("metadata"), {}),
+                  enabled=bool(value("enabled", 1)),
+                  last_heartbeat=value("last_heartbeat", 0.0),
+                  success_count=value("success_count", 0),
+                  error_count=value("error_count", 0),
+                  latencies=loads(value("latencies"), []))
 
 
 def _to_task(row):
@@ -497,7 +540,9 @@ def _to_permission(row):
                       resource=row["resource"], actions=loads(row["actions"], []),
                       device_id=row["device_id"] or "",
                       status=PermissionStatus(row["status"]),
-                      granted_at=row["granted_at"], expires_at=row["expires_at"])
+                      granted_at=row["granted_at"], expires_at=row["expires_at"],
+                      agent_id=(row["agent_id"] or "")
+                      if "agent_id" in row.keys() else "")
 
 
 def _to_approval(row):

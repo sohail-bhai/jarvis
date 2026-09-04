@@ -111,6 +111,11 @@ class EventType(str, Enum):
     CAPABILITY_REQUESTED = "capability_requested"
     CAPABILITY_DENIED = "capability_denied"
     POLICY_CHANGED = "policy_changed"
+    AGENT_REGISTERED = "agent_registered"
+    AGENT_OFFLINE = "agent_offline"
+    AGENT_QUARANTINED = "agent_quarantined"
+    DEVICE_CONNECTED = "device_connected"
+    DEVICE_DISCONNECTED = "device_disconnected"
     EMERGENCY_STOP = "emergency_stop"
     NOTE = "note"
 
@@ -126,6 +131,15 @@ class Device:
     last_seen: float = field(default_factory=now)
     token_hash: str = ""            # sha256 of the device's API token
     paired_at: float = 0.0
+    capabilities: list = field(default_factory=list)   # what this machine can do
+
+    def can(self, capability):
+        return capability in self.capabilities
+
+    def is_stale(self, seconds, at=None):
+        """True when this device has not been heard from recently enough."""
+        at = at if at is not None else now()
+        return (at - self.last_seen) > seconds
 
     @property
     def is_paired(self):
@@ -140,21 +154,87 @@ class Device:
 
 @dataclass
 class Helper:
-    """An AI helper. 'Framework' is an implementation detail the UI hides."""
+    """An AI agent. 'Framework' is an implementation detail the UI hides.
+
+    An agent advertises what it can do and reports how it is doing. Health is
+    recorded rather than guessed: heartbeats say it is alive, and the counts
+    and latencies come from work it actually did.
+    """
     id: str = field(default_factory=new_id)
     name: str = ""
-    framework: str = "native"       # native, openclaw, langgraph, crewai, mcp
+    framework: str = "native"       # native, http, mcp, langgraph, crewai
     device_id: str = ""
     status: HelperStatus = HelperStatus.IDLE
     capabilities: list = field(default_factory=list)
     current_task_id: str = ""
     last_active: float = field(default_factory=now)
+    version: str = ""
+    endpoint: str = ""              # where a remote agent is reached
+    metadata: dict = field(default_factory=dict)
+    enabled: bool = True            # switched off by a person, not by health
+    last_heartbeat: float = 0.0
+    success_count: int = 0
+    error_count: int = 0
+    latencies: list = field(default_factory=list)      # milliseconds, most recent last
 
     def can(self, capability):
         return capability in self.capabilities
 
+    @property
+    def is_available(self):
+        """Whether this agent may be given work right now."""
+        return (self.enabled
+                and self.status in (HelperStatus.IDLE, HelperStatus.WORKING))
+
+    @property
+    def error_rate(self):
+        total = self.success_count + self.error_count
+        return round(self.error_count / total, 3) if total else 0.0
+
+    @property
+    def p95_latency_ms(self):
+        """The slow end of recent work, which is what a person notices."""
+        if not self.latencies:
+            return 0
+        ordered = sorted(self.latencies)
+        index = min(len(ordered) - 1, int(round(0.95 * (len(ordered) - 1))))
+        return int(ordered[index])
+
+    def is_stale(self, seconds, at=None):
+        """True when a heartbeat was expected by now and did not arrive."""
+        if not self.last_heartbeat:
+            return False        # never sent one; silence is not evidence yet
+        at = at if at is not None else now()
+        return (at - self.last_heartbeat) > seconds
+
+    def record_result(self, ok, latency_ms=None, keep=50):
+        if ok:
+            self.success_count += 1
+        else:
+            self.error_count += 1
+        if latency_ms is not None:
+            self.latencies = (self.latencies + [int(latency_ms)])[-keep:]
+
+    def health(self):
+        """A small snapshot for a monitoring screen."""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "status": self.status.value,
+            "enabled": self.enabled,
+            "version": self.version,
+            "last_heartbeat": self.last_heartbeat,
+            "success_count": self.success_count,
+            "error_count": self.error_count,
+            "error_rate": self.error_rate,
+            "p95_latency_ms": self.p95_latency_ms,
+        }
+
     def to_dict(self):
-        return _serialise(self)
+        data = _serialise(self)
+        data["error_rate"] = self.error_rate
+        data["p95_latency_ms"] = self.p95_latency_ms
+        return data
 
 
 @dataclass
@@ -196,6 +276,7 @@ class Permission:
     resource: str = ""
     actions: list = field(default_factory=list)   # read, write, execute
     device_id: str = ""
+    agent_id: str = ""              # who this was granted to, when an agent asked
     status: PermissionStatus = PermissionStatus.ACTIVE
     granted_at: float = field(default_factory=now)
     expires_at: float = 0.0

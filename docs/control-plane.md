@@ -37,6 +37,7 @@ Putting it behind an API means:
 | `assistant/control/models.py` | The data model: `Task`, `TaskStep`, `Helper`, `Device`, `Permission`, `Approval`, `ActivityEvent`, plus their status enums. Plain dataclasses with no framework dependency. |
 | `assistant/control/store.py` | SQLite persistence. The only module that knows SQL, so moving to PostgreSQL later means rewriting this file alone. |
 | `assistant/control/service.py` | `ControlPlane` — the coordination logic and the only thing clients need. |
+| `assistant/control/adapters.py` | How the control plane talks to an agent: in-process, over HTTP, or something added later. |
 | `assistant/control/capabilities.py` | The catalog of namespaced capabilities and the risk each one carries. |
 | `assistant/control/policy.py` | `PolicyEngine` - allow, ask or deny, from risk defaults and stored rules. |
 | `assistant/control/executor.py` | `TaskExecutor` - runs a task's steps through the AI brain and writes the outcomes back. |
@@ -50,14 +51,44 @@ Putting it behind an API means:
 person can read them ("Finding relevant files"). Progress is derived from how
 many steps are done, so no client has to compute it.
 
-**Helper** — an AI helper that advertises capabilities. Callers ask for a
-capability, never for a helper by name:
+**Agent** (`Helper` in the code, `/api/agents` over HTTP) — an AI worker that
+advertises capabilities and reports how it is doing. Callers ask for a
+capability, never for an agent by name:
 
 ```python
 plane.create_task("Look this up", capability="research")
 ```
 
-A helper that is offline or quarantined is never selected.
+An agent that is offline, disabled or quarantined is never selected.
+
+Agents carry a version, an endpoint, free-form metadata, and health that is
+observed rather than guessed - heartbeats say it is alive, while the success
+and error counts and the latencies come from work that actually ran:
+
+```python
+plane.heartbeat(agent.id, latency_ms=250, ok=True)
+plane.agent_health()
+# [{"name": "Research agent", "status": "idle", "error_rate": 0.0,
+#   "p95_latency_ms": 250, ...}]
+```
+
+An agent that has reported and then goes quiet for 90 seconds is marked
+offline; one that has never reported is left alone, because silence from
+something that never spoke proves nothing. Devices work the same way with a
+five-minute window, and this computer is never swept offline.
+
+**Adapters** — an agent is a capability and an address, not a framework.
+`NativeAdapter` runs the step in this process through the JARVIS agent loop;
+`HttpAdapter` posts `{"instruction", "context"}` to the agent's endpoint and
+reads `{"output"}` back. An unknown framework falls back to running locally, so
+MCP, LangGraph or a containerised agent can join later without the
+orchestrator learning anything about them.
+
+**Stopping an agent** — `plane.kill_helper(id)` cancels the task it was
+working on, revokes every grant it holds, disables it and quarantines it, in
+one step. Other agents' grants are untouched. Nothing is deleted: the timeline
+still shows what it did before it was stopped. `set_helper_enabled(id, False)`
+is the gentler version - no new work, history intact.
 
 **Capability** — a namespaced thing an agent may ask to do, such as
 `google.gmail.read`, `browser.navigate` or `gcp.cloud_run.deploy`. Every
@@ -270,7 +301,15 @@ carries `fields`, naming what was wrong.
 | `GET`/`POST` | `/api/policies` | List or add allow/ask/deny rules. |
 | `DELETE` | `/api/policies/{id}` | Remove a rule. |
 | `GET` | `/api/devices` | Known machines. |
-| `GET`/`POST` | `/api/helpers` | List or register AI helpers. |
+| `GET`/`POST` | `/api/agents` | List or register AI agents. `/api/helpers` is the older name and still works. |
+| `GET` | `/api/agents/health` | Status, error rate and slow-end latency per agent. |
+| `GET` | `/api/agents/{id}` | One agent. |
+| `POST` | `/api/agents/{id}/heartbeat` | Report alive, with optional `latency_ms` and `ok`. |
+| `POST` | `/api/agents/{id}/enable` | Give this agent work again. |
+| `POST` | `/api/agents/{id}/disable` | Stop giving it work, keep its history. |
+| `POST` | `/api/agents/{id}/kill` | Stop it now: work, access and future requests. |
+| `POST` | `/api/devices` | Register a device with its capabilities. |
+| `POST` | `/api/devices/{id}/heartbeat` | A device reports that it is still here. |
 | `GET` | `/api/approvals` | Pending approvals by default. |
 | `POST` | `/api/approvals/{id}` | Approve or decline. |
 | `GET`/`POST` | `/api/permissions` | List or grant temporary access. |
@@ -333,8 +372,12 @@ These are known gaps, not oversights:
 - **Capabilities are brokered, not enforced at the call site.** An agent that
   ignores the answer and calls a tool directly is not stopped yet; wiring the
   broker into the tool loop is WP5.
-- **Helper selection is a first match, not a scheduler.** It prefers idle then
+- **Agent selection is a first match, not a scheduler.** It prefers idle then
   least-recently-used. There is no load balancing or cost awareness.
+- **Health is swept on read, not by a timer.** An agent flips to `offline` the
+  next time agents, devices or status are listed, not the moment it goes quiet.
+- **Agents are not authenticated separately.** An agent calls through a paired
+  device's token; there is no per-agent credential yet.
 - **Steps are not planned automatically.** The caller supplies the steps. A
   goal with no steps is run as a single piece of work.
 - **A running step cannot be interrupted.** Cancellation and emergency stop
@@ -353,9 +396,10 @@ These are known gaps, not oversights:
 python -m unittest discover -s tests
 ```
 
-162 tests cover the task lifecycle, capability matching, permission expiry and
+207 tests cover the task lifecycle, capability matching, permission expiry and
 revocation, the approval flow, emergency stop, step execution, failure and
 cancellation paths, pairing and token authentication, rate limiting, schema
 migrations, the capability catalog, policy precedence, the broker's grant,
-hold and refuse paths, and the HTTP and WebSocket surface. The executor tests use an
+hold and refuse paths, agent registration, heartbeats and staleness, the kill
+switch, the HTTP and native adapters, and the HTTP and WebSocket surface. The executor tests use an
 injected runner, so none of them need Ollama.
