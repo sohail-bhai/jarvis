@@ -101,7 +101,7 @@ devices from seeing each other, and a private network is unaffected by that.
 | Files | `GET /api/files`, `GET /api/files/search` over the shared folders |
 | Devices | `GET /api/devices` |
 | Security | `GET /api/permissions`, `GET /api/status`, `POST /api/emergency-stop` |
-| Google | Nothing. It is marked **Demo mode** on the screen itself. |
+| Google | `GET /api/google/status`, then Drive, Gmail and Calendar through the computer |
 
 ### Live rather than polled
 
@@ -128,17 +128,28 @@ server talks about goals, steps, helpers and events; the components were
 written against their own types. Translating in one place means a renamed
 server field breaks in one file rather than in nine screens.
 
+## Starting the computer side from the desktop app
+
+The desktop app can be the server itself. **My Devices → Connect your phone →
+Turn on** starts the same API inside the running app and shows the address to
+type, and **Show pairing code** gives you the six digits without a terminal.
+
+Because it runs inside the desktop app, both are looking at one control plane:
+a task you start on the phone appears in the desktop timeline as it happens.
+`python -m assistant.api --host 0.0.0.0` still works and does the same thing
+for a headless machine.
+
 ## What is not connected yet
 
 Said plainly, because a screen that pretends is worse than a screen that
 admits:
 
-- **Google** is example data, labelled Demo mode on the page.
 - **What JARVIS remembers** is example data.
-- **Files** are read-only from the phone. Upload, move and delete exist on the
-  API but have no screen yet.
+- **Google** is real, but shows examples until you connect an account, and
+  labels them - see [google.md](google.md).
 - **Notifications** need the app open. There is no push service, so a phone in
   a pocket sees an approval when it next asks.
-- **The desktop app still talks to its own control plane in-process**, so a
-  desktop on another machine does not yet see these tasks. That is the next
-  piece of work.
+- **Files move both ways now** - browse, download and upload - but there are no
+  thumbnails, no folder downloads, and move and rename have no screen.
+- **A second desktop on another machine** still runs its own control plane
+  rather than pairing into this one.

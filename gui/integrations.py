@@ -35,18 +35,23 @@ def _has_setting(key):
 
 
 def google_status():
-    """Google Workspace access depends on an OAuth client and a stored token."""
-    token = PROJECT_ROOT / "token.json"
-    credentials = PROJECT_ROOT / "credentials.json"
+    """Google Workspace access, as the workspace layer actually finds it.
 
-    if token.exists():
-        return {"connected": True, "label": "Connected",
-                "detail": "Calendar access is authorized."}
-    if credentials.exists():
-        return {"connected": False, "label": "Needs sign-in",
-                "detail": "Credentials found. Ask JARVIS for your schedule to authorize."}
-    return {"connected": False, "label": "Not connected",
-            "detail": "Add credentials.json from the Google Cloud Console to connect."}
+    A token file on disk is not a connection - it can be revoked or expired -
+    so this asks whether Google would answer, which is the only thing worth
+    showing a person.
+    """
+    from assistant.workspace import auth as workspace_auth
+
+    state = workspace_auth.connection_state()
+    labels = {
+        workspace_auth.LIVE: "Connected",
+        workspace_auth.NEEDS_AUTHORIZATION: "Needs sign-in",
+        workspace_auth.NOT_CONFIGURED: "Not connected",
+    }
+    return {"connected": state["state"] == workspace_auth.LIVE,
+            "label": labels.get(state["state"], "Not connected"),
+            "detail": state["detail"]}
 
 
 def gmail_status():

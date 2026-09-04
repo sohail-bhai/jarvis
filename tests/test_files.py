@@ -70,8 +70,46 @@ class BrowsingTests(FileTestCase):
         self.assertEqual(["reports", "invoice.pdf"],
                          [item["name"] for item in listing["entries"]])
 
-    def test_an_empty_path_means_the_first_share(self):
-        self.assertEqual(str(self.shared), files.list_dir("")["path"])
+    def test_an_empty_path_lists_the_shares_themselves(self):
+        """The top level is the shares, so every one of them is reachable.
+
+        Listing the first share instead would leave the second and third with
+        no name a client could ever ask for.
+        """
+        listing = files.list_dir("")
+
+        self.assertEqual("", listing["path"])
+        self.assertEqual(["Documents"], [item["name"] for item in listing["entries"]])
+        self.assertTrue(all(item["is_dir"] for item in listing["entries"]))
+
+    def test_every_share_is_reachable_by_name(self):
+        second = self.root / "Pictures"
+        second.mkdir()
+        (second / "beach.jpg").write_text("a photo")
+        files.get_setting = lambda key, default=None: (
+            [str(self.shared), str(second)] if key == "file_shares"
+            else self._real_get_setting(key, default))
+
+        names = [item["name"] for item in files.list_dir("")["entries"]]
+        self.assertEqual(["Documents", "Pictures"], names)
+
+        listing = files.list_dir("Pictures")
+        self.assertEqual(["beach.jpg"], [item["name"] for item in listing["entries"]])
+
+    def test_a_listing_names_the_folder_above_it(self):
+        """A client walks back out using the parent the server gives it."""
+        listing = files.list_dir("reports")
+
+        self.assertEqual("Documents/reports", listing["path"])
+        self.assertEqual("Documents", listing["parent"])
+        self.assertEqual("", files.list_dir("Documents")["parent"])
+
+    def test_a_listed_file_can_be_asked_for_again(self):
+        """What a listing calls a file is what a client may send back."""
+        entry = files.list_dir("Documents")["entries"][0]
+
+        self.assertEqual("Documents/reports", entry["relative"])
+        self.assertEqual(files.resolve(entry["relative"]), self.shared / "reports")
 
     def test_a_relative_path_is_taken_from_the_share(self):
         listing = files.list_dir("reports")
@@ -79,7 +117,7 @@ class BrowsingTests(FileTestCase):
         self.assertEqual(["q3.txt"], [item["name"] for item in listing["entries"]])
 
     def test_hidden_files_are_not_listed(self):
-        names = [item["name"] for item in files.list_dir("")["entries"]]
+        names = [item["name"] for item in files.list_dir("Documents")["entries"]]
 
         self.assertNotIn(".hidden", names)
 
@@ -226,7 +264,7 @@ class ToolTests(FileTestCase):
         self.assertIn(str(self.shared), files.shared_folders())
 
     def test_listing_reads_as_a_person_would_write_it(self):
-        result = files.list_shared_files("")
+        result = files.list_shared_files("Documents")
 
         self.assertIn("[dir] reports", result)
         self.assertIn("invoice.pdf", result)

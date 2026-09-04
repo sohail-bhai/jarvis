@@ -9,7 +9,7 @@ import { MenuItem } from '../../src/components/MenuItem';
 import { useAppState } from '../../src/store/AppContext';
 import { devicesService } from '../../src/services/devices';
 import { approvalsService } from '../../src/services/approvals';
-import { googleService } from '../../src/services/google';
+import { useGoogleStatus } from '../../src/services/useGoogleStatus';
 import { securityService } from '../../src/services/security';
 import { sessionService } from '../../src/api/session';
 import { getHost } from '../../src/api/client';
@@ -21,6 +21,7 @@ export default function YouScreen() {
   const [approvalCount, setApprovalCount] = useState(0);
   const [reachable, setReachable] = useState(false);
   const [securityLine, setSecurityLine] = useState('');
+  const google = useGoogleStatus();
 
   useEffect(() => {
     loadData();
@@ -108,7 +109,7 @@ export default function YouScreen() {
           icon="logo-google"
           iconColor="#4285F4"
           label="Google Workspace"
-          value={googleService.isConnected() ? 'Connected' : 'Not connected'}
+          value={google.loading ? 'Checking' : google.connected ? 'Connected' : 'Not connected'}
           onPress={() => router.push('/google' as any)}
         />
         <MenuItem
@@ -136,11 +137,11 @@ export default function YouScreen() {
         <MenuItem
           icon="link-outline"
           label="Connected Services"
-          value={googleService.isConnected() ? '2 connected' : '1 connected'}
+          value={google.connected ? '2 connected' : '1 connected'}
           onPress={() => Alert.alert(
             'Connected Services',
             `• Your computer${reachable ? '' : ' (not reachable right now)'}\n` +
-            `• Google Workspace${googleService.isConnected() ? '' : ' - not connected yet'}`,
+            `• Google Workspace${google.connected ? '' : ' - not connected yet'}`,
           )}
         />
         <MenuItem

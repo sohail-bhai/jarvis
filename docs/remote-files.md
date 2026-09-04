@@ -95,6 +95,22 @@ token exchange first and treat the port as hostile.
 > itself - but there is no TLS yet, so on an untrusted network the token
 > crosses in the clear. Use a private network or a tunnel.
 
+## Browsing from the top
+
+`GET /api/files` with no path lists the **shares themselves**, and every entry
+names its share first - `Pictures/holiday/beach.jpg`. That is what makes a
+second and third shared folder reachable at all: a client that knows nothing
+starts at the top, walks down, and hands back the name it was given. Each
+listing also carries the `parent` to walk back out, so no client has to trim a
+path itself and risk stepping outside a share.
+
+## From the phone
+
+The Files tab does the round trip. **Send** picks a file on the phone and puts
+it in the folder you are looking at; a file's sheet offers **Open on this
+phone** and **Save a copy here**, and Delete when the computer allows it. Every
+transfer is written to the timeline with the device that asked.
+
 ## What this does not do yet
 
 - **No TLS of its own.** Put a private network or a tunnel in front of it.

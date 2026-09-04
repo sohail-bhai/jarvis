@@ -229,10 +229,24 @@ class HomePage(ctk.CTkScrollableFrame):
         grid.pack(fill="x", padx=16, pady=(0, 16))
         grid.grid_columnconfigure((0, 1, 2, 3), weight=1, uniform="env")
 
+        from assistant.api.server import get_local_server
+        from gui import integrations
+
+        # Each card says what is true right now. A card that always reads
+        # "Connected" teaches the user to ignore all four.
+        google = integrations.google_status()
+        phone_paired = get_local_server().running
+
         cards_data = [
             ("My Computer", "Online", "💻", theme.INFO_LIGHT, theme.INFO_BORDER, theme.INFO, "devices"),
-            ("My Phone", "Connected", "📱", theme.SUCCESS_LIGHT, theme.SUCCESS_BORDER, theme.SUCCESS, "devices"),
-            ("Google Drive", "Connected", "📁", theme.WARNING_LIGHT, theme.WARNING_BORDER, theme.WARNING, "google"),
+            ("My Phone", "Ready to pair" if phone_paired else "Not connected",
+             "📱", theme.SUCCESS_LIGHT if phone_paired else theme.MAIN_BG,
+             theme.SUCCESS_BORDER if phone_paired else theme.CARD_BORDER,
+             theme.SUCCESS if phone_paired else theme.TEXT_MUTED, "devices"),
+            ("Google", google["label"], "📁",
+             theme.WARNING_LIGHT if google["connected"] else theme.MAIN_BG,
+             theme.WARNING_BORDER if google["connected"] else theme.CARD_BORDER,
+             theme.WARNING if google["connected"] else theme.TEXT_MUTED, "google"),
             ("Internet", "Ready", "🌐", theme.PURPLE_LIGHT, theme.PURPLE_BORDER, theme.PURPLE, "web"),
         ]
 

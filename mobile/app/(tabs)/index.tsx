@@ -11,7 +11,7 @@ import { useAppState } from '../../src/store/AppContext';
 import { jarvisService } from '../../src/services/jarvis';
 import { tasksService } from '../../src/services/tasks';
 import { approvalsService } from '../../src/services/approvals';
-import { googleService } from '../../src/services/google';
+import { useGoogleStatus } from '../../src/services/useGoogleStatus';
 import { openEventStream } from '../../src/api/live';
 import { getHost } from '../../src/api/client';
 import { Task, ApprovalRequest } from '../../src/services/types';
@@ -24,6 +24,7 @@ export default function HomeScreen() {
   const [currentApproval, setCurrentApproval] = useState<ApprovalRequest | null>(null);
   const [online, setOnline] = useState(false);
   const [problem, setProblem] = useState('');
+  const google = useGoogleStatus();
 
   const greeting = jarvisService.getGreeting();
   const suggestions = jarvisService.getSuggestions();
@@ -138,10 +139,11 @@ export default function HomeScreen() {
       icon: 'phone-portrait-outline',
     },
     {
-      title: 'Google Drive',
-      status: googleService.isConnected() ? '● Connected' : '○ Not connected',
-      color: googleService.isConnected() ? colors.warning : colors.textTertiary,
-      bg: googleService.isConnected() ? colors.warningLight : colors.surface,
+      title: 'Google',
+      status: google.loading
+        ? '· Checking' : google.connected ? '● Connected' : '○ Not connected',
+      color: google.connected ? colors.warning : colors.textTertiary,
+      bg: google.connected ? colors.warningLight : colors.surface,
       icon: 'folder-outline',
     },
     {

@@ -44,6 +44,9 @@ def create_google_calendar_event(summary: str, start_time_iso: str = None, durat
 def create_google_doc(title: str, content: str = "") -> str:
     return str(workspace.create_google_doc(title, content))
 
+def create_google_slides(title: str, slides=None) -> str:
+    return str(workspace.create_google_slides(title, slides))
+
 def open_website(url: str):
     return webbrowser.open(url)
 
@@ -62,6 +65,7 @@ AVAILABLE_FUNCTIONS = {
     "draft_gmail_message": draft_gmail_message,
     "create_google_calendar_event": create_google_calendar_event,
     "create_google_doc": create_google_doc,
+    "create_google_slides": create_google_slides,
     "open_app": system_tasks.open_app,
     "tell_time": system_tasks.tell_time,
     "tell_date": system_tasks.tell_date,
@@ -310,11 +314,12 @@ TOOL_GROUPS = {
     ),
     "google": (
         ("email", "mail", "gmail", "inbox", "drive", "calendar", "meeting",
-         "schedule", "document", "doc", "sheet", "spreadsheet"),
+         "schedule", "document", "doc", "sheet", "spreadsheet", "slides",
+         "presentation", "deck"),
         ("read_unread_emails", "send_email", "summarize_gmail_inbox",
          "draft_gmail_message", "search_google_drive", "read_google_drive_file",
-         "upload_google_drive_file", "create_google_doc", "get_schedule",
-         "schedule_meeting", "create_google_calendar_event"),
+         "upload_google_drive_file", "create_google_doc", "create_google_slides",
+         "get_schedule", "schedule_meeting", "create_google_calendar_event"),
     ),
     "computer": (
         ("open ", "app", "volume", "screenshot", "screen", "click", "type",
@@ -490,6 +495,25 @@ LLM_TOOLS = WEB_TOOLS + [
                 "properties": {
                     "title": {"type": "string", "description": "Title of the Google Document."},
                     "content": {"type": "string", "description": "Initial text content to insert into the document."}
+                },
+                "required": ["title"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_google_slides",
+            "description": "Creates a Google Slides presentation from a title and an outline of slides.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Title of the presentation."},
+                    "slides": {
+                        "type": "array",
+                        "description": "One entry per slide: a title string, or an object with a title and bullets.",
+                        "items": {"type": "string"}
+                    }
                 },
                 "required": ["title"]
             }
@@ -1345,6 +1369,6 @@ def run_task_step(instruction, context="", auto_confirm=True,
 for t in ["run_terminal_command", "shutdown_laptop", "restart_laptop", "clear_notes", "write_file", "disable_voice_input", "disable_speech_output"]:
     if t in AVAILABLE_FUNCTIONS:
         guard.register("destructive")(AVAILABLE_FUNCTIONS[t])
-for t in ["update_setting", "take_screenshot", "read_file", "send_email", "git_auto_commit_and_push", "spawn_parallel_agents", "run_actor_critic_research", "send_telegram_update", "upload_google_drive_file", "draft_gmail_message", "create_google_calendar_event", "create_google_doc"]:
+for t in ["update_setting", "take_screenshot", "read_file", "send_email", "git_auto_commit_and_push", "spawn_parallel_agents", "run_actor_critic_research", "send_telegram_update", "upload_google_drive_file", "draft_gmail_message", "create_google_calendar_event", "create_google_doc", "create_google_slides"]:
     if t in AVAILABLE_FUNCTIONS:
         guard.register("sensitive")(AVAILABLE_FUNCTIONS[t])

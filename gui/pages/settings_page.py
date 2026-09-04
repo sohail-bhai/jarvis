@@ -320,11 +320,24 @@ class SettingsPage(ctk.CTkScrollableFrame):
         ctk.CTkLabel(card, text="Connected Services", font=theme.font(14, "bold"), text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=16, pady=(14, 4))
         ctk.CTkLabel(card, text="Third-party platforms and integrations connected to JARVIS.", font=theme.font(11), text_color=theme.TEXT_MUTED).pack(anchor="w", padx=16, pady=(0, 12))
 
+        # Every line is checked rather than assumed, so this page can be
+        # trusted to say when something is not actually connected.
+        from assistant.api.server import get_local_server
+        from gui import integrations
+
+        google = integrations.google_status()
+        local_ai = integrations.local_ai_status()
+        phone = get_local_server().running
+
         services = [
-            ("Google Workspace", "Drive, Gmail, Calendar", "● Connected", theme.SUCCESS),
-            ("GitHub", "Repositories and commit sync", "● Connected", theme.SUCCESS),
-            ("Phone Notification Bridge", "Local WiFi message channel", "● Connected", theme.SUCCESS),
-            ("AI Helpers", "Local Ollama engine", "● Ready", theme.INFO),
+            ("Google Workspace", "Drive, Gmail, Calendar, Docs, Slides",
+             f"● {google['label']}",
+             theme.SUCCESS if google["connected"] else theme.TEXT_MUTED),
+            ("Phone", "This computer, reachable from your phone",
+             "● On" if phone else "● Off",
+             theme.SUCCESS if phone else theme.TEXT_MUTED),
+            ("AI Helpers", "Local Ollama engine", f"● {local_ai['label']}",
+             theme.INFO if local_ai["connected"] else theme.TEXT_MUTED),
         ]
 
         for title, desc, st, col in services:

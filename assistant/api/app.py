@@ -18,6 +18,7 @@ device token; see `assistant/api/auth.py`.
 import argparse
 import asyncio
 import logging
+import threading
 from pathlib import Path
 
 from fastapi import (
@@ -166,6 +167,41 @@ class SecretRequest(BaseModel):
     value: str = Field(..., min_length=1,
                        description="The credential. It is never returned again.")
     description: str = Field("", description="What this is for.")
+
+
+class DraftEmailRequest(BaseModel):
+    to: str = Field(..., min_length=3, description="Who it goes to.")
+    subject: str = Field("", description="Subject line.")
+    body: str = Field("", description="The message.")
+
+
+class SendEmailRequest(DraftEmailRequest):
+    """Sending is the same shape as drafting; only the consequence differs."""
+
+
+class CalendarEventRequest(BaseModel):
+    summary: str = Field(..., min_length=1, description="What the event is called.")
+    start_time_iso: str = Field("", description="When it starts, ISO 8601. "
+                                                "Empty means an hour from now.")
+    duration_minutes: int = Field(60, gt=0, le=24 * 60)
+    description: str = Field("", description="Details shown on the event.")
+
+
+class NewDocRequest(BaseModel):
+    title: str = Field(..., min_length=1)
+    content: str = Field("", description="Text to put in the document.")
+
+
+class NewDeckRequest(BaseModel):
+    title: str = Field(..., min_length=1)
+    slides: list = Field(default_factory=list,
+                         description="Slide titles, or {title, bullets} entries.")
+
+
+class DriveUploadRequest(BaseModel):
+    name: str = Field(..., min_length=1, description="The file name in Drive.")
+    content: str = Field("", description="The file's text content.")
+    mime_type: str = Field("text/plain")
 
 
 class PairRequest(BaseModel):
@@ -542,6 +578,221 @@ def create_app(control=None, executor=None, security=None, notifier=None):
                      f"{device.name if device else 'this computer'}.",
                      metadata=result)
         return result
+
+    # -- Google Workspace --------------------------------------------------
+    # Drive, Gmail, Calendar, Docs, Sheets and Slides through one gateway.
+    # Reading is direct. Anything the outside world would notice - sending
+    # mail, putting an event on a calendar, uploading a file - is held for
+    # approval, and the approval is bound to those exact arguments.
+
+    def _google():
+        from assistant.workspace.gateway import gateway as workspace_gateway
+        return workspace_gateway
+
+    def _google_live():
+        """Whether these answers come from Google or are examples."""
+        return _google().is_connected()
+
+    def _google_payload(items, **extra):
+        """Every Google answer says which it is, so no screen has to guess."""
+        body = {"live": _google_live(), "items": items}
+        if not body["live"]:
+            body["notice"] = ("Google isn't connected yet. These are examples, "
+                              "not your data.")
+        body.update(extra)
+        return body
+
+    def _fingerprint(action, arguments):
+        """Bind an approval to one specific action.
+
+        Approving "email Sam the budget" must not also authorise emailing
+        someone else, so the resource carries a hash of the arguments.
+        """
+        import hashlib
+        import json
+
+        digest = hashlib.sha256(
+            json.dumps(arguments, sort_keys=True, default=str).encode("utf-8")
+        ).hexdigest()[:16]
+        return f"google:{action}:{digest}"
+
+    def _held_for_approval(capability, action, question, impact, arguments,
+                           request):
+        """Run a consequential Google action only once the user has said yes.
+
+        Returns None when the action may go ahead - the grant is spent on the
+        way out, so one approval is one action. Otherwise returns the pending
+        approval for the client to show.
+        """
+        resource = _fingerprint(action, arguments)
+
+        for permission in plane.list_permissions(active_only=True):
+            if permission.resource == resource and permission.allows(capability):
+                # Spend it. A second identical call needs a second approval.
+                plane.revoke(permission.id, reason="Used once, as approved.")
+                return None
+
+        device = getattr(request.state, "device", None)
+        approval = plane.request_approval(
+            action=action, question=question, impact=impact,
+            reason=f"Asked from {device.name}." if device else "",
+            capability=capability, resource=resource,
+            risk=plane.capability_risk(capability))
+        return approval
+
+    @app.get("/api/google/status", tags=["google"])
+    def google_status():
+        """Whether Google is connected, and what it can reach if it is."""
+        return _google().get_status()
+
+    @app.post("/api/google/connect", tags=["google"])
+    def google_connect():
+        """Start the Google sign-in. The browser opens on this computer.
+
+        The consent screen can only be answered where the browser is, so this
+        returns immediately and the status endpoint reports the outcome.
+        """
+        from assistant.workspace import auth as workspace_auth
+
+        state = workspace_auth.connection_state()
+        if state["state"] == workspace_auth.LIVE:
+            return _google().get_status()
+        if state["state"] == workspace_auth.NOT_CONFIGURED:
+            raise HTTPException(status_code=409, detail=state["detail"])
+
+        def _run():
+            result = workspace_auth.authorize()
+            plane.record(
+                "Connected your Google account." if result["state"] == workspace_auth.LIVE
+                else f"Google sign-in did not finish. {result['detail']}",
+                metadata={"state": result["state"]})
+
+        threading.Thread(target=_run, daemon=True, name="google-oauth").start()
+        plane.record("Opened Google sign-in on this computer.")
+        return {"state": workspace_auth.NEEDS_AUTHORIZATION,
+                "detail": "Finish signing in to Google in the browser on your "
+                          "computer, then check the status again.",
+                "connected": False}
+
+    @app.post("/api/google/disconnect", tags=["google"])
+    def google_disconnect():
+        """Forget this computer's Google token. The account is untouched."""
+        from assistant.workspace import auth as workspace_auth
+
+        state = workspace_auth.disconnect()
+        plane.record("Disconnected your Google account from this computer.")
+        return {"connected": False, **state}
+
+    @app.get("/api/google/drive", tags=["google"])
+    def google_drive(limit: int = 20):
+        """Recent files in Drive."""
+        return _google_payload(_google().execute_capability(
+            "google.drive.list", limit=limit))
+
+    @app.get("/api/google/drive/search", tags=["google"])
+    def google_drive_search(query: str, limit: int = 20):
+        return _google_payload(_google().execute_capability(
+            "google.drive.search", query=query, limit=limit))
+
+    @app.get("/api/google/gmail", tags=["google"])
+    def google_gmail(query: str = "is:unread", limit: int = 10):
+        return _google_payload(_google().execute_capability(
+            "google.gmail.search", query=query, max_results=limit),
+            query=query)
+
+    @app.get("/api/google/calendar", tags=["google"])
+    def google_calendar(limit: int = 10):
+        return _google_payload(_google().execute_capability(
+            "google.calendar.read", max_results=limit))
+
+    @app.post("/api/google/gmail/draft", status_code=201, tags=["google"])
+    def google_draft_email(body: DraftEmailRequest):
+        """A draft changes nothing until someone sends it, so it needs no approval."""
+        result = _google().execute_capability(
+            "google.gmail.draft", to=body.to, subject=body.subject, body=body.body)
+        plane.record(f"Drafted an email to {body.to}.")
+        return {"live": _google_live(), "draft": result}
+
+    @app.post("/api/google/gmail/send", tags=["google"])
+    def google_send_email(body: SendEmailRequest, request: Request):
+        """Send mail - held for approval, and the approval names the recipient."""
+        arguments = {"to": body.to, "subject": body.subject, "body": body.body}
+        approval = _held_for_approval(
+            "google.gmail.send", "Send email",
+            f"Send \"{body.subject}\" to {body.to}?",
+            "The message leaves your account and cannot be unsent.",
+            arguments, request)
+        if approval is not None:
+            return JSONResponse(status_code=202, content={
+                "status": "waiting_approval",
+                "approval": approval.to_dict(),
+                "detail": "Approve this on your phone or the desktop app, then "
+                          "send it again."})
+
+        result = _google().execute_capability("google.gmail.send", **arguments)
+        plane.record(f"Sent an email to {body.to}.", result="sent")
+        return {"live": _google_live(), "status": "sent", "message": result}
+
+    @app.post("/api/google/calendar/events", tags=["google"])
+    def google_create_event(body: CalendarEventRequest, request: Request):
+        """Put an event on the calendar - other people may see it, so ask first."""
+        arguments = {"summary": body.summary, "start_time_iso": body.start_time_iso,
+                     "duration_minutes": body.duration_minutes,
+                     "description": body.description}
+        approval = _held_for_approval(
+            "google.calendar.write", "Create calendar event",
+            f"Put \"{body.summary}\" on your calendar?",
+            "The event appears on your calendar and to anyone you invite.",
+            arguments, request)
+        if approval is not None:
+            return JSONResponse(status_code=202, content={
+                "status": "waiting_approval",
+                "approval": approval.to_dict(),
+                "detail": "Approve this, then create it again."})
+
+        conflicts = _google().execute_capability(
+            "google.calendar.conflicts",
+            start_iso=body.start_time_iso or "",
+            end_iso=body.start_time_iso or "") if body.start_time_iso else []
+        result = _google().execute_capability("google.calendar.write", **arguments)
+        plane.record(f"Added \"{body.summary}\" to your calendar.", result="created")
+        return {"live": _google_live(), "event": result, "conflicts": conflicts}
+
+    @app.post("/api/google/docs", status_code=201, tags=["google"])
+    def google_create_doc(body: NewDocRequest):
+        """A new document in your own Drive. Nothing is shared by creating it."""
+        result = _google().execute_capability(
+            "google.docs.create", title=body.title, content=body.content)
+        plane.record(f"Created the document \"{body.title}\".")
+        return {"live": _google_live(), "document": result}
+
+    @app.post("/api/google/slides", status_code=201, tags=["google"])
+    def google_create_slides(body: NewDeckRequest):
+        """Turn an outline into a presentation."""
+        result = _google().execute_capability(
+            "google.slides.create", title=body.title, slides=body.slides)
+        plane.record(f"Created the presentation \"{body.title}\".")
+        return {"live": _google_live(), "presentation": result}
+
+    @app.post("/api/google/drive/upload", status_code=201, tags=["google"])
+    def google_upload(body: DriveUploadRequest, request: Request):
+        """Put a file in Drive - held for approval, like anything that leaves."""
+        arguments = {"name": body.name, "content": body.content,
+                     "mime_type": body.mime_type}
+        approval = _held_for_approval(
+            "google.drive.write", "Upload to Drive",
+            f"Upload \"{body.name}\" to your Google Drive?",
+            "The file is stored in your Drive.",
+            arguments, request)
+        if approval is not None:
+            return JSONResponse(status_code=202, content={
+                "status": "waiting_approval",
+                "approval": approval.to_dict(),
+                "detail": "Approve this, then upload it again."})
+
+        result = _google().execute_capability("google.drive.write", **arguments)
+        plane.record(f"Uploaded \"{body.name}\" to your Google Drive.")
+        return {"live": _google_live(), "file": result}
 
     # -- secrets -----------------------------------------------------------
     # Values go in and are never handed back. Agents receive secret://name and

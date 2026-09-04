@@ -1,13 +1,21 @@
-"""Google Workspace Authentication and Service Factory.
+"""Google Workspace authentication and service factory.
 
-Handles unified OAuth2 credentials across Google Drive, Gmail, Calendar,
-Docs, and Sheets. Provides graceful simulation/fallback if credentials.json
-is not yet configured by the user.
+One OAuth client covers Drive, Gmail, Calendar, Docs, Sheets and Slides.
+
+Two rules shape this module:
+
+* **Asking is never authorizing.** Reading the connection state, or building a
+  service for a request that arrived over the API, must never open a browser.
+  Only `authorize()` does that, and only when a person asked for it.
+* **Demo is never silent.** `connection_state()` reports exactly one of three
+  states, so a screen can say which one it is showing rather than presenting
+  example data as the user's own.
 """
 
 import os
 import logging
-from typing import Optional, Dict, Any
+import threading
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -17,9 +25,16 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
     "https://www.googleapis.com/auth/documents",
     "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/presentations",
 ]
 
+# States reported by connection_state().
+NOT_CONFIGURED = "not_configured"      # no OAuth client downloaded yet
+NEEDS_AUTHORIZATION = "needs_authorization"  # client present, no usable token
+LIVE = "live"                          # a token that Google will accept
+
 _services_cache: Dict[str, Any] = {}
+_lock = threading.Lock()
 
 
 def get_project_root() -> str:
@@ -45,82 +60,193 @@ def get_credentials_path() -> str:
     return os.path.join(get_project_root(), "credentials.json")
 
 
-def is_workspace_connected() -> bool:
-    """Returns True if valid workspace credentials or token exist."""
-    creds_p = get_credentials_path()
-    has_token = any(os.path.exists(p) for p in get_token_paths())
-    return has_token or os.path.exists(creds_p)
+def has_client_secrets() -> bool:
+    """True once credentials.json from the Google Cloud Console is in place."""
+    return os.path.exists(get_credentials_path())
 
 
-def get_oauth_credentials():
-    """Loads or refreshes user OAuth credentials."""
+def has_token() -> bool:
+    """True once this machine has been authorized at least once."""
+    return any(os.path.exists(p) for p in get_token_paths())
+
+
+def google_libraries_available() -> bool:
+    try:
+        import google.oauth2.credentials  # noqa: F401
+        import google_auth_oauthlib  # noqa: F401
+        import googleapiclient  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def load_saved_credentials(refresh: bool = True):
+    """Load the stored token. Never prompts, never opens a browser.
+
+    Returns valid credentials, or None when the user still has to authorize.
+    """
     try:
         from google.oauth2.credentials import Credentials
         from google.auth.transport.requests import Request
-        from google_auth_oauthlib.flow import InstalledAppFlow
     except ImportError:
         logger.warning("Google auth libraries not available.")
         return None
 
     token_path = get_token_path()
-    creds_path = get_credentials_path()
-    creds = None
+    if not os.path.exists(token_path):
+        return None
 
-    if os.path.exists(token_path):
-        try:
-            creds = Credentials.from_authorized_user_file(token_path, SCOPES)
-        except Exception as e:
-            logger.warning(f"Failed to read token_workspace.json: {e}")
-            try:
-                os.remove(token_path)
-            except OSError:
-                pass
-            creds = None
+    try:
+        creds = Credentials.from_authorized_user_file(token_path, SCOPES)
+    except Exception as error:
+        logger.warning("Stored Google token is unreadable: %s", error)
+        return None
 
     if creds and creds.valid:
         return creds
 
-    if creds and creds.expired and creds.refresh_token:
+    if refresh and creds and creds.expired and creds.refresh_token:
         try:
             creds.refresh(Request())
-            with open(token_path, "w", encoding="utf-8") as f:
-                f.write(creds.to_json())
+            _write_token(creds)
             return creds
-        except Exception as e:
-            logger.warning(f"Could not refresh Google OAuth credentials: {e}")
-            creds = None
+        except Exception as error:
+            logger.warning("Could not refresh Google credentials: %s", error)
+            return None
 
-    if not os.path.exists(creds_path):
-        logger.info("No credentials.json found; Google Workspace in local demo mode.")
-        return None
+    return None
+
+
+def _write_token(creds) -> None:
+    token_path = os.path.join(get_project_root(), "token_workspace.json")
+    if os.path.exists(os.path.join(get_project_root(), "token.json")):
+        token_path = get_token_path()
+    with open(token_path, "w", encoding="utf-8") as handle:
+        handle.write(creds.to_json())
+    try:
+        os.chmod(token_path, 0o600)
+    except OSError:
+        pass
+
+
+def connection_state() -> Dict[str, str]:
+    """What Google access this machine actually has, in one call.
+
+    Cheap enough to call from a screen refresh: it reads files and, at most,
+    refreshes an expired token. It never starts an authorization flow.
+    """
+    if not google_libraries_available():
+        return {
+            "state": NOT_CONFIGURED,
+            "detail": "Google libraries are not installed. "
+                      "Run: pip install -r requirements.txt",
+        }
+
+    if not has_client_secrets() and not has_token():
+        return {
+            "state": NOT_CONFIGURED,
+            "detail": "Add credentials.json from the Google Cloud Console to "
+                      "the JARVIS folder, then connect.",
+        }
+
+    if load_saved_credentials() is not None:
+        return {"state": LIVE, "detail": "Connected to your Google account."}
+
+    return {
+        "state": NEEDS_AUTHORIZATION,
+        "detail": "Sign in to Google once to finish connecting.",
+    }
+
+
+def is_workspace_live() -> bool:
+    """True only when Google will actually answer. Not "a file exists"."""
+    return connection_state()["state"] == LIVE
+
+
+def is_workspace_connected() -> bool:
+    """Kept for callers that only ask whether Google is usable right now."""
+    return is_workspace_live()
+
+
+def authorize(open_browser: bool = True) -> Dict[str, str]:
+    """Run the OAuth consent flow. Blocks until the person finishes it.
+
+    Only call this from an explicit user action - a button, or a CLI command -
+    never from a request handler, which would hang the API on a browser.
+    """
+    if not google_libraries_available():
+        return {"state": NOT_CONFIGURED,
+                "detail": "Google libraries are not installed."}
+
+    if not has_client_secrets():
+        return {"state": NOT_CONFIGURED,
+                "detail": "credentials.json is missing. Download the OAuth "
+                          "client from the Google Cloud Console first."}
 
     try:
-        flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
-        creds = flow.run_local_server(port=0)
-        with open(token_path, "w", encoding="utf-8") as f:
-            f.write(creds.to_json())
-        return creds
-    except Exception as e:
-        logger.error(f"Google OAuth authorization flow failed: {e}")
-        return None
+        from google_auth_oauthlib.flow import InstalledAppFlow
+    except ImportError:
+        return {"state": NOT_CONFIGURED,
+                "detail": "google-auth-oauthlib is not installed."}
+
+    try:
+        flow = InstalledAppFlow.from_client_secrets_file(get_credentials_path(), SCOPES)
+        if open_browser:
+            creds = flow.run_local_server(port=0)
+        else:
+            creds = flow.run_local_server(port=0, open_browser=False)
+        _write_token(creds)
+    except Exception as error:
+        logger.error("Google authorization failed: %s", error)
+        return {"state": NEEDS_AUTHORIZATION, "detail": f"Sign-in failed: {error}"}
+
+    with _lock:
+        _services_cache.clear()
+    return {"state": LIVE, "detail": "Connected to your Google account."}
+
+
+def disconnect() -> Dict[str, str]:
+    """Forget the token on this machine. The Google account is untouched."""
+    for path in get_token_paths():
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+    with _lock:
+        _services_cache.clear()
+    return connection_state()
 
 
 def get_google_service(service_name: str, version: str):
-    """Returns a Google API client service instance or None."""
-    global _services_cache
-    cache_key = f"{service_name}_{version}"
-    if cache_key in _services_cache:
-        return _services_cache[cache_key]
+    """Returns a Google API client, or None when Google is not connected.
 
-    creds = get_oauth_credentials()
+    Never interactive: a caller that gets None falls back to demo data and has
+    to say so.
+    """
+    cache_key = f"{service_name}_{version}"
+    with _lock:
+        cached = _services_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    creds = load_saved_credentials()
     if not creds:
         return None
 
     try:
         from googleapiclient.discovery import build
-        service = build(service_name, version, credentials=creds)
-        _services_cache[cache_key] = service
-        return service
-    except Exception as e:
-        logger.error(f"Failed to build Google service {service_name} ({version}): {e}")
+        service = build(service_name, version, credentials=creds,
+                        cache_discovery=False)
+    except Exception as error:
+        logger.error("Failed to build Google service %s (%s): %s",
+                     service_name, version, error)
         return None
+
+    with _lock:
+        _services_cache[cache_key] = service
+    return service
+
+
+def get_oauth_credentials():
+    """Older name kept for existing callers. Non-interactive."""
+    return load_saved_credentials()

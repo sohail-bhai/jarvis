@@ -18,9 +18,11 @@ export function FileActionsModal({ file, visible, onClose, onAction }: FileActio
     onClose();
     if (onAction) {
       onAction(actionName, file);
-    } else {
-      Alert.alert(actionName, `${actionName} performed on ${file.name}`);
+      return;
     }
+    // No handler means nothing would actually happen, so say that rather than
+    // reporting an action that was never performed.
+    Alert.alert(actionName, `JARVIS cannot ${actionName.toLowerCase()} ${file.name} from here yet.`);
   };
 
   const getFileIcon = (type: FileItem['type']) => {
@@ -52,7 +54,9 @@ export function FileActionsModal({ file, visible, onClose, onAction }: FileActio
             </View>
             <View style={styles.headerTitleBox}>
               <Text style={styles.fileName} numberOfLines={1}>{file.name}</Text>
-              <Text style={styles.fileSub}>{file.type.toUpperCase()} · {file.size}</Text>
+              <Text style={styles.fileSub}>
+                {file.type.toUpperCase()}{file.size ? ` · ${file.size}` : ''}
+              </Text>
             </View>
             <Pressable style={styles.closeButton} onPress={onClose} hitSlop={8}>
               <Ionicons name="close" size={22} color={colors.textSecondary} />
@@ -68,23 +72,7 @@ export function FileActionsModal({ file, visible, onClose, onAction }: FileActio
               onPress={() => handleAction('Open')}
             >
               <Ionicons name="open-outline" size={20} color={colors.textPrimary} />
-              <Text style={styles.actionLabel}>Open</Text>
-            </Pressable>
-
-            <Pressable
-              style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}
-              onPress={() => handleAction('Send to my laptop')}
-            >
-              <Ionicons name="laptop-outline" size={20} color={colors.textPrimary} />
-              <Text style={styles.actionLabel}>Send to my laptop</Text>
-            </Pressable>
-
-            <Pressable
-              style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}
-              onPress={() => handleAction('Share')}
-            >
-              <Ionicons name="share-outline" size={20} color={colors.textPrimary} />
-              <Text style={styles.actionLabel}>Share</Text>
+              <Text style={styles.actionLabel}>Open on this phone</Text>
             </Pressable>
 
             <Pressable
@@ -92,7 +80,7 @@ export function FileActionsModal({ file, visible, onClose, onAction }: FileActio
               onPress={() => handleAction('Download')}
             >
               <Ionicons name="download-outline" size={20} color={colors.textPrimary} />
-              <Text style={styles.actionLabel}>Download</Text>
+              <Text style={styles.actionLabel}>Save a copy here</Text>
             </Pressable>
 
             <Pressable
@@ -101,14 +89,6 @@ export function FileActionsModal({ file, visible, onClose, onAction }: FileActio
             >
               <Ionicons name="sparkles-outline" size={20} color={colors.primary} />
               <Text style={[styles.actionLabel, { color: colors.primary }]}>Ask JARVIS about this file</Text>
-            </Pressable>
-
-            <Pressable
-              style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}
-              onPress={() => handleAction('View in Drive')}
-            >
-              <Ionicons name="logo-google" size={20} color={colors.textPrimary} />
-              <Text style={styles.actionLabel}>View in Drive</Text>
             </Pressable>
 
             <View style={styles.divider} />

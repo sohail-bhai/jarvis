@@ -1,81 +1,183 @@
 /**
- * Google Workspace - not connected yet.
+ * Google Workspace, through the computer.
  *
- * The control plane has no Google endpoints, so everything below is example
- * data. It is exported behind `isDemo` so the screens can say so out loud
- * rather than showing invented mail as if it were yours.
+ * The phone never holds a Google token. It asks the computer, and the computer
+ * - which did the OAuth and stores the token - answers. Every answer carries
+ * `live`, so a screen showing example data always knows it is doing so and can
+ * say it out loud.
  */
-import { DriveFile, Email, CalendarEvent } from './types';
+import { request } from '../api/client';
+import { CalendarEvent, DriveFile, Email } from './types';
 
-const mockDriveFiles: DriveFile[] = [
-  { id: 'gd-1', name: 'Architecture.pdf', mimeType: 'application/pdf', modifiedTime: '2026-09-02T10:00:00Z', size: '2.1 MB' },
-  { id: 'gd-2', name: 'Project Notes.docx', mimeType: 'application/vnd.google-apps.document', modifiedTime: '2026-08-30T16:00:00Z', size: '340 KB' },
-  { id: 'gd-3', name: 'Budget_Q3.xlsx', mimeType: 'application/vnd.google-apps.spreadsheet', modifiedTime: '2026-09-03T11:00:00Z', size: '890 KB' },
-  { id: 'gd-4', name: 'Team Photo.jpg', mimeType: 'image/jpeg', modifiedTime: '2026-08-28T14:00:00Z', size: '4.5 MB' },
-  { id: 'gd-5', name: 'Hackwave Deck.pptx', mimeType: 'application/vnd.google-apps.presentation', modifiedTime: '2026-09-03T15:00:00Z', size: '8.2 MB' },
-];
+export type GoogleState = 'live' | 'needs_authorization' | 'not_configured';
 
-const mockEmails: Email[] = [
-  { id: 'em-1', from: 'Sarah Chen', subject: 'Hackwave submission deadline', snippet: 'Just a reminder that the final submission is due...', date: '2026-09-04T14:30:00Z', isRead: false, isImportant: true },
-  { id: 'em-2', from: 'Alex Kumar', subject: 'Code review feedback', snippet: 'I reviewed your PR and left some comments on...', date: '2026-09-04T13:15:00Z', isRead: false, isImportant: true },
-  { id: 'em-3', from: 'Team Updates', subject: 'Weekly sync notes', snippet: 'Here are the notes from today\'s sync meeting...', date: '2026-09-04T11:00:00Z', isRead: true, isImportant: false },
-  { id: 'em-4', from: 'GitHub', subject: 'New issue: Performance optimization', snippet: 'A new issue was opened in your repository...', date: '2026-09-04T09:30:00Z', isRead: true, isImportant: false },
-];
+export interface GoogleStatus {
+  connected: boolean;
+  state: GoogleState;
+  detail: string;
+  mode: 'live' | 'demo';
+  account: string;
+  services: Record<string, { status: string; label: string }>;
+}
 
-const mockCalendarEvents: CalendarEvent[] = [
-  { id: 'cal-1', title: 'Team Standup', startTime: '2026-09-04T10:00:00Z', endTime: '2026-09-04T10:15:00Z' },
-  { id: 'cal-2', title: 'Hackwave Review', startTime: '2026-09-04T14:00:00Z', endTime: '2026-09-04T15:00:00Z', location: 'Room 204' },
-  { id: 'cal-3', title: 'Design Review', startTime: '2026-09-05T11:00:00Z', endTime: '2026-09-05T12:00:00Z', attendees: ['Sarah', 'Alex', 'Maya'] },
-  { id: 'cal-4', title: 'Sprint Planning', startTime: '2026-09-05T14:00:00Z', endTime: '2026-09-05T15:30:00Z' },
-];
+/** Answers arrive labelled: real, or an example the screen must own up to. */
+export interface Answer<T> {
+  live: boolean;
+  items: T[];
+  notice?: string;
+}
 
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+interface RawPayload<T> {
+  live: boolean;
+  items: T[];
+  notice?: string;
+}
+
+interface RawDriveFile {
+  id: string;
+  name: string;
+  mimeType?: string;
+  modifiedTime?: string;
+  size?: string;
+  webViewLink?: string;
+}
+
+interface RawEmail {
+  id: string;
+  sender?: string;
+  subject?: string;
+  snippet?: string;
+  unread?: boolean;
+}
+
+interface RawEvent {
+  id: string;
+  summary?: string;
+  description?: string;
+  location?: string;
+  start?: { dateTime?: string; date?: string };
+  end?: { dateTime?: string; date?: string };
+  attendees?: { email?: string; displayName?: string }[];
+}
+
+function readableSize(size?: string): string | undefined {
+  const bytes = Number(size);
+  if (!size || Number.isNaN(bytes) || bytes <= 0) return undefined;
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value < 10 && unit > 0 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
+}
+
+function toDriveFile(raw: RawDriveFile): DriveFile {
+  return {
+    id: raw.id,
+    name: raw.name,
+    mimeType: raw.mimeType ?? 'application/octet-stream',
+    modifiedTime: raw.modifiedTime ?? '',
+    size: readableSize(raw.size),
+  };
+}
+
+function toEmail(raw: RawEmail): Email {
+  return {
+    id: raw.id,
+    from: raw.sender ?? 'Unknown',
+    subject: raw.subject ?? '(no subject)',
+    snippet: raw.snippet ?? '',
+    date: '',
+    isRead: !raw.unread,
+    // Gmail's own "important" marking is a separate call; unread is the honest
+    // stand-in and is what the screen actually sorts on.
+    isImportant: Boolean(raw.unread),
+  };
+}
+
+function toEvent(raw: RawEvent): CalendarEvent {
+  return {
+    id: raw.id,
+    title: raw.summary ?? 'Untitled event',
+    startTime: raw.start?.dateTime ?? raw.start?.date ?? '',
+    endTime: raw.end?.dateTime ?? raw.end?.date ?? '',
+    location: raw.location,
+    attendees: raw.attendees?.map(person => person.displayName || person.email || '').filter(Boolean),
+  };
+}
+
+function answer<Raw, T>(payload: RawPayload<Raw>, map: (raw: Raw) => T): Answer<T> {
+  return {
+    live: Boolean(payload?.live),
+    items: (payload?.items ?? []).map(map),
+    notice: payload?.notice,
+  };
+}
 
 export const googleService = {
-  // Drive
-  async getDriveFiles(): Promise<DriveFile[]> {
-    await delay(400);
-    return [...mockDriveFiles];
+  /** Whether the computer's Google account is connected, and to whom. */
+  async getStatus(): Promise<GoogleStatus> {
+    return request<GoogleStatus>('/api/google/status');
   },
 
-  async searchDrive(query: string): Promise<DriveFile[]> {
-    await delay(600);
-    const q = query.toLowerCase();
-    return mockDriveFiles.filter(f => f.name.toLowerCase().includes(q));
+  /**
+   * Start the sign-in. The browser opens on the computer, because that is
+   * where the token belongs - the phone only learns the outcome.
+   */
+  async connect(): Promise<{ detail: string }> {
+    return request<{ detail: string }>('/api/google/connect', { method: 'POST' });
   },
 
-  // Gmail
-  async getEmails(): Promise<Email[]> {
-    await delay(400);
-    return [...mockEmails];
+  async disconnect(): Promise<GoogleStatus> {
+    return request<GoogleStatus>('/api/google/disconnect', { method: 'POST' });
   },
 
-  async getImportantEmails(): Promise<Email[]> {
-    await delay(300);
-    return mockEmails.filter(e => e.isImportant);
+  async getDriveFiles(limit = 20): Promise<Answer<DriveFile>> {
+    return answer(await request<RawPayload<RawDriveFile>>(
+      `/api/google/drive?limit=${limit}`), toDriveFile);
   },
 
-  async getUnreadCount(): Promise<number> {
-    return mockEmails.filter(e => !e.isRead).length;
+  async searchDrive(query: string, limit = 20): Promise<Answer<DriveFile>> {
+    return answer(await request<RawPayload<RawDriveFile>>(
+      `/api/google/drive/search?query=${encodeURIComponent(query)}&limit=${limit}`), toDriveFile);
   },
 
-  // Calendar
-  async getCalendarEvents(): Promise<CalendarEvent[]> {
-    await delay(400);
-    return [...mockCalendarEvents];
+  async getEmails(query = 'is:unread', limit = 10): Promise<Answer<Email>> {
+    return answer(await request<RawPayload<RawEmail>>(
+      `/api/google/gmail?query=${encodeURIComponent(query)}&limit=${limit}`), toEmail);
   },
 
-  async getTodayEvents(): Promise<CalendarEvent[]> {
-    await delay(300);
-    return mockCalendarEvents.filter(e => e.startTime.includes('2026-09-04'));
+  async getImportantEmails(limit = 10): Promise<Answer<Email>> {
+    return this.getEmails('is:unread is:important', limit);
   },
 
-  // Status
-  /** Nothing is connected to a real Google account yet. */
-  isConnected(): boolean {
-    return false;
+  async getCalendarEvents(limit = 10): Promise<Answer<CalendarEvent>> {
+    return answer(await request<RawPayload<RawEvent>>(
+      `/api/google/calendar?limit=${limit}`), toEvent);
   },
 
-  /** True while these answers are examples rather than your data. */
-  isDemo: true,
+  /** Today's events, filtered here so the server stays a plain listing. */
+  async getTodayEvents(): Promise<Answer<CalendarEvent>> {
+    const events = await this.getCalendarEvents(25);
+    const today = new Date().toDateString();
+    return {
+      ...events,
+      items: events.items.filter(
+        event => event.startTime && new Date(event.startTime).toDateString() === today),
+    };
+  },
+
+  async draftEmail(to: string, subject: string, body: string) {
+    return request('/api/google/gmail/draft', { method: 'POST', body: { to, subject, body } });
+  },
+
+  async createDoc(title: string, content = '') {
+    return request('/api/google/docs', { method: 'POST', body: { title, content } });
+  },
+
+  async createSlides(title: string, slides: string[] = []) {
+    return request('/api/google/slides', { method: 'POST', body: { title, slides } });
+  },
 };

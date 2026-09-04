@@ -82,7 +82,13 @@ def resolve(path):
 
     candidate = Path(text).expanduser()
     if not candidate.is_absolute():
-        candidate = roots[0] / candidate
+        # A relative path names its share first - "Pictures/beach.jpg" - which
+        # is what makes every share reachable rather than only the first one.
+        # A path that names no share is read against the first share, so the
+        # older single-share form still works.
+        head, _, tail = text.replace("\\", "/").partition("/")
+        base = next((root for root in roots if root.name == head), None)
+        candidate = (base / tail if tail else base) if base else roots[0] / candidate
 
     try:
         real = candidate.resolve()
@@ -98,16 +104,35 @@ def resolve(path):
     raise FileAccessError("That path is outside the folders you shared.")
 
 
+def share_relative(path):
+    """Name a file the way a client may ask for it back.
+
+    Every share contributes its own name as the first segment, so
+    `Pictures/holiday/beach.jpg` is unambiguous across shares while never
+    revealing where the share sits on disk.
+    """
+    for root in shares():
+        if path == root:
+            return root.name
+        if root in path.parents:
+            return f"{root.name}/{path.relative_to(root)}"
+    return ""
+
+
 def _entry(path, root=None):
     try:
         info = path.stat()
     except OSError:
         return None
 
+    relative = share_relative(path)
+    if not relative:
+        relative = str(path.relative_to(root)) if root else path.name
+
     return {
         "name": path.name,
         "path": str(path),
-        "relative": str(path.relative_to(root)) if root else path.name,
+        "relative": relative,
         "is_dir": path.is_dir(),
         "size": 0 if path.is_dir() else info.st_size,
         "modified": info.st_mtime,
@@ -117,7 +142,21 @@ def _entry(path, root=None):
 
 
 def list_dir(path=""):
-    """What is in a folder: folders first, then files, newest name order."""
+    """What is in a folder: folders first, then files, newest name order.
+
+    An empty path lists the shares themselves, so a client that knows nothing
+    can start at the top and walk down into any of them.
+    """
+    if not str(path or "").strip():
+        roots = shares()
+        if not roots:
+            raise FileAccessError(
+                "Nothing is shared yet. Add folders to `file_shares` in config.json.")
+        return {"path": "", "parent": "",
+                "entries": [entry for entry in (_entry(root) for root in roots)
+                            if entry is not None],
+                "truncated": False}
+
     target = resolve(path)
     if not target.is_dir():
         raise FileAccessError(f"{target.name} is a file, not a folder.")
@@ -133,7 +172,8 @@ def list_dir(path=""):
         if len(entries) >= MAX_ENTRIES:
             break
 
-    return {"path": str(target), "parent": str(target.parent),
+    return {"path": share_relative(target) or str(target),
+            "parent": share_relative(target.parent),
             "entries": entries, "truncated": len(entries) >= MAX_ENTRIES}
 
 
