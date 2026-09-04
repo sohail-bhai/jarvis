@@ -79,7 +79,7 @@ class DevicesPage(ctk.CTkScrollableFrame):
 
         ctk.CTkLabel(
             title_row,
-            text="📱  Connect your phone",
+            text="Connect your phone",
             font=theme.font(14, "bold"),
             text_color=theme.TEXT_PRIMARY,
         ).pack(side="left")

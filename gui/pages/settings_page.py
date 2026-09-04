@@ -214,7 +214,7 @@ class SettingsPage(ctk.CTkScrollableFrame):
 
         ctk.CTkButton(
             stop_inner,
-            text="🛑 Stop JARVIS",
+            text="Stop JARVIS",
             font=theme.font(12, "bold"),
             fg_color=theme.DANGER,
             hover_color=theme.DANGER_HOVER,

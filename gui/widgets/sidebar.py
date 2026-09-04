@@ -1,6 +1,8 @@
 """
 Sidebar component for the JARVIS desktop interface.
-Clean, dark slate aesthetic matching the reference design.
+
+Text-only navigation on a neutral dark surface. No icons: seven short labels
+read faster than seven labels plus seven pictures.
 """
 from __future__ import annotations
 
@@ -47,58 +49,52 @@ class Sidebar(ctk.CTkFrame):
 
         # 3. Navigation Items
         self.nav_items = [
-            ("home", "Home", "⌂"),
-            ("devices", "My Devices", "💻"),
-            ("files", "My Files", "📁"),
-            ("google", "Google", "G"),
-            ("web", "Web", "🌐"),
-            ("activity", "Activity", "⏱"),
-            ("settings", "Settings", "⚙"),
+            ("home", "Home"),
+            ("devices", "My Devices"),
+            ("files", "My Files"),
+            ("google", "Google"),
+            ("web", "Web"),
+            ("activity", "Activity"),
+            ("settings", "Settings"),
         ]
 
         self.nav_container = ctk.CTkFrame(self, fg_color="transparent")
         self.nav_container.pack(fill="x", padx=12, expand=True, anchor="n")
 
-        for page_id, label, icon in self.nav_items:
+        for page_id, label in self.nav_items:
             btn = ctk.CTkButton(
                 self.nav_container,
-                text=f"  {icon}   {label}",
+                text=f"   {label}",
                 font=theme.font(13, "bold" if page_id == "home" else "normal"),
                 fg_color=theme.SIDEBAR_ACTIVE if page_id == "home" else "transparent",
                 text_color=theme.SIDEBAR_TEXT,
                 hover_color=theme.SIDEBAR_HOVER,
-                corner_radius=10,
-                height=38,
+                corner_radius=theme.RADIUS_CONTROL,
+                height=36,
                 anchor="w",
                 command=lambda pid=page_id: self._select_page(pid),
             )
-            btn.pack(fill="x", pady=3)
+            btn.pack(fill="x", pady=2)
             self.nav_buttons[page_id] = btn
 
-        # 4. Bottom Status Pill (JARVIS Online & Voice Control)
-        bottom_frame = ctk.CTkFrame(
-            self,
-            fg_color="#1F2432",
-            corner_radius=12,
-            border_width=1,
-            border_color="#2B3245",
-        )
-        bottom_frame.pack(side="bottom", fill="x", padx=14, pady=16)
+        # 4. Bottom status line
+        bottom_frame = ctk.CTkFrame(self, fg_color="transparent")
+        bottom_frame.pack(side="bottom", fill="x", padx=20, pady=18)
 
         status_row = ctk.CTkFrame(bottom_frame, fg_color="transparent")
-        status_row.pack(fill="x", padx=12, pady=(12, 4))
+        status_row.pack(fill="x")
 
         self.dot_label = ctk.CTkLabel(
             status_row,
             text="●",
-            font=theme.font(14, "bold"),
+            font=theme.font(11, "bold"),
             text_color=theme.SUCCESS,
         )
         self.dot_label.pack(side="left")
 
         self.status_title = ctk.CTkLabel(
             status_row,
-            text=" JARVIS Online",
+            text="  JARVIS Online",
             font=theme.font(12, "bold"),
             text_color=theme.SIDEBAR_TEXT,
         )
@@ -111,7 +107,7 @@ class Sidebar(ctk.CTkFrame):
             text_color=theme.SIDEBAR_TEXT_MUTED,
             anchor="w",
         )
-        self.status_sub.pack(fill="x", padx=16, pady=(0, 12))
+        self.status_sub.pack(fill="x", pady=(3, 0))
 
     def _select_page(self, page_id: str):
         for pid, btn in self.nav_buttons.items():

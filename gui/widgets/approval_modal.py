@@ -39,7 +39,7 @@ class ApprovalModal(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             hdr,
-            text="⚠️",
+            text="!",
             font=theme.font(16),
         ).pack(side="left", padx=(0, 8))
 

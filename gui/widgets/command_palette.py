@@ -43,7 +43,7 @@ class CommandPalette(ctk.CTkToplevel):
 
         sparkle = ctk.CTkLabel(
             header,
-            text="✦",
+            text="›",
             font=theme.font(16, "bold"),
             text_color=theme.ACCENT,
         )

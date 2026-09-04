@@ -397,7 +397,7 @@ class GooglePage(ctk.CTkScrollableFrame):
                                   corner_radius=12, border_width=1,
                                   border_color=theme.CARD_BORDER)
         search_row.pack(fill="x", pady=(0, 12))
-        ctk.CTkLabel(search_row, text=" 🔍", font=theme.font(12)).pack(side="left", padx=8)
+        ctk.CTkLabel(search_row, text="Search", font=theme.font(11), text_color=theme.TEXT_MUTED).pack(side="left", padx=(12, 4))
 
         entry = ctk.CTkEntry(
             search_row,

@@ -52,12 +52,6 @@ class FilesPage(ctk.CTkScrollableFrame):
         search_row = ctk.CTkFrame(search_card, fg_color="transparent")
         search_row.pack(fill="x", padx=14, pady=8)
 
-        ctk.CTkLabel(
-            search_row,
-            text="🔍",
-            font=theme.font(13),
-        ).pack(side="left", padx=(0, 8))
-
         self.search_entry = ctk.CTkEntry(
             search_row,
             placeholder_text="Search your files...",

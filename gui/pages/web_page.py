@@ -51,12 +51,6 @@ class WebPage(ctk.CTkScrollableFrame):
         row = ctk.CTkFrame(input_card, fg_color="transparent")
         row.pack(fill="x", padx=14, pady=10)
 
-        ctk.CTkLabel(
-            row,
-            text="🌐",
-            font=theme.font(16),
-        ).pack(side="left", padx=(0, 8))
-
         self.web_entry = ctk.CTkEntry(
             row,
             placeholder_text="What should I find or do online?",
