@@ -54,6 +54,7 @@ Primary user-facing capabilities:
 - `assistant/memory.py`: persistent vector memory backed by ChromaDB.
 - `assistant/swarm.py`: parallel sub-agents and actor-critic research.
 - `assistant/browser/`: a real Chromium driven through Playwright. `session.py` (one persistent window, numbered elements), `actions.py` (the tools the model calls). See `docs/web-agent.md`.
+- `assistant/files.py`: the folders in `file_shares` reachable from a paired phone. Every path is resolved before it is checked, so `..` and symlinks out of a share are refused. See `docs/remote-files.md`.
 - `assistant/web_api.py`: `web_api_get` and `web_api_call` reach any service with a REST API, resolving a named credential from the secret store. Prefer this over a per-service module.
 - `assistant/site_memory.py`: per-domain notes in `data/site_notes.json`, handed back when that domain is opened again.
 - `assistant/gitlab_agent.py`: GitLab over its API - issues, files, a fix on its own branch, a merge request, and merging as a separate critical step.
@@ -248,6 +249,8 @@ Known limits in Version 1.2:
   operations, as the GitLab fix flow does.
 - JARVIS never types a password. A login wall is handed to the user through
   `browser_wait_for_login`.
+- File access is opt-in per folder and resolved-then-checked. Never add a path
+  that skips `files.resolve()`; that function is the boundary.
 - A step is retried three times by default; after that the task fails.
 - Resuming after a restart is not automatic: call `POST /api/tasks/resume` or
   `executor.resume_interrupted()`.

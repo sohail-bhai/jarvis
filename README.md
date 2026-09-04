@@ -260,6 +260,20 @@ curl -X POST http://<computer>:8765/api/pair \
 Only the SHA-256 hash of a token is stored, and `DELETE /api/devices/{id}/token`
 revokes one device without disturbing the others.
 
+#### 📁 Your Files, From Anywhere
+Share folders with your phone and reach them from a train:
+```json
+"file_shares": ["~/Documents", "~/Pictures"]
+```
+```bash
+curl -H "Authorization: Bearer $TOKEN" localhost:8765/api/files
+curl -H "Authorization: Bearer $TOKEN" \
+     "localhost:8765/api/files/download?path=reports/q3.txt" -o q3.txt
+```
+Only the folders you list are reachable, every path is resolved before it is
+checked, and each transfer is written to the timeline with the device that
+asked. See [`docs/remote-files.md`](docs/remote-files.md).
+
 #### 🗝️ Credentials
 Secrets live in an encrypted store rather than in `config.json`. Agents receive
 `secret://<name>` and never the value — the control plane resolves it at the

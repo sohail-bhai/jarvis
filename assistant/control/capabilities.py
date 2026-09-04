@@ -112,6 +112,9 @@ TOOL_CAPABILITIES = {
     "remember_about_site": "memory.write",
     "web_api_get": "web.api.read",
     "web_api_call": "web.api.write",
+    "list_shared_files": "filesystem.read",
+    "find_shared_file": "filesystem.read",
+    "shared_folders": "filesystem.read",
 
     # GitLab. Proposing a change and merging it are deliberately different.
     "gitlab_list_issues": "gitlab.read",

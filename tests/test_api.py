@@ -661,5 +661,122 @@ class SecretApiTests(ApiTestCase):
         self.assertEqual(422, response.status_code)
 
 
+class FileApiTests(ApiTestCase):
+    """The phone's view: browse, download, upload, over the same token."""
+
+    def setUp(self):
+        super().setUp()
+        import assistant.files as files
+        import assistant.api.app as api_app
+
+        self.files = files
+        self.share = Path(self.tempdir) / "Shared"
+        (self.share / "reports").mkdir(parents=True)
+        (self.share / "invoice.pdf").write_bytes(b"a bill")
+        (self.share / "reports" / "q3.txt").write_text("numbers")
+
+        self._real_setting = files.get_setting
+        self._real_api_setting = api_app.get_setting
+        files.get_setting = self._setting
+        api_app.get_setting = self._setting
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        import assistant.api.app as api_app
+        self.files.get_setting = self._real_setting
+        api_app.get_setting = self._real_api_setting
+
+    def _setting(self, key, default=None):
+        if key == "file_shares":
+            return [str(self.share)]
+        if key == "files_allow_write":
+            return True
+        if key == "files_allow_delete":
+            return getattr(self, "allow_delete", False)
+        return self._real_setting(key, default)
+
+    def test_the_phone_is_told_what_is_shared(self):
+        body = self.client.get("/api/files/shares").json()
+
+        self.assertEqual([str(self.share)], [item["path"] for item in body])
+
+    def test_a_folder_can_be_browsed(self):
+        body = self.client.get("/api/files").json()
+
+        self.assertEqual(["reports", "invoice.pdf"],
+                         [item["name"] for item in body["entries"]])
+
+    def test_a_file_can_be_downloaded(self):
+        response = self.client.get("/api/files/download",
+                                   params={"path": "invoice.pdf"})
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual(b"a bill", response.content)
+
+    def test_a_download_is_recorded_on_the_timeline(self):
+        self.client.get("/api/files/download", params={"path": "invoice.pdf"})
+
+        messages = [event.message for event in self.plane.list_events()]
+        self.assertTrue(any("Sent invoice.pdf" in message for message in messages))
+
+    def test_a_file_outside_the_shares_is_a_404(self):
+        response = self.client.get("/api/files/download",
+                                   params={"path": "/etc/passwd"})
+
+        self.assertEqual(404, response.status_code)
+
+    def test_climbing_out_of_a_share_is_a_404(self):
+        response = self.client.get("/api/files",
+                                   params={"path": str(self.share / ".." / "..")})
+
+        self.assertEqual(404, response.status_code)
+
+    def test_a_file_can_be_searched_for_by_name(self):
+        body = self.client.get("/api/files/search", params={"query": "q3"}).json()
+
+        self.assertEqual(["q3.txt"], [item["name"] for item in body])
+
+    def test_the_phone_can_send_a_file_to_the_computer(self):
+        response = self.client.post(
+            "/api/files/upload",
+            files={"file": ("photo.jpg", b"image bytes", "image/jpeg")},
+            data={"folder": ""})
+
+        self.assertEqual(201, response.status_code)
+        self.assertEqual(b"image bytes", (self.share / "photo.jpg").read_bytes())
+
+    def test_an_upload_is_recorded_on_the_timeline(self):
+        self.client.post("/api/files/upload",
+                         files={"file": ("photo.jpg", b"bytes", "image/jpeg")},
+                         data={"folder": ""})
+
+        messages = [event.message for event in self.plane.list_events()]
+        self.assertTrue(any("Received photo.jpg" in message for message in messages))
+
+    def test_a_folder_can_be_made_and_a_file_moved_into_it(self):
+        self.client.post("/api/files/folder", json={"path": "bills"})
+
+        moved = self.client.post("/api/files/move",
+                                 json={"source": "invoice.pdf",
+                                       "destination": str(self.share / "bills" / "invoice.pdf")})
+
+        self.assertEqual(200, moved.status_code)
+        self.assertTrue((self.share / "bills" / "invoice.pdf").exists())
+
+    def test_deleting_is_off_unless_it_is_switched_on(self):
+        response = self.client.delete("/api/files", params={"path": "invoice.pdf"})
+
+        self.assertEqual(403, response.status_code)
+        self.assertTrue((self.share / "invoice.pdf").exists())
+
+    def test_deleting_works_once_switched_on(self):
+        self.allow_delete = True
+
+        response = self.client.delete("/api/files", params={"path": "invoice.pdf"})
+
+        self.assertEqual(200, response.status_code)
+        self.assertFalse((self.share / "invoice.pdf").exists())
+
+
 if __name__ == "__main__":
     unittest.main()

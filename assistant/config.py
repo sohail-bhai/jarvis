@@ -14,6 +14,12 @@ DEFAULT_CONFIG = {
     "voice_rate": 170,
     "voice_volume": 1.0,
     "llm_model": "qwen2.5:3b",
+    # Where Ollama is listening. Point this elsewhere for a second instance
+    # (a CPU-only one, say) or for Ollama on another machine.
+    "ollama_url": "http://localhost:11434",
+    # A model running on the CPU needs longer to read a long prompt than one
+    # on a GPU. A timeout is indistinguishable from "no model", so be generous.
+    "llm_timeout_seconds": 300,
     
     "telegram_bot_token": "",
     "telegram_chat_id": "",
@@ -35,6 +41,12 @@ DEFAULT_CONFIG = {
     # Seeing the browser matters: some sites serve an empty page to a headless
     # one, and a login has to be done by a person in a window they can see.
     "browser_headless": False,
+
+    # Folders a paired phone can reach. Nothing is shared until you list one.
+    # Example: ["~/Documents", "~/Pictures"]
+    "file_shares": [],
+    "files_allow_write": True,
+    "files_allow_delete": False,
 
     "default_volume_step": 5,
     "listen_timeout_seconds": 8,

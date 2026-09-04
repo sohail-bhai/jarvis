@@ -18,10 +18,20 @@ device token; see `assistant/api/auth.py`.
 import argparse
 import asyncio
 import logging
+from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import (
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from assistant.api.auth import (
@@ -31,6 +41,7 @@ from assistant.api.auth import (
     bearer_token,
 )
 from assistant.api.errors import error_body, install_error_handlers
+from assistant import files as shared_files
 from assistant.control.capabilities import catalog
 from assistant.control.models import EventType
 from assistant.control.notifier import Notifier, TelegramChannel
@@ -140,6 +151,15 @@ class DelegateRequest(BaseModel):
     agent_id: str = Field("", description="A specific agent, if it matters.")
     after: list[int] | None = Field(
         None, description="Positions this must wait for. Defaults to the unfinished ones.")
+
+
+class MoveFileRequest(BaseModel):
+    source: str = Field(..., description="What to move, as it was listed.")
+    destination: str = Field(..., description="Where it should end up.")
+
+
+class NewFolderRequest(BaseModel):
+    path: str = Field(..., min_length=1, description="Folder to create.")
 
 
 class SecretRequest(BaseModel):
@@ -438,6 +458,90 @@ def create_app(control=None, executor=None, security=None, notifier=None):
         if rule is None:
             raise HTTPException(status_code=404, detail="No such policy rule.")
         return rule.to_dict()
+
+    # -- files -------------------------------------------------------------
+    # Your computer's files, reachable from a paired phone anywhere. Only the
+    # folders in `file_shares` are visible, and every path is resolved before
+    # it is checked, so a symlink out of a share fails like any other path.
+
+    def _files_or_404(action, *args, **kwargs):
+        try:
+            return action(*args, **kwargs)
+        except shared_files.FileAccessError as error:
+            raise HTTPException(status_code=404, detail=str(error))
+
+    def _writing_allowed():
+        if not get_setting("files_allow_write", True):
+            raise HTTPException(
+                status_code=403,
+                detail="Changing files from a phone is switched off. "
+                       "Set files_allow_write in config.json.")
+
+    @app.get("/api/files/shares", tags=["files"])
+    def list_shares():
+        """The folders that are reachable at all."""
+        return shared_files.describe_shares()
+
+    @app.get("/api/files", tags=["files"])
+    def list_files(path: str = ""):
+        """What is in a folder, folders first."""
+        return _files_or_404(shared_files.list_dir, path)
+
+    @app.get("/api/files/search", tags=["files"])
+    def search_files(query: str, path: str = "", limit: int = 100):
+        """Find a file by name, without knowing where you left it."""
+        return _files_or_404(shared_files.search, query, path, limit)
+
+    @app.get("/api/files/download", tags=["files"])
+    def download_file(path: str, request: Request):
+        """Send a file to the phone. Streamed, so size is not a problem."""
+        target, media_type = _files_or_404(shared_files.open_for_download, path)
+
+        device = getattr(request.state, "device", None)
+        plane.record(f"Sent {target.name} to {device.name if device else 'this computer'}.",
+                     metadata={"path": str(target)})
+        return FileResponse(target, media_type=media_type, filename=target.name)
+
+    @app.post("/api/files/upload", status_code=201, tags=["files"])
+    async def upload_file(request: Request, file: UploadFile = File(...),
+                          folder: str = Form(""), overwrite: bool = Form(False)):
+        """Take a file from the phone and put it in a shared folder."""
+        _writing_allowed()
+        saved = _files_or_404(shared_files.save_upload, folder, file.filename,
+                              file.file, overwrite)
+
+        device = getattr(request.state, "device", None)
+        plane.record(f"Received {saved['name']} from "
+                     f"{device.name if device else 'this computer'}.",
+                     metadata={"path": saved["path"]})
+        return saved
+
+    @app.post("/api/files/folder", status_code=201, tags=["files"])
+    def create_folder(request_body: NewFolderRequest):
+        _writing_allowed()
+        return _files_or_404(shared_files.make_folder, request_body.path)
+
+    @app.post("/api/files/move", tags=["files"])
+    def move_file(request_body: MoveFileRequest):
+        _writing_allowed()
+        return _files_or_404(shared_files.move, request_body.source,
+                             request_body.destination)
+
+    @app.delete("/api/files", tags=["files"])
+    def delete_file(path: str, request: Request):
+        """Delete a file, or an empty folder. Off unless you turn it on."""
+        if not get_setting("files_allow_delete", False):
+            raise HTTPException(
+                status_code=403,
+                detail="Deleting from a phone is switched off. "
+                       "Set files_allow_delete in config.json.")
+
+        result = _files_or_404(shared_files.delete, path)
+        device = getattr(request.state, "device", None)
+        plane.record(f"Deleted {Path(result['path']).name} at the request of "
+                     f"{device.name if device else 'this computer'}.",
+                     metadata=result)
+        return result
 
     # -- secrets -----------------------------------------------------------
     # Values go in and are never handed back. Agents receive secret://name and
