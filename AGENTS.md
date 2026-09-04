@@ -49,7 +49,7 @@ Primary user-facing capabilities:
 - `assistant/config.py`: config defaults, JSON loading/merging, and setting updates.
 - `assistant/notes.py`: note capture, readback, and clearing.
 - `assistant/ai_brain.py`: Ollama-backed agent loop (`_agent_loop`), the voice entry point `ask_ai()`, the control plane entry point `run_task_step()`, the tool-calling schema, and the `AVAILABLE_FUNCTIONS` tool registry.
-- `assistant/control/`: the control plane. `models.py` (data model), `store.py` (SQLite), `service.py` (`ControlPlane` coordination logic), `executor.py` (`TaskExecutor`, which runs task steps through `ai_brain.run_task_step`).
+- `assistant/control/`: the control plane. `models.py` (data model), `store.py` (SQLite), `service.py` (`ControlPlane` coordination logic), `executor.py` (`TaskExecutor`, which runs task steps through `ai_brain.run_task_step`), `capabilities.py` (namespaced capability catalog with risk levels), `policy.py` (`PolicyEngine`: allow, ask or deny).
 - `assistant/api/`: HTTP + WebSocket boundary over the control plane. `app.py` (routes), `auth.py` (device pairing, tokens, rate limiting), `errors.py` (one error envelope). Run with `python -m assistant.api`.
 - `assistant/memory.py`: persistent vector memory backed by ChromaDB.
 - `assistant/swarm.py`: parallel sub-agents and actor-critic research.
@@ -232,6 +232,8 @@ Known limits in Version 1.2:
   is already executing cannot be interrupted. Cancellation and emergency stop
   take effect between steps.
 - Steps must be supplied by the caller. Nothing plans them from a goal yet.
+- Capabilities are brokered but not yet enforced at the call site: an agent
+  that ignores `request_capability` and calls a tool directly is not stopped.
 
 Likely future work:
 

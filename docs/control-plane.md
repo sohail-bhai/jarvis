@@ -37,6 +37,8 @@ Putting it behind an API means:
 | `assistant/control/models.py` | The data model: `Task`, `TaskStep`, `Helper`, `Device`, `Permission`, `Approval`, `ActivityEvent`, plus their status enums. Plain dataclasses with no framework dependency. |
 | `assistant/control/store.py` | SQLite persistence. The only module that knows SQL, so moving to PostgreSQL later means rewriting this file alone. |
 | `assistant/control/service.py` | `ControlPlane` — the coordination logic and the only thing clients need. |
+| `assistant/control/capabilities.py` | The catalog of namespaced capabilities and the risk each one carries. |
+| `assistant/control/policy.py` | `PolicyEngine` - allow, ask or deny, from risk defaults and stored rules. |
 | `assistant/control/executor.py` | `TaskExecutor` - runs a task's steps through the AI brain and writes the outcomes back. |
 | `assistant/api/app.py` | FastAPI HTTP + WebSocket boundary. |
 | `assistant/api/auth.py` | Device pairing, token authentication and rate limiting. |
@@ -57,12 +59,22 @@ plane.create_task("Look this up", capability="research")
 
 A helper that is offline or quarantined is never selected.
 
+**Capability** — a namespaced thing an agent may ask to do, such as
+`google.gmail.read`, `browser.navigate` or `gcp.cloud_run.deploy`. Every
+capability carries a risk level, and unknown names are treated as critical so a
+typo can never become quiet access. `assistant/control/capabilities.py` is the
+catalog; the Phase 2 integrations key off these exact strings.
+
 **Permission** — access scoped to a resource, a set of actions, a task and an
-expiry. Grants are released automatically when their task finishes.
+expiry. Grants are released automatically when their task finishes. An agent
+never receives one as a side effect of asking: it holds a permission or it
+holds nothing.
 
 **Approval** — a consequential action held until the user decides. Requesting
 one moves the task to `waiting_approval`; approving resumes it, declining
-cancels it.
+cancels it. An approval that carries a capability *is* the held grant:
+approving releases exactly that access, so the decision and the permission are
+one event rather than two that can drift apart.
 
 **Execution** — the control plane records steps; `TaskExecutor` runs them. It
 hands each step to `ai_brain.run_task_step()`, which uses the same tools and
@@ -106,6 +118,41 @@ plane.resolve_approval(approval.id, approved=True)
 
 plane.complete_task(task.id, "Your project has been updated.")
 ```
+
+## Asking for access
+
+```python
+result = plane.request_capability("google.gmail.send", task_id=task.id,
+                                  agent_id="mail-agent")
+
+result["status"]     # granted | waiting | denied
+result["permission"] # the grant, when granted
+result["approval"]   # what the user must answer, when waiting
+result["judgement"]  # the decision, its risk level and why
+```
+
+Risk decides the default: low and medium run, high and critical ask. Stored
+rules override that wherever the user has an opinion:
+
+```python
+plane.add_policy_rule("gcp.*", "deny", reason="No cloud from this machine.")
+plane.add_policy_rule("google.gmail.send", "allow", task_id=task.id)
+```
+
+The narrowest matching rule wins — an exact capability beats a `google.*`
+namespace, which beats `*` — and a deny beats an allow of equal narrowness, so
+a broad permit never quietly re-enables something specifically forbidden. Rules
+can also target one agent or one task.
+
+| Risk | Examples | Default |
+| --- | --- | --- |
+| `low` | `browser.navigate`, `web.search` | runs |
+| `medium` | `google.drive.read`, `system.screen.read` | runs |
+| `high` | `google.gmail.send`, `filesystem.write` | asks you |
+| `critical` | `gcp.cloud_run.deploy`, `filesystem.delete` | asks you |
+
+`TOOL_CAPABILITIES` maps the tools in `ai_brain.py` onto the same names, so the
+voice path and an agent calling over HTTP are judged by one set of rules.
 
 ## Running a task
 
@@ -218,6 +265,10 @@ carries `fields`, naming what was wrong.
 | `POST` | `/api/tasks/{id}/steps/finish` | Finish a step, optionally as failed. |
 | `POST` | `/api/tasks/{id}/complete` | Complete a task with a summary. |
 | `POST` | `/api/tasks/{id}/cancel` | Stop a task. |
+| `GET` | `/api/capabilities` | The catalog, with risk levels. `?prefix=google.*` filters. |
+| `POST` | `/api/capabilities/request` | Ask for access. Answers granted, waiting or denied. |
+| `GET`/`POST` | `/api/policies` | List or add allow/ask/deny rules. |
+| `DELETE` | `/api/policies/{id}` | Remove a rule. |
 | `GET` | `/api/devices` | Known machines. |
 | `GET`/`POST` | `/api/helpers` | List or register AI helpers. |
 | `GET` | `/api/approvals` | Pending approvals by default. |
@@ -279,6 +330,9 @@ These are known gaps, not oversights:
 - **Tokens do not expire.** A paired device stays paired until it is revoked.
   There is no refresh or rotation yet.
 - **Rate limiting is per process.** Restarting the API resets every bucket.
+- **Capabilities are brokered, not enforced at the call site.** An agent that
+  ignores the answer and calls a tool directly is not stopped yet; wiring the
+  broker into the tool loop is WP5.
 - **Helper selection is a first match, not a scheduler.** It prefers idle then
   least-recently-used. There is no load balancing or cost awareness.
 - **Steps are not planned automatically.** The caller supplies the steps. A
@@ -299,8 +353,9 @@ These are known gaps, not oversights:
 python -m unittest discover -s tests
 ```
 
-116 tests cover the task lifecycle, capability matching, permission expiry and
+162 tests cover the task lifecycle, capability matching, permission expiry and
 revocation, the approval flow, emergency stop, step execution, failure and
 cancellation paths, pairing and token authentication, rate limiting, schema
-migrations, and the HTTP and WebSocket surface. The executor tests use an
+migrations, the capability catalog, policy precedence, the broker's grant,
+hold and refuse paths, and the HTTP and WebSocket surface. The executor tests use an
 injected runner, so none of them need Ollama.

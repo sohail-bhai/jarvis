@@ -31,6 +31,7 @@ from assistant.api.auth import (
     bearer_token,
 )
 from assistant.api.errors import error_body, install_error_handlers
+from assistant.control.capabilities import catalog
 from assistant.control.executor import get_executor
 from assistant.control.service import get_control_plane
 
@@ -71,6 +72,26 @@ class StepUpdateRequest(BaseModel):
     position: int
     detail: str = ""
     failed: bool = False
+
+
+class CapabilityRequest(BaseModel):
+    capability: str = Field(..., min_length=1,
+                            description="Namespaced capability, e.g. 'google.gmail.read'.")
+    agent_id: str = Field("", description="Which agent is asking.")
+    task_id: str = Field("", description="The task this belongs to.")
+    resource: str = Field("", description="What it applies to, if narrower than the capability.")
+    seconds: int = Field(1800, gt=0, le=24 * 3600)
+    reason: str = Field("", description="Why this is needed, shown to the user.")
+
+
+class PolicyRuleRequest(BaseModel):
+    capability: str = Field(..., min_length=1,
+                            description="Capability or pattern, e.g. 'google.*'.")
+    decision: str = Field(..., description="allow, require_approval or deny.")
+    agent_id: str = ""
+    task_id: str = ""
+    resource: str = ""
+    reason: str = ""
 
 
 class PairRequest(BaseModel):
@@ -287,6 +308,48 @@ def create_app(control=None, executor=None, security=None):
         if task is None:
             raise HTTPException(status_code=404, detail="No such task.")
         return plane.task_detail(task_id)
+
+    # -- capabilities and policy -------------------------------------------
+
+    @app.get("/api/capabilities", tags=["security"])
+    def list_capabilities(prefix: str = ""):
+        """Everything an agent may ask for, with the risk each one carries."""
+        return catalog(prefix)
+
+    @app.post("/api/capabilities/request", tags=["security"])
+    def request_capability(request: CapabilityRequest):
+        """Ask for access. Answers granted, waiting on you, or denied."""
+        try:
+            return plane.request_capability(
+                request.capability, agent_id=request.agent_id,
+                task_id=request.task_id, resource=request.resource,
+                seconds=request.seconds, reason=request.reason)
+        except RuntimeError as error:
+            raise HTTPException(status_code=409, detail=str(error))
+
+    @app.get("/api/policies", tags=["security"])
+    def list_policies():
+        return [rule.to_dict() for rule in plane.list_policy_rules()]
+
+    @app.post("/api/policies", status_code=201, tags=["security"])
+    def add_policy(request: PolicyRuleRequest):
+        try:
+            rule = plane.add_policy_rule(
+                request.capability, request.decision, agent_id=request.agent_id,
+                task_id=request.task_id, resource=request.resource,
+                reason=request.reason)
+        except ValueError:
+            raise HTTPException(
+                status_code=422,
+                detail="Decision must be allow, require_approval or deny.")
+        return rule.to_dict()
+
+    @app.delete("/api/policies/{rule_id}", tags=["security"])
+    def remove_policy(rule_id: str):
+        rule = plane.remove_policy_rule(rule_id)
+        if rule is None:
+            raise HTTPException(status_code=404, detail="No such policy rule.")
+        return rule.to_dict()
 
     # -- devices and helpers ----------------------------------------------
 

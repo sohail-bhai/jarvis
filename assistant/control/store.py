@@ -17,6 +17,7 @@ from assistant.control.models import (
     ActivityEvent,
     Approval,
     ApprovalStatus,
+    Decision,
     Device,
     DeviceStatus,
     EventType,
@@ -24,6 +25,8 @@ from assistant.control.models import (
     HelperStatus,
     Permission,
     PermissionStatus,
+    PolicyRule,
+    RiskLevel,
     StepStatus,
     Task,
     TaskStatus,
@@ -124,6 +127,26 @@ MIGRATIONS = [
     ("0002_device_pairing", [
         ("devices", "token_hash", "ALTER TABLE devices ADD COLUMN token_hash TEXT"),
         ("devices", "paired_at", "ALTER TABLE devices ADD COLUMN paired_at REAL"),
+    ]),
+    ("0003_policy_rules", """
+        CREATE TABLE IF NOT EXISTS policy_rules (
+            id TEXT PRIMARY KEY,
+            capability TEXT NOT NULL,
+            decision TEXT NOT NULL,
+            agent_id TEXT,
+            task_id TEXT,
+            resource TEXT,
+            reason TEXT,
+            created_at REAL NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_rules_capability ON policy_rules (capability);
+    """),
+    ("0004_approval_capabilities", [
+        ("approvals", "capability", "ALTER TABLE approvals ADD COLUMN capability TEXT"),
+        ("approvals", "resource", "ALTER TABLE approvals ADD COLUMN resource TEXT"),
+        ("approvals", "risk", "ALTER TABLE approvals ADD COLUMN risk TEXT"),
+        ("approvals", "agent_id", "ALTER TABLE approvals ADD COLUMN agent_id TEXT"),
+        ("approvals", "seconds", "ALTER TABLE approvals ADD COLUMN seconds INTEGER"),
     ]),
 ]
 
@@ -350,14 +373,46 @@ class ControlStore:
     def save_approval(self, approval):
         self._write(
             "INSERT INTO approvals (id, task_id, action, question, reason, impact, "
-            "status, created_at, resolved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "status, created_at, resolved_at, capability, resource, risk, agent_id, "
+            "seconds) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(id) DO UPDATE SET status=excluded.status, "
             "resolved_at=excluded.resolved_at",
             (approval.id, approval.task_id, approval.action, approval.question,
              approval.reason, approval.impact, approval.status.value,
-             approval.created_at, approval.resolved_at),
+             approval.created_at, approval.resolved_at, approval.capability,
+             approval.resource, approval.risk.value, approval.agent_id,
+             approval.seconds),
         )
         return approval
+
+    # -- policy rules -------------------------------------------------------
+
+    def save_policy_rule(self, rule):
+        self._write(
+            "INSERT INTO policy_rules (id, capability, decision, agent_id, task_id, "
+            "resource, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(id) DO UPDATE SET capability=excluded.capability, "
+            "decision=excluded.decision, agent_id=excluded.agent_id, "
+            "task_id=excluded.task_id, resource=excluded.resource, "
+            "reason=excluded.reason",
+            (rule.id, rule.capability, rule.decision.value, rule.agent_id,
+             rule.task_id, rule.resource, rule.reason, rule.created_at),
+        )
+        return rule
+
+    def get_policy_rule(self, rule_id):
+        return _to_policy_rule(
+            self._row("SELECT * FROM policy_rules WHERE id = ?", (rule_id,)))
+
+    def list_policy_rules(self):
+        return [_to_policy_rule(row) for row in
+                self._rows("SELECT * FROM policy_rules ORDER BY created_at")]
+
+    def delete_policy_rule(self, rule_id):
+        rule = self.get_policy_rule(rule_id)
+        if rule is not None:
+            self._write("DELETE FROM policy_rules WHERE id = ?", (rule_id,))
+        return rule
 
     def get_approval(self, approval_id):
         return _to_approval(
@@ -448,10 +503,28 @@ def _to_permission(row):
 def _to_approval(row):
     if row is None:
         return None
+    keys = row.keys()
+
+    def value(name, fallback=""):
+        return (row[name] or fallback) if name in keys else fallback
+
     return Approval(id=row["id"], task_id=row["task_id"] or "", action=row["action"],
                     question=row["question"], reason=row["reason"] or "",
                     impact=row["impact"] or "", status=ApprovalStatus(row["status"]),
-                    created_at=row["created_at"], resolved_at=row["resolved_at"] or 0.0)
+                    created_at=row["created_at"], resolved_at=row["resolved_at"] or 0.0,
+                    capability=value("capability"), resource=value("resource"),
+                    risk=RiskLevel(value("risk", RiskLevel.MEDIUM.value)),
+                    agent_id=value("agent_id"), seconds=int(value("seconds", 0)))
+
+
+def _to_policy_rule(row):
+    if row is None:
+        return None
+    return PolicyRule(id=row["id"], capability=row["capability"],
+                      decision=Decision(row["decision"]),
+                      agent_id=row["agent_id"] or "", task_id=row["task_id"] or "",
+                      resource=row["resource"] or "", reason=row["reason"] or "",
+                      created_at=row["created_at"])
 
 
 def _to_event(row):

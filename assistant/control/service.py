@@ -15,10 +15,12 @@ import platform
 import socket
 import threading
 
+from assistant.control.capabilities import describe, risk_for
 from assistant.control.models import (
     ActivityEvent,
     Approval,
     ApprovalStatus,
+    Decision,
     Device,
     DeviceStatus,
     EventType,
@@ -26,12 +28,14 @@ from assistant.control.models import (
     HelperStatus,
     Permission,
     PermissionStatus,
+    RiskLevel,
     StepStatus,
     Task,
     TaskStatus,
     TaskStep,
     now,
 )
+from assistant.control.policy import PolicyEngine
 from assistant.control.store import ControlStore
 
 logger = logging.getLogger(__name__)
@@ -45,6 +49,7 @@ class ControlPlane:
 
     def __init__(self, store=None, event_bus=None):
         self.store = store or ControlStore()
+        self.policy = PolicyEngine(self.store)
         self.event_bus = event_bus
         self._lock = threading.RLock()
         self._subscribers = []
@@ -341,12 +346,93 @@ class ControlPlane:
             permission.status = PermissionStatus.REVOKED
             self.store.save_permission(permission)
 
+    # -- capabilities -------------------------------------------------------
+
+    def request_capability(self, capability, agent_id="", task_id="", resource="",
+                           seconds=DEFAULT_PERMISSION_SECONDS, reason=""):
+        """Ask for one named capability. This is how an agent gets access.
+
+        Returns a dict describing what happened: `granted` with a permission,
+        `waiting` with the approval the user must answer, or `denied`. The
+        caller never gets access as a side effect of asking - it holds a
+        permission or it holds nothing.
+        """
+        if self._stopped:
+            raise RuntimeError("JARVIS is stopped. Reset before starting new work.")
+
+        judgement = self.policy.evaluate(capability, agent_id=agent_id,
+                                         task_id=task_id, resource=resource)
+        target = resource or capability
+
+        self.record(f"Asked to {describe(capability).lower()}.",
+                    EventType.CAPABILITY_REQUESTED, task_id=task_id,
+                    metadata={"capability": capability, "risk": judgement.risk.value,
+                              "agent_id": agent_id})
+
+        if judgement.denied:
+            self.record(f"Refused: {describe(capability).lower()}. {judgement.reason}",
+                        EventType.CAPABILITY_DENIED, task_id=task_id,
+                        metadata={"capability": capability, "agent_id": agent_id})
+            return {"status": "denied", "judgement": judgement.to_dict(),
+                    "permission": None, "approval": None}
+
+        if judgement.needs_approval:
+            approval = self.request_approval(
+                action=describe(capability),
+                question=f"Can I {describe(capability).lower()}?",
+                reason=reason or judgement.reason,
+                impact=f"This grants {capability} on {target} for "
+                       f"{max(1, int(seconds // 60))} minutes.",
+                task_id=task_id, capability=capability, resource=target,
+                risk=judgement.risk, agent_id=agent_id, seconds=seconds)
+            return {"status": "waiting", "judgement": judgement.to_dict(),
+                    "permission": None, "approval": approval.to_dict()}
+
+        permission = self.grant(target, [capability], task_id=task_id,
+                                seconds=seconds)
+        return {"status": "granted", "judgement": judgement.to_dict(),
+                "permission": permission.to_dict(), "approval": None}
+
+    def has_capability(self, capability, task_id="", resource=""):
+        """Whether a live grant currently authorises this capability."""
+        return self.check(resource or capability, capability, task_id=task_id)
+
+    def capability_risk(self, capability):
+        return risk_for(capability)
+
+    def add_policy_rule(self, capability, decision, agent_id="", task_id="",
+                        resource="", reason=""):
+        rule = self.policy.add_rule(capability, decision, agent_id=agent_id,
+                                    task_id=task_id, resource=resource, reason=reason)
+        self.record(f"Policy: {rule.decision.value} {rule.capability}.",
+                    EventType.POLICY_CHANGED, metadata={"rule_id": rule.id})
+        return rule
+
+    def list_policy_rules(self):
+        return self.policy.list_rules()
+
+    def remove_policy_rule(self, rule_id):
+        rule = self.policy.remove_rule(rule_id)
+        if rule is not None:
+            self.record(f"Policy rule removed: {rule.capability}.",
+                        EventType.POLICY_CHANGED, metadata={"rule_id": rule_id})
+        return rule
+
     # -- approvals ----------------------------------------------------------
 
-    def request_approval(self, action, question, reason="", impact="", task_id=""):
-        """Hold a consequential action until the user decides."""
+    def request_approval(self, action, question, reason="", impact="", task_id="",
+                         capability="", resource="", risk=RiskLevel.MEDIUM,
+                         agent_id="", seconds=DEFAULT_PERMISSION_SECONDS):
+        """Hold a consequential action until the user decides.
+
+        An approval that carries a capability is a held grant: approving it
+        releases exactly that access, so the decision and the permission are
+        the same event rather than two things that can drift apart.
+        """
         approval = Approval(task_id=task_id, action=action, question=question,
-                            reason=reason, impact=impact)
+                            reason=reason, impact=impact, capability=capability,
+                            resource=resource, risk=risk, agent_id=agent_id,
+                            seconds=seconds)
         self.store.save_approval(approval)
 
         if task_id:
@@ -367,6 +453,12 @@ class ControlPlane:
         approval.status = ApprovalStatus.APPROVED if approved else ApprovalStatus.DECLINED
         approval.resolved_at = now()
         self.store.save_approval(approval)
+
+        # Approving a held capability is what releases it. Nothing else does.
+        if approved and approval.capability:
+            self.grant(approval.resource or approval.capability,
+                       [approval.capability], task_id=approval.task_id,
+                       seconds=approval.seconds or DEFAULT_PERMISSION_SECONDS)
 
         if approval.task_id:
             task = self.store.get_task(approval.task_id)

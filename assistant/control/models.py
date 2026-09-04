@@ -47,6 +47,29 @@ class StepStatus(str, Enum):
     SKIPPED = "skipped"
 
 
+class RiskLevel(str, Enum):
+    """How much damage an action could do if it were wrong.
+
+    Risk is a property of the capability, not of the agent asking for it, and
+    it is what decides whether the user is interrupted.
+    """
+    LOW = "low"                  # reading public or harmless information
+    MEDIUM = "medium"            # reading private data, sending a message
+    HIGH = "high"                # writing, deploying, spending
+    CRITICAL = "critical"        # destroying data or changing who has access
+
+    @property
+    def rank(self):
+        return {"low": 0, "medium": 1, "high": 2, "critical": 3}[self.value]
+
+
+class Decision(str, Enum):
+    """What the policy engine says about one capability request."""
+    ALLOW = "allow"
+    REQUIRE_APPROVAL = "require_approval"
+    DENY = "deny"
+
+
 class ApprovalStatus(str, Enum):
     PENDING = "pending"
     APPROVED = "approved"
@@ -85,6 +108,9 @@ class EventType(str, Enum):
     PERMISSION_REVOKED = "permission_revoked"
     APPROVAL_REQUESTED = "approval_requested"
     APPROVAL_RESOLVED = "approval_resolved"
+    CAPABILITY_REQUESTED = "capability_requested"
+    CAPABILITY_DENIED = "capability_denied"
+    POLICY_CHANGED = "policy_changed"
     EMERGENCY_STOP = "emergency_stop"
     NOTE = "note"
 
@@ -189,7 +215,11 @@ class Permission:
 
 @dataclass
 class Approval:
-    """A consequential action held until the user decides."""
+    """A consequential action held until the user decides.
+
+    When an approval carries a capability, approving it is what releases that
+    access - the user's decision and the grant are the same event.
+    """
     id: str = field(default_factory=new_id)
     task_id: str = ""
     action: str = ""                # short label: "Send email"
@@ -199,9 +229,67 @@ class Approval:
     status: ApprovalStatus = ApprovalStatus.PENDING
     created_at: float = field(default_factory=now)
     resolved_at: float = 0.0
+    capability: str = ""            # what access this releases, if any
+    resource: str = ""              # what it applies to
+    risk: RiskLevel = RiskLevel.MEDIUM
+    agent_id: str = ""              # who asked
+    seconds: int = 0                # how long the grant should last
 
     def to_dict(self):
         return _serialise(self)
+
+
+@dataclass
+class PolicyRule:
+    """One allow/deny/ask rule.
+
+    Patterns match capability strings and support a trailing wildcard, so
+    `google.gmail.*` covers every Gmail capability. An empty agent, task or
+    resource means "any", which is what makes a rule general or specific.
+    """
+    id: str = field(default_factory=new_id)
+    capability: str = "*"
+    decision: Decision = Decision.ALLOW
+    agent_id: str = ""
+    task_id: str = ""
+    resource: str = ""
+    reason: str = ""
+    created_at: float = field(default_factory=now)
+
+    @property
+    def specificity(self):
+        """How narrowly this rule is aimed. The narrowest rule wins."""
+        score = 0
+        if self.capability != "*":
+            score += 4 if not self.capability.endswith("*") else 2
+        if self.agent_id:
+            score += 2
+        if self.task_id:
+            score += 2
+        if self.resource:
+            score += 1
+        return score
+
+    def matches(self, capability, agent_id="", task_id="", resource=""):
+        if self.agent_id and self.agent_id != agent_id:
+            return False
+        if self.task_id and self.task_id != task_id:
+            return False
+        if self.resource and self.resource != resource:
+            return False
+        return matches_pattern(self.capability, capability)
+
+    def to_dict(self):
+        return _serialise(self)
+
+
+def matches_pattern(pattern, capability):
+    """`*` matches everything, `a.b.*` matches the a.b namespace."""
+    if pattern in ("*", capability):
+        return True
+    if pattern.endswith(".*"):
+        return capability.startswith(pattern[:-1])
+    return False
 
 
 @dataclass

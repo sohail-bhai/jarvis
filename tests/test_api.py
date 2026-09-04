@@ -293,5 +293,83 @@ class TaskExecutionTests(ApiTestCase):
         self.assertEqual([], self.executed)
 
 
+class CapabilityTests(ApiTestCase):
+    def test_the_catalog_lists_capabilities_with_their_risk(self):
+        body = self.client.get("/api/capabilities").json()
+
+        entry = next(item for item in body
+                     if item["capability"] == "gcp.cloud_run.deploy")
+        self.assertEqual("critical", entry["risk"])
+
+    def test_the_catalog_can_be_filtered(self):
+        body = self.client.get("/api/capabilities", params={"prefix": "browser.*"}).json()
+
+        self.assertTrue(all(item["capability"].startswith("browser.")
+                            for item in body))
+
+    def test_a_low_risk_request_is_granted(self):
+        body = self.client.post("/api/capabilities/request",
+                                json={"capability": "browser.navigate"}).json()
+
+        self.assertEqual("granted", body["status"])
+        self.assertIsNotNone(body["permission"])
+
+    def test_a_high_risk_request_comes_back_waiting(self):
+        body = self.client.post("/api/capabilities/request",
+                                json={"capability": "google.gmail.send"}).json()
+
+        self.assertEqual("waiting", body["status"])
+        self.assertEqual("google.gmail.send", body["approval"]["capability"])
+
+    def test_approving_over_the_api_releases_the_access(self):
+        request = self.client.post("/api/capabilities/request",
+                                   json={"capability": "google.gmail.send"}).json()
+
+        self.client.post(f"/api/approvals/{request['approval']['id']}",
+                         json={"approved": True})
+
+        granted = [permission["actions"]
+                   for permission in self.client.get("/api/permissions").json()]
+        self.assertIn(["google.gmail.send"], granted)
+
+    def test_requesting_is_refused_while_stopped(self):
+        self.client.post("/api/emergency-stop")
+
+        response = self.client.post("/api/capabilities/request",
+                                    json={"capability": "browser.navigate"})
+
+        self.assertEqual(409, response.status_code)
+
+    def test_a_policy_rule_changes_the_answer(self):
+        self.client.post("/api/policies", json={"capability": "browser.navigate",
+                                                 "decision": "deny",
+                                                 "reason": "Not today."})
+
+        body = self.client.post("/api/capabilities/request",
+                                json={"capability": "browser.navigate"}).json()
+
+        self.assertEqual("denied", body["status"])
+        self.assertEqual("Not today.", body["judgement"]["reason"])
+
+    def test_policy_rules_are_listed_and_removable(self):
+        rule = self.client.post("/api/policies",
+                                json={"capability": "google.*",
+                                      "decision": "require_approval"}).json()
+
+        self.assertEqual(1, len(self.client.get("/api/policies").json()))
+        self.assertEqual(200, self.client.delete(f"/api/policies/{rule['id']}").status_code)
+        self.assertEqual([], self.client.get("/api/policies").json())
+
+    def test_an_unknown_decision_is_rejected(self):
+        response = self.client.post("/api/policies",
+                                    json={"capability": "google.*",
+                                          "decision": "maybe"})
+
+        self.assertEqual(422, response.status_code)
+
+    def test_removing_an_unknown_rule_is_a_404(self):
+        self.assertEqual(404, self.client.delete("/api/policies/nope").status_code)
+
+
 if __name__ == "__main__":
     unittest.main()
