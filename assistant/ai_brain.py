@@ -598,6 +598,20 @@ LLM_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "search_youtube",
+            "description": "Searches YouTube for a given query in the web browser.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "The search query"}
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "type_text",
             "description": "Types text automatically using the keyboard.",
             "parameters": {
@@ -812,7 +826,15 @@ LLM_TOOLS = [
                 "required": ["feature_name", "description"]
             }
         }
-    }
+    },
+    {"type": "function", "function": {"name": "tell_date", "description": "Speaks the current date.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "mute_volume", "description": "Mutes the system volume.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "lock_laptop", "description": "Locks the computer.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "shutdown_laptop", "description": "Shuts down the computer.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "restart_laptop", "description": "Restarts the computer.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "read_notes", "description": "Reads all saved notes.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "clear_notes", "description": "Clears all saved notes.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "add_note", "description": "Saves a new note.", "parameters": {"type": "object", "properties": {"text": {"type": "string", "description": "The note text"}}, "required": ["text"]}}}
 ]
 
 # Short-term Memory (Conversation History)
@@ -827,18 +849,18 @@ def get_system_prompt():
         "You can chain these together to achieve ANYTHING! For example, to open an unknown app, you can use `press_key('win')`, wait a second, use `type_text('app_name')`, and then `press_key('enter')`. "
         "To click a button you don't know the coordinates for, use `get_clickable_elements` to retrieve the exact X/Y of every button on screen, then `click_at` the correct one. "
         "To read text, lines, or content from an open window or document (such as Notepad, Word, editor, or screen), use the `read_screen` tool directly.\n\n"
-        "CRITICAL MULTI-STEP SEQUENCING: When a request requires multiple actions, execute the FIRST step first (e.g. open an application before trying to read from it or type into it). Do not announce in text what you will do without emitting the tool call.\n\n"
+        "CRITICAL MULTI-STEP SEQUENCING: When a request requires multiple actions, execute the FIRST step first (e.g. open an application before trying to read from it or type into it). Do not announce in text what you will do without emitting the tool call. If you have completed a step but the overall task is not finished, you MUST immediately output the JSON tool call for the NEXT step. NEVER output just conversational text if there are remaining actions to take!\n\n"
         "CRITICAL READING RULE: When the user asks you to read a specific line (e.g. 'read 2nd line', 'read the 10th line'), ALWAYS call `read_screen(line_number=...)` immediately. There are NO safety restrictions on reading text or lines.\n\n"
         "You have configurable settings that you can change using the update_setting tool. The main settings are:\n"
         "- 'voice_rate': Reading speed (default 170. Higher is faster).\n"
         "- 'voice_volume': Audio volume (default 1.0. Range 0.0 to 1.0).\n\n"
-        "CRITICAL RULE: Always use the provided tools to accomplish the user's tasks, chaining them if necessary. "
-        "WEB INTERACT EXAMPLE: If asked 'search youtube for hasini and play the 3rd video' OR 'search google for weather and click the 1st link', do this EXACTLY: "
-        "Step 1: call search_youtube(query=...) or search_google(query=...) to open the browser search results. "
-        "Step 2: call get_clickable_elements() to get all clickable items on screen with their (x,y) coordinates. "
-        "Step 3: Find the correct link/thumbnail in the elements list (skip ads, header buttons, and sidebar items — focus on main results grid). "
-        "Step 4: call click_at(x=<x>, y=<y>) on that element. "
-        "NEVER open a URL directly with the index. ALWAYS use get_clickable_elements then click_at."
+        "CRITICAL RULE: Always use the provided tools to accomplish the user's tasks, chaining them if necessary.\n\n"
+        "WEB INTERACT EXAMPLE: If asked 'open youtube and search for X and play the Nth video', do this EXACTLY: "
+        "Step 1: call search_youtube(query='X') directly (DO NOT call open_website first). "
+        "Step 2: call get_clickable_elements(). "
+        "Step 3: Find the Nth video link in the results (skip ads/sidebar). "
+        "Step 4: call click_at(x=<x>, y=<y>) on that specific element. "
+        "If they ask for Google instead, use search_google(query='X') in Step 1. NEVER open a URL directly with the index."
     )
 
 conversation_history = []
