@@ -21,6 +21,12 @@ DEFAULT_CONFIG = {
     "email_address": "",
     "email_app_password": "",
     
+    # Control plane API. Authentication is on by default; callers on this
+    # machine are trusted so the desktop app keeps working without a token.
+    "api_require_auth": True,
+    "api_trust_localhost": True,
+    "api_rate_limit_per_minute": 120,
+
     "default_volume_step": 5,
     "listen_timeout_seconds": 8,
     "listen_phrase_time_limit_seconds": 25,

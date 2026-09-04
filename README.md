@@ -93,8 +93,17 @@ curl -X POST localhost:8765/api/tasks \
      -d '{"goal": "Summarise my notes", "steps": ["Reading notes"], "run": true}'
 ```
 
-> `--host 0.0.0.0` lets anything on your network control this computer, and
-> there is no authentication yet. Only use it on a network you trust.
+Remote clients pair once and then carry a device token:
+
+```bash
+curl -X POST localhost:8765/api/pair/code        # on this computer
+curl -X POST http://<computer>:8765/api/pair \
+     -H 'Content-Type: application/json' \
+     -d '{"code": "418302", "name": "My phone", "kind": "phone"}'
+```
+
+> `--host 0.0.0.0` lets your network reach this computer. Callers still need a
+> paired token, but only use it on a network you trust.
 
 See [docs/control-plane.md](docs/control-plane.md) for the data model,
 the full endpoint list, and known limitations.

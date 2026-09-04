@@ -50,7 +50,7 @@ Primary user-facing capabilities:
 - `assistant/notes.py`: note capture, readback, and clearing.
 - `assistant/ai_brain.py`: Ollama-backed agent loop (`_agent_loop`), the voice entry point `ask_ai()`, the control plane entry point `run_task_step()`, the tool-calling schema, and the `AVAILABLE_FUNCTIONS` tool registry.
 - `assistant/control/`: the control plane. `models.py` (data model), `store.py` (SQLite), `service.py` (`ControlPlane` coordination logic), `executor.py` (`TaskExecutor`, which runs task steps through `ai_brain.run_task_step`).
-- `assistant/api.py`: FastAPI HTTP + WebSocket boundary over the control plane. Run with `python -m assistant.api`.
+- `assistant/api/`: HTTP + WebSocket boundary over the control plane. `app.py` (routes), `auth.py` (device pairing, tokens, rate limiting), `errors.py` (one error envelope). Run with `python -m assistant.api`.
 - `assistant/memory.py`: persistent vector memory backed by ChromaDB.
 - `assistant/swarm.py`: parallel sub-agents and actor-critic research.
 - `assistant/vision.py`, `assistant/dev_tools.py`, `assistant/calendar_sync.py`, `assistant/email_tasks.py`, `assistant/telegram_sync.py`, `assistant/wakeword.py`, `assistant/interrupter.py`: screen OCR, developer automation, Google Calendar, mail, phone bridge, wake word, global interrupt hotkey.
@@ -225,8 +225,9 @@ Known limits in Version 1.2:
 - Much of `system_tasks.py` is Windows-first. Volume control, lock, and window
   automation have no working Linux or macOS path, although the app targets all
   three. Platform-specific imports must stay lazy so the app still starts.
-- The control plane has no authentication, so the API binds to localhost by
-  default. See `docs/control-plane.md` for the full list of known gaps.
+- The API authenticates remote clients with paired device tokens, but tokens
+  never expire and rate limit buckets reset when the process restarts. See
+  `docs/control-plane.md` for the full list of known gaps.
 - Control plane steps run through `ai_brain.run_task_step()`, but a step that
   is already executing cannot be interrupted. Cancellation and emergency stop
   take effect between steps.
@@ -236,7 +237,7 @@ Likely future work:
 
 - Plan steps from a goal automatically instead of requiring the caller to list them.
 - Give `system_tasks.py` real cross-platform implementations.
-- Add authentication to the API before any remote use.
+- Add token expiry and rotation to the API.
 - Make command routing more structured to reduce accidental matches.
 - Add safer abstractions around app launching and destructive system commands.
 

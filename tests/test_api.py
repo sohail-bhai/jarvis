@@ -12,6 +12,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from assistant.api import create_app
+from assistant.api.auth import ApiSecurity
 from assistant.control.executor import TaskExecutor
 from assistant.control.service import ControlPlane
 from assistant.control.store import ControlStore
@@ -25,8 +26,13 @@ class ApiTestCase(unittest.TestCase):
         # A runner that needs no local model, so the API is tested on its own.
         self.executed = []
         self.executor = TaskExecutor(plane=self.plane, runner=self._runner)
+        # These tests are about the endpoints; authentication has its own
+        # module, so this app is deliberately open.
+        self.security = ApiSecurity(self.store, require_auth=False,
+                                    rate_limit_per_minute=10000)
         self.client = TestClient(create_app(control=self.plane,
-                                            executor=self.executor))
+                                            executor=self.executor,
+                                            security=self.security))
 
     def _runner(self, instruction, context):
         self.executed.append(instruction)

@@ -38,7 +38,9 @@ Putting it behind an API means:
 | `assistant/control/store.py` | SQLite persistence. The only module that knows SQL, so moving to PostgreSQL later means rewriting this file alone. |
 | `assistant/control/service.py` | `ControlPlane` — the coordination logic and the only thing clients need. |
 | `assistant/control/executor.py` | `TaskExecutor` - runs a task's steps through the AI brain and writes the outcomes back. |
-| `assistant/api.py` | FastAPI HTTP + WebSocket boundary. |
+| `assistant/api/app.py` | FastAPI HTTP + WebSocket boundary. |
+| `assistant/api/auth.py` | Device pairing, token authentication and rate limiting. |
+| `assistant/api/errors.py` | One error envelope for every failure. |
 
 ## Core concepts
 
@@ -147,13 +149,65 @@ python -m assistant.api --port 8765
 Interactive documentation is generated at `http://127.0.0.1:8765/docs`.
 
 > Binding to `0.0.0.0` lets anything on your network control this computer.
-> It is opt-in and logs a warning on startup. Only use it on a network you
-> trust. There is no authentication yet — see Limitations.
+> It is opt-in and logs a warning on startup. Remote clients must pair first.
+
+## Pairing a device
+
+Reaching the port is not the same as being allowed to use it. Every remote
+client is a paired device holding its own token, and one token can be revoked
+without disturbing the others.
+
+```bash
+# On the computer itself (or from an already paired device):
+curl -X POST localhost:8765/api/pair/code
+# {"code": "418302", "expires_in": 600}
+
+# From the phone, once:
+curl -X POST http://<computer>:8765/api/pair \
+     -H 'Content-Type: application/json' \
+     -d '{"code": "418302", "name": "My phone", "kind": "phone"}'
+# {"device": {...}, "token": "..."}   <- shown once, never again
+
+# Every call after that:
+curl -H 'Authorization: Bearer <token>' http://<computer>:8765/api/status
+
+# WebSockets carry the same authority, so they authenticate too:
+ws://<computer>:8765/ws/activity?token=<token>
+```
+
+Only the SHA-256 hash of a token is stored, so the database is not a list of
+working credentials. `DELETE /api/devices/{id}/token` revokes one device.
+
+Callers from this machine are trusted without a token by default, which keeps
+the desktop app working. Three settings in `config.json` control this:
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `api_require_auth` | `true` | Demand a token from anyone not trusted. |
+| `api_trust_localhost` | `true` | Treat callers on this machine as authorised. |
+| `api_rate_limit_per_minute` | `120` | Requests allowed per device per minute. |
+
+Going over the limit returns `429` with a `Retry-After` header.
+
+## Errors
+
+Every failure uses one envelope, so no client special-cases anything:
+
+```json
+{"error": {"status": 404, "kind": "not_found", "message": "No such task."}}
+```
+
+`kind` is one of `bad_request`, `unauthenticated`, `forbidden`, `not_found`,
+`conflict`, `invalid_request`, `rate_limited`, `internal_error`. A `422` also
+carries `fields`, naming what was wrong.
 
 ## Endpoints
 
 | Method | Path | Purpose |
 | --- | --- | --- |
+| `POST` | `/api/pair/code` | Mint a one-time pairing code. Local callers and paired devices only. |
+| `POST` | `/api/pair` | Trade a code for a device token. |
+| `DELETE` | `/api/devices/{id}/token` | Revoke one device's access. |
 | `GET` | `/health` | Liveness check. |
 | `GET` | `/api/status` | Counts for a home or security screen. |
 | `GET` | `/api/tasks` | List tasks. `?active_only=true` hides finished ones. |
@@ -200,6 +254,13 @@ latches: new tasks are refused with `409` until `POST /api/resume`.
 It never deletes user data. History stays intact so the user can see what was
 stopped.
 
+## Schema migrations
+
+`store.py` owns an ordered, named migration list and a `schema_version` table.
+Schema changes go there rather than into `SCHEMA`, so an existing
+`data/control.db` is upgraded in place instead of quietly missing columns.
+Names are permanent: never renumber or reorder them.
+
 ## Design decisions
 
 - **SQLite, not PostgreSQL.** No server to run. Storage is isolated in
@@ -215,9 +276,9 @@ stopped.
 
 These are known gaps, not oversights:
 
-- **No authentication.** Anyone who can reach the port can drive the control
-  plane. This is why it binds to localhost by default. An API key or paired
-  device token is needed before real remote use.
+- **Tokens do not expire.** A paired device stays paired until it is revoked.
+  There is no refresh or rotation yet.
+- **Rate limiting is per process.** Restarting the API resets every bucket.
 - **Helper selection is a first match, not a scheduler.** It prefers idle then
   least-recently-used. There is no load balancing or cost awareness.
 - **Steps are not planned automatically.** The caller supplies the steps. A
@@ -235,10 +296,11 @@ These are known gaps, not oversights:
 ## Tests
 
 ```bash
-python -m unittest tests.test_control_plane tests.test_api tests.test_executor
+python -m unittest discover -s tests
 ```
 
-81 tests cover the task lifecycle, capability matching, permission expiry and
+116 tests cover the task lifecycle, capability matching, permission expiry and
 revocation, the approval flow, emergency stop, step execution, failure and
-cancellation paths, and the HTTP and WebSocket surface. The executor tests use
-an injected runner, so none of them need Ollama.
+cancellation paths, pairing and token authentication, rate limiting, schema
+migrations, and the HTTP and WebSocket surface. The executor tests use an
+injected runner, so none of them need Ollama.

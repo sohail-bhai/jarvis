@@ -98,9 +98,18 @@ class Device:
     platform: str = ""              # windows, darwin, linux, android, ios
     status: DeviceStatus = DeviceStatus.ONLINE
     last_seen: float = field(default_factory=now)
+    token_hash: str = ""            # sha256 of the device's API token
+    paired_at: float = 0.0
+
+    @property
+    def is_paired(self):
+        return bool(self.token_hash)
 
     def to_dict(self):
-        return _serialise(self)
+        data = _serialise(self)
+        # A device's credential never leaves the backend, not even hashed.
+        data.pop("token_hash", None)
+        return data
 
 
 @dataclass

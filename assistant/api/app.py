@@ -11,17 +11,26 @@ Run it with:
     python -m assistant.api --host 0.0.0.0  # reachable from a phone
 
 Binding to 0.0.0.0 exposes control of this computer to the local network, so it
-is opt-in and warns on startup.
+is opt-in and warns on startup. Remote clients must pair first and then carry a
+device token; see `assistant/api/auth.py`.
 """
 
 import argparse
 import asyncio
 import logging
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from assistant.api.auth import (
+    ApiSecurity,
+    PairingError,
+    RateLimited,
+    bearer_token,
+)
+from assistant.api.errors import error_body, install_error_handlers
 from assistant.control.executor import get_executor
 from assistant.control.service import get_control_plane
 
@@ -64,11 +73,23 @@ class StepUpdateRequest(BaseModel):
     failed: bool = False
 
 
-def create_app(control=None, executor=None):
+class PairRequest(BaseModel):
+    code: str = Field(..., min_length=4, description="The pairing code shown on the computer.")
+    name: str = Field("", description="What to call this device, e.g. 'Rav's phone'.")
+    kind: str = Field("phone", description="phone, computer, server, tablet.")
+    platform: str = Field("", description="android, ios, windows, darwin, linux.")
+
+
+# Paths that must work before a client holds a token.
+OPEN_PATHS = ("/", "/health", "/docs", "/redoc", "/openapi.json",
+              "/api/pair", "/api/pair/code")
+
+
+def create_app(control=None, executor=None, security=None):
     """Build the API.
 
-    Accepts a control plane and an executor so tests, and any embedding app,
-    can inject their own instead of driving the shared ones.
+    Accepts a control plane, an executor and a security policy so tests, and
+    any embedding app, can inject their own instead of driving the shared ones.
     """
     app = FastAPI(
         title="JARVIS Control Plane",
@@ -87,8 +108,42 @@ def create_app(control=None, executor=None):
 
     plane = control or get_control_plane()
     runner = executor or get_executor(plane=plane)
+    guard = security if security is not None else ApiSecurity(plane.store)
     app.state.control = plane
     app.state.executor = runner
+    app.state.security = guard
+
+    install_error_handlers(app)
+
+    @app.middleware("http")
+    async def authenticate_and_limit(request: Request, call_next):
+        """Every call names a device, and no device may flood the API."""
+        path = request.url.path
+        client_host = request.client.host if request.client else ""
+
+        if path in OPEN_PATHS or path.startswith("/docs") or path.startswith("/static"):
+            # Open to everyone, but a token still names the caller: pairing a
+            # second device from a phone depends on knowing who is asking.
+            device = guard.device_for_token(
+                bearer_token(request.headers.get("authorization")))
+        else:
+            try:
+                device = guard.authenticate(
+                    bearer_token(request.headers.get("authorization")), client_host)
+            except PermissionError as error:
+                return JSONResponse(status_code=401,
+                                    content=error_body(401, str(error)))
+
+        try:
+            guard.check_rate(device.id if device is not None else client_host or "local")
+        except RateLimited as error:
+            return JSONResponse(
+                status_code=429,
+                content=error_body(429, "Too many requests. Slow down."),
+                headers={"Retry-After": str(error.retry_after)})
+
+        request.state.device = device
+        return await call_next(request)
 
     # -- health and status -------------------------------------------------
 
@@ -118,6 +173,43 @@ def create_app(control=None, executor=None):
     @app.get("/api/status", tags=["system"])
     def status():
         return plane.status()
+
+    # -- pairing -----------------------------------------------------------
+
+    @app.post("/api/pair/code", tags=["security"])
+    def pairing_code(request: Request):
+        """Mint a short-lived code for a new device to claim.
+
+        Only this computer, or an already paired device, may do this - it is
+        the step that decides who gets to control the machine.
+        """
+        if not guard.may_pair(getattr(request.state, "device", None),
+                              request.client.host if request.client else ""):
+            raise HTTPException(status_code=403,
+                                detail="Ask for a pairing code on the computer itself.")
+        return guard.issue_pairing_code()
+
+    @app.post("/api/pair", status_code=201, tags=["security"])
+    def pair_device(request: PairRequest):
+        """Trade a pairing code for a device token. The token is shown once."""
+        try:
+            device, token = guard.pair(request.code, request.name,
+                                       kind=request.kind, platform=request.platform)
+        except PairingError as error:
+            raise HTTPException(status_code=403, detail=str(error))
+
+        plane.record(f"Paired a new device: {device.name}.")
+        return {"device": device.to_dict(), "token": token,
+                "note": "Store this token now. It is not shown again."}
+
+    @app.delete("/api/devices/{device_id}/token", tags=["security"])
+    def unpair_device(device_id: str):
+        """Revoke one device's access without touching any other device."""
+        device = guard.unpair(device_id)
+        if device is None:
+            raise HTTPException(status_code=404, detail="No such device.")
+        plane.record(f"Revoked access for {device.name}.")
+        return device.to_dict()
 
     # -- tasks -------------------------------------------------------------
 
@@ -267,8 +359,20 @@ def create_app(control=None, executor=None):
     # -- live activity stream ----------------------------------------------
 
     @app.websocket("/ws/activity")
-    async def activity_stream(websocket: WebSocket):
-        """Pushes activity events to a client as they happen."""
+    async def activity_stream(websocket: WebSocket, token: str = ""):
+        """Pushes activity events to a client as they happen.
+
+        A socket carries the same authority as the REST API, so it is
+        authenticated the same way - by token, or by being local.
+        """
+        try:
+            guard.authenticate(
+                token or bearer_token(websocket.headers.get("authorization")),
+                websocket.client.host if websocket.client else "")
+        except PermissionError:
+            await websocket.close(code=1008)
+            return
+
         await websocket.accept()
 
         loop = asyncio.get_running_loop()

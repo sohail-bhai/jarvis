@@ -10,6 +10,7 @@ PostgreSQL later means rewriting this module and nothing else.
 
 import sqlite3
 import threading
+import time
 from pathlib import Path
 
 from assistant.control.models import (
@@ -115,6 +116,17 @@ CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks (status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_approvals_status ON approvals (status, created_at DESC);
 """
 
+# Ordered, named migrations. Every schema change goes here rather than into
+# SCHEMA, so an existing data/control.db is upgraded in place instead of
+# silently missing columns. Names are permanent; never renumber or reorder.
+MIGRATIONS = [
+    ("0001_baseline", SCHEMA),
+    ("0002_device_pairing", [
+        ("devices", "token_hash", "ALTER TABLE devices ADD COLUMN token_hash TEXT"),
+        ("devices", "paired_at", "ALTER TABLE devices ADD COLUMN paired_at REAL"),
+    ]),
+]
+
 DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "control.db"
 
 
@@ -134,12 +146,54 @@ class ControlStore:
         self._lock = threading.RLock()
 
         with self._lock:
-            self._connection.executescript(SCHEMA)
-            self._connection.commit()
+            self._migrate()
 
     def close(self):
         with self._lock:
             self._connection.close()
+
+    # -- migrations ---------------------------------------------------------
+
+    def _migrate(self):
+        """Bring the database up to date, one named migration at a time.
+
+        A migration is either a SQL script or a list of column additions,
+        each guarded by the column it adds so re-running is harmless.
+        """
+        self._connection.execute(
+            "CREATE TABLE IF NOT EXISTS schema_version ("
+            "  name TEXT PRIMARY KEY,"
+            "  applied_at REAL NOT NULL"
+            ")")
+
+        applied = {row["name"] for row in
+                   self._connection.execute("SELECT name FROM schema_version")}
+
+        for name, migration in MIGRATIONS:
+            if name in applied:
+                continue
+
+            if isinstance(migration, str):
+                self._connection.executescript(migration)
+            else:
+                for table, column, statement in migration:
+                    if not self._has_column(table, column):
+                        self._connection.execute(statement)
+
+            self._connection.execute(
+                "INSERT INTO schema_version (name, applied_at) VALUES (?, ?)",
+                (name, time.time()))
+
+        self._connection.commit()
+
+    def _has_column(self, table, column):
+        rows = self._connection.execute(f"PRAGMA table_info({table})").fetchall()
+        return any(row["name"] == column for row in rows)
+
+    def schema_versions(self):
+        """Migrations applied to this database, oldest first."""
+        return [row["name"] for row in
+                self._rows("SELECT name FROM schema_version ORDER BY applied_at")]
 
     # -- low level ----------------------------------------------------------
 
@@ -161,14 +215,24 @@ class ControlStore:
 
     def save_device(self, device):
         self._write(
-            "INSERT INTO devices (id, name, kind, platform, status, last_seen) "
-            "VALUES (?, ?, ?, ?, ?, ?) "
+            "INSERT INTO devices (id, name, kind, platform, status, last_seen, "
+            "token_hash, paired_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(id) DO UPDATE SET name=excluded.name, kind=excluded.kind, "
-            "platform=excluded.platform, status=excluded.status, last_seen=excluded.last_seen",
+            "platform=excluded.platform, status=excluded.status, "
+            "last_seen=excluded.last_seen, token_hash=excluded.token_hash, "
+            "paired_at=excluded.paired_at",
             (device.id, device.name, device.kind, device.platform,
-             device.status.value, device.last_seen),
+             device.status.value, device.last_seen, device.token_hash,
+             device.paired_at),
         )
         return device
+
+    def get_device_by_token(self, token_hash):
+        """Look a device up by the hash of its token. Never by the token itself."""
+        if not token_hash:
+            return None
+        return _to_device(self._row("SELECT * FROM devices WHERE token_hash = ?",
+                                    (token_hash,)))
 
     def get_device(self, device_id):
         row = self._row("SELECT * FROM devices WHERE id = ?", (device_id,))
@@ -335,9 +399,12 @@ class ControlStore:
 def _to_device(row):
     if row is None:
         return None
+    keys = row.keys()
     return Device(id=row["id"], name=row["name"], kind=row["kind"],
                   platform=row["platform"] or "",
-                  status=DeviceStatus(row["status"]), last_seen=row["last_seen"])
+                  status=DeviceStatus(row["status"]), last_seen=row["last_seen"],
+                  token_hash=(row["token_hash"] or "") if "token_hash" in keys else "",
+                  paired_at=(row["paired_at"] or 0.0) if "paired_at" in keys else 0.0)
 
 
 def _to_helper(row):
