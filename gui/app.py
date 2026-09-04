@@ -190,10 +190,16 @@ class JarvisDashboardApp(ctk.CTk):
         store.close_drawer()
 
     def open_command_palette(self):
-        CommandPalette(self, on_execute=self.handle_user_command)
+        if hasattr(self, '_active_cmd_palette') and self._active_cmd_palette.winfo_exists():
+            self._active_cmd_palette.destroy()
+            return
+        self._active_cmd_palette = CommandPalette(self, on_execute=self.handle_user_command)
 
     def open_notifications(self):
-        NotificationsModal(self, on_navigate=self.navigate_to)
+        if hasattr(self, '_active_notif_modal') and self._active_notif_modal.winfo_exists():
+            self._active_notif_modal.destroy()
+            return
+        self._active_notif_modal = NotificationsModal(self, on_navigate=self.navigate_to)
 
     def handle_user_command(self, command_text: str):
         cmd_clean = command_text.strip()
@@ -269,7 +275,9 @@ class JarvisDashboardApp(ctk.CTk):
         elif event == "drawer_closed":
             self.close_drawer()
         elif event == "approval_requested":
-            ApprovalModal(self, data)
+            if hasattr(self, '_active_approval_modal') and self._active_approval_modal.winfo_exists():
+                self._active_approval_modal.destroy()
+            self._active_approval_modal = ApprovalModal(self, data)
 
     def _poll_events(self):
         """Poll the event bus from the main UI thread."""

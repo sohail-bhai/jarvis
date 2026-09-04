@@ -9,29 +9,29 @@ from gui import theme
 from gui.store import store
 
 
-class ApprovalModal(ctk.CTkToplevel):
+class ApprovalModal(ctk.CTkFrame):
     def __init__(self, parent, approval_data):
-        super().__init__(parent)
+        super().__init__(
+            parent,
+            fg_color=theme.CARD_BG,
+            border_width=1,
+            border_color=theme.CARD_BORDER,
+            corner_radius=12,
+            width=440,
+            height=300
+        )
         self.approval_data = approval_data
+        
+        self.grid_propagate(False)
+        self.pack_propagate(False)
 
-        self.title("Approval Required")
-        self.geometry("440x300")
-        self.resizable(False, False)
-        self.configure(fg_color=theme.CARD_BG)
-        self.transient(parent)
-        self.grab_set()
+        # Place centered in the application window
+        self.place(relx=0.5, rely=0.5, anchor="center")
+        self.lift()
 
-        # Center on parent
-        parent_x = parent.winfo_rootx()
-        parent_y = parent.winfo_rooty()
-        parent_w = parent.winfo_width()
-        parent_h = parent.winfo_height()
-        x = parent_x + (parent_w // 2) - 220
-        y = parent_y + (parent_h // 2) - 150
-        self.geometry(f"+{max(10, x)}+{max(10, y)}")
-
-        container = ctk.CTkFrame(self, fg_color=theme.CARD_BG, corner_radius=16)
-        container.pack(fill="both", expand=True, padx=20, pady=20)
+        # Wrap in a transparent container
+        container = ctk.CTkFrame(self, fg_color="transparent")
+        container.pack(fill="both", expand=True, padx=2, pady=2)
 
         # Header with warning/attention icon
         hdr = ctk.CTkFrame(container, fg_color="transparent")

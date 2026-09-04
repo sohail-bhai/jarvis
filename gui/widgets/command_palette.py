@@ -10,31 +10,32 @@ from gui import theme
 from gui.store import store
 
 
-class CommandPalette(ctk.CTkToplevel):
+class CommandPalette(ctk.CTkFrame):
     def __init__(self, parent, on_execute: Callable[[str], None]):
-        super().__init__(parent)
+        super().__init__(
+            parent,
+            fg_color=theme.CARD_BG,
+            border_width=1,
+            border_color=theme.CARD_BORDER,
+            corner_radius=12,
+            width=540,
+            height=380
+        )
         self.on_execute = on_execute
+        
+        self.grid_propagate(False)
+        self.pack_propagate(False)
 
-        self.title("Ask JARVIS")
-        self.geometry("540x380")
-        self.resizable(False, False)
-        self.configure(fg_color=theme.CARD_BG)
+        # Place centered in the application window
+        self.place(relx=0.5, rely=0.35, anchor="center")
+        self.lift()
 
-        # Center over parent
-        self.transient(parent)
-        self.grab_set()
-
-        # Center calculation
-        parent_x = parent.winfo_rootx()
-        parent_y = parent.winfo_rooty()
-        parent_w = parent.winfo_width()
-        parent_h = parent.winfo_height()
-        x = parent_x + (parent_w // 2) - 270
-        y = parent_y + (parent_h // 2) - 190
-        self.geometry(f"+{max(10, x)}+{max(10, y)}")
+        # Wrap everything in a transparent container
+        container = ctk.CTkFrame(self, fg_color="transparent")
+        container.pack(fill="both", expand=True, padx=2, pady=2)
 
         # Container
-        main_frame = ctk.CTkFrame(self, fg_color=theme.CARD_BG, corner_radius=16)
+        main_frame = ctk.CTkFrame(container, fg_color=theme.CARD_BG, corner_radius=16)
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
 
         # Header
