@@ -1,0 +1,26 @@
+# Operating System
+.DS_Store
+Thumbs.db
+
+# Large Models & Binaries (>50MB)
+*.onnx
+*.apk
+*.sqlite3
+*.mp3
+
+# Node & Expo
+node_modules/
+mobile/node_modules/
+mobile/dist/
+mobile/.expo/
+mobile/android/
+mobile/ios/
+
+# Python & Build
+__pycache__/
+*.pyc
+*.pyo
+logs/
+.freebuff/
+.cxx/
+.gradle/
