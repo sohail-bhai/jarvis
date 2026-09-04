@@ -1,13 +1,14 @@
 """
 Home screen.
 
-Three things, in the order a person needs them: what you can ask, what VAVE is
-doing right now, and what it is connected to. Navigation lives in the sidebar,
-so it is not repeated here.
+Two columns, not a stack of cards. The left is a statement: who is here, what
+it can be asked, and the box to ask it in. The right is the live column - what
+is happening now, what it is connected to, and what it just did, in that order,
+because that is the order someone watching asks about them.
 
-The layout is deliberately editorial - a serif greeting with room around it, one
-raised surface for the thing you actually came to do, and everything else
-sitting quietly below it.
+Nothing here is boxed unless the box means something. Sections are separated by
+space and a rule, which is what a printed page does and what a dashboard
+usually forgets.
 """
 from __future__ import annotations
 
@@ -20,125 +21,128 @@ from gui.store import store
 from gui.widgets.card import Card
 
 
-class HomePage(ctk.CTkScrollableFrame):
-    # Room down either side of the page. Generous on purpose: whitespace is
-    # most of what separates a considered interface from a dense one.
-    GUTTER = 34
+class HomePage(ctk.CTkFrame):
+    # The statement column stops growing; the live column takes the rest.
+    STATEMENT_WIDTH = 430
 
     def __init__(self, parent, on_navigate: Callable[[str], None],
                  on_execute_command: Callable[[str], None],
                  on_voice_toggle: Callable[[], None] | None = None):
-        super().__init__(
-            parent,
-            fg_color="transparent",
-            scrollbar_button_color=theme.CARD_BORDER,
-            scrollbar_button_hover_color=theme.TEXT_MUTED,
-        )
+        super().__init__(parent, fg_color="transparent")
         self.on_navigate = on_navigate
         self.on_execute_command = on_execute_command
         self.on_voice_toggle = on_voice_toggle
         self._icons = []          # Tk drops images with no live reference.
 
-        self._build_header()
-        self._build_command_input()
-        self._build_suggestions()
-        self._build_current_task()
-        self._build_connected()
+        self.grid_columnconfigure(0, weight=0, minsize=self.STATEMENT_WIDTH)
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+
+        self._build_statement()
+        self._build_live_column()
 
         store.subscribe(self._on_store_update)
 
     def _on_store_update(self, event: str, data: any):
         if event == "task_updated":
             self._update_task_ui()
+        elif event == "system_log_added":
+            self._render_log()
 
-    # -- header -------------------------------------------------------------
+    # -- left: the statement --------------------------------------------------
 
-    def _build_header(self):
-        header = ctk.CTkFrame(self, fg_color="transparent")
-        header.pack(fill="x", padx=self.GUTTER, pady=(30, 22))
-
-        left = ctk.CTkFrame(header, fg_color="transparent")
-        left.pack(side="left")
+    def _build_statement(self):
+        column = ctk.CTkFrame(self, fg_color="transparent")
+        column.grid(row=0, column=0, sticky="nsew",
+                    padx=(theme.PAGE_GUTTER, theme.COLUMN_GAP), pady=(38, 34))
 
         hour = datetime.datetime.now().hour
         greeting = ("Good morning" if hour < 12
                     else "Good afternoon" if hour < 17 else "Good evening")
 
         ctk.CTkLabel(
-            left,
-            text=theme.tracked(greeting),
-            font=theme.label_font(),
-            text_color=theme.TEXT_MUTED,
-            anchor="w",
-        ).pack(anchor="w")
+            column, text=theme.tracked(greeting), font=theme.label_font(),
+            text_color=theme.TEXT_MUTED, anchor="w",
+        ).pack(fill="x")
 
+        # Set on three lines on purpose: one long line would decide the width
+        # of the whole column.
         ctk.CTkLabel(
-            left,
-            text="What would you like to do?",
+            column,
+            text="Tell me\nwhat you want.\nI handle the rest.",
             font=theme.display(theme.SIZE_DISPLAY),
             text_color=theme.TEXT_PRIMARY,
-            anchor="w",
-        ).pack(anchor="w", pady=(8, 0))
+            justify="left", anchor="w",
+        ).pack(fill="x", pady=(14, 0))
 
-        now = datetime.datetime.now()
-        date_str = now.strftime(f"%A, {now.day} %B")
         ctk.CTkLabel(
-            header,
-            text=date_str,
-            font=theme.font(theme.SIZE_SMALL),
-            text_color=theme.TEXT_MUTED,
-        ).pack(side="right", pady=(18, 0))
+            column,
+            text="Your computer, your phone, Google and the web.\n"
+                 "One place to ask, and a record of what happened.",
+            font=theme.font(theme.SIZE_BODY),
+            text_color=theme.TEXT_SECONDARY,
+            justify="left", anchor="w",
+        ).pack(fill="x", pady=(18, 0))
 
-    # -- the one thing you came here to do -----------------------------------
+        # The command box anchors the bottom of the column, where the eye lands.
+        anchor = ctk.CTkFrame(column, fg_color="transparent")
+        anchor.pack(side="bottom", fill="x", pady=(0, 2))
 
-    def _build_command_input(self):
-        card = Card(self, radius=16, elevation=theme.ELEVATION_HIGH)
-        card.pack(fill="x", padx=self.GUTTER - card.inset, pady=(0, 6))
-        card.configure(height=78 + card.inset * 2)
+        self._build_suggestions(anchor)
+        self._build_command_input(anchor)
+
+    def _build_suggestions(self, parent):
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(fill="x", pady=(0, 14))
+
+        for text in ["Find my presentation", "Continue my project"]:
+            ctk.CTkButton(
+                row, text=text, font=theme.font(theme.SIZE_SMALL),
+                fg_color="transparent", hover_color=theme.CARD_HOVER,
+                text_color=theme.TEXT_MUTED,
+                border_width=1, border_color=theme.CARD_BORDER,
+                corner_radius=theme.RADIUS_PILL, height=30,
+                command=lambda t=text: self.on_execute_command(t),
+            ).pack(side="left", padx=(0, 7))
+
+    def _build_command_input(self, parent):
+        card = Card(parent, radius=16, elevation=theme.ELEVATION_LOW,
+                    border=theme.CARD_BORDER)
+        card.pack(fill="x", padx=0)
+        card.configure(height=64 + card.inset * 2)
         card.pack_propagate(False)
 
         row = ctk.CTkFrame(card.body, fg_color="transparent")
-        row.pack(fill="both", expand=True, padx=20, pady=16)
+        row.pack(fill="both", expand=True, padx=16, pady=13)
 
         self.cmd_entry = ctk.CTkEntry(
             row,
-            placeholder_text="Ask for anything. VAVE works out the rest.",
+            placeholder_text="Ask for anything…",
             placeholder_text_color=theme.TEXT_MUTED,
             font=theme.font(theme.SIZE_TITLE),
-            fg_color="transparent",
-            border_width=0,
+            fg_color="transparent", border_width=0,
             text_color=theme.TEXT_PRIMARY,
         )
-        self.cmd_entry.pack(side="left", fill="both", expand=True, padx=(2, 12))
+        self.cmd_entry.pack(side="left", fill="both", expand=True, padx=(4, 10))
         self.cmd_entry.bind("<Return>", lambda e: self._submit_input())
 
         self.mic_icon = icons.image("mic", theme.ICON_CARD, theme.TEXT_MUTED)
-        mic = ctk.CTkButton(
-            row,
-            text="" if self.mic_icon else "Voice",
-            image=self.mic_icon,
-            width=40, height=40,
-            corner_radius=20,
-            fg_color="transparent",
-            hover_color=theme.SURFACE_SUBTLE,
-            text_color=theme.TEXT_SECONDARY,
-            command=self._toggle_voice,
-        )
-        mic.pack(side="right", padx=(0, 8))
+        self._icons.append(self.mic_icon)
+        ctk.CTkButton(
+            row, text="" if self.mic_icon else "Voice", image=self.mic_icon,
+            width=38, height=38, corner_radius=19,
+            fg_color="transparent", hover_color=theme.CARD_HOVER,
+            text_color=theme.TEXT_SECONDARY, command=self._toggle_voice,
+        ).pack(side="right", padx=(0, 6))
 
         self.send_icon = icons.image("send", theme.ICON_CARD, theme.TEXT_LIGHT, 2.0)
-        send = ctk.CTkButton(
-            row,
-            text="" if self.send_icon else "Send",
-            image=self.send_icon,
-            width=40, height=40,
-            corner_radius=20,
-            fg_color=theme.ACCENT,
-            hover_color=theme.ACCENT_HOVER,
-            text_color=theme.TEXT_LIGHT,
-            command=self._submit_input,
-        )
-        send.pack(side="right")
+        self._icons.append(self.send_icon)
+        ctk.CTkButton(
+            row, text="" if self.send_icon else "Send", image=self.send_icon,
+            width=38, height=38, corner_radius=19,
+            fg_color=theme.ACCENT, hover_color=theme.ACCENT_HOVER,
+            text_color=theme.TEXT_LIGHT, command=self._submit_input,
+        ).pack(side="right")
 
     def _submit_input(self):
         text = self.cmd_entry.get().strip()
@@ -150,159 +154,124 @@ class HomePage(ctk.CTkScrollableFrame):
         if self.on_voice_toggle:
             self.on_voice_toggle()
 
-    def _build_suggestions(self):
-        row = ctk.CTkFrame(self, fg_color="transparent")
-        row.pack(fill="x", padx=self.GUTTER, pady=(4, 30))
+    # -- right: the live column -----------------------------------------------
 
-        for text in ["Find my presentation", "Continue my project",
-                     "Check my email"]:
-            ctk.CTkButton(
-                row,
-                text=text,
-                font=theme.font(theme.SIZE_SMALL),
-                fg_color="transparent",
-                hover_color=theme.SURFACE_SUBTLE,
-                text_color=theme.TEXT_SECONDARY,
-                border_width=1,
-                border_color=theme.CARD_BORDER,
-                corner_radius=theme.RADIUS_PILL,
-                height=32,
-                command=lambda t=text: self.on_execute_command(t),
-            ).pack(side="left", padx=(0, 8))
+    def _build_live_column(self):
+        column = ctk.CTkFrame(self, fg_color=theme.CARD_BG, corner_radius=0)
+        column.grid(row=0, column=1, sticky="nsew")
 
-    # -- what is happening now ------------------------------------------------
+        # A single hairline is all that separates the two halves.
+        ctk.CTkFrame(column, fg_color=theme.DIVIDER, width=1).pack(
+            side="left", fill="y")
 
-    def _section_label(self, text: str, top: int = 0):
-        ctk.CTkLabel(
-            self,
-            text=theme.tracked(text),
-            font=theme.label_font(),
-            text_color=theme.TEXT_MUTED,
-            anchor="w",
-        ).pack(fill="x", padx=self.GUTTER, pady=(top, 10))
+        inner = ctk.CTkFrame(column, fg_color="transparent")
+        inner.pack(fill="both", expand=True, padx=30, pady=(38, 30))
 
-    def _build_current_task(self):
-        self._section_label("Now")
+        self._build_task(inner)
+        self._build_connected(inner)
+        self._build_log(inner)
 
-        card = Card(self, elevation=theme.ELEVATION_LOW, border=theme.CARD_BORDER)
-        card.pack(fill="x", padx=self.GUTTER - card.inset, pady=(0, 30))
+    def _rule(self, parent, pady=(22, 22)):
+        ctk.CTkFrame(parent, fg_color=theme.DIVIDER, height=1).pack(
+            fill="x", pady=pady)
 
-        head = ctk.CTkFrame(card.body, fg_color="transparent")
-        head.pack(fill="x", padx=22, pady=(20, 0))
+    def _label(self, parent, text, right_text=None):
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(fill="x", pady=(0, 12))
+        ctk.CTkLabel(row, text=theme.tracked(text), font=theme.label_font(),
+                     text_color=theme.TEXT_MUTED).pack(side="left")
+        if right_text:
+            ctk.CTkLabel(row, text=right_text, font=theme.font(theme.SIZE_LABEL),
+                         text_color=theme.TEXT_MUTED).pack(side="right")
+        return row
 
-        title_col = ctk.CTkFrame(head, fg_color="transparent")
-        title_col.pack(side="left", fill="x", expand=True)
+    def _build_task(self, parent):
+        steps = store.current_task.get("steps", [])
+        done = sum(1 for step in steps if step.get("status") == "done")
+        self._label(parent, "In progress",
+                    f"Step {min(done + 1, len(steps))} of {len(steps)}" if steps else "")
 
-        state = ctk.CTkFrame(title_col, fg_color="transparent")
-        state.pack(anchor="w")
+        state = ctk.CTkFrame(parent, fg_color="transparent")
+        state.pack(fill="x")
 
         ctk.CTkLabel(state, text="●", font=theme.font(9, "bold"),
-                     text_color=theme.ACCENT).pack(side="left", padx=(0, 7))
-        ctk.CTkLabel(state, text=theme.tracked("Working"), font=theme.label_font(),
-                     text_color=theme.ACCENT).pack(side="left")
+                     text_color=theme.ACCENT).pack(side="left", padx=(0, 8))
 
         self.task_title_lbl = ctk.CTkLabel(
-            title_col,
+            state,
             text=store.current_task.get("title", "Preparing your project"),
             font=theme.display(theme.SIZE_HEADING),
-            text_color=theme.TEXT_PRIMARY,
-            anchor="w",
+            text_color=theme.TEXT_PRIMARY, anchor="w",
         )
-        self.task_title_lbl.pack(anchor="w", pady=(9, 0))
-
-        self.task_sub_lbl = ctk.CTkLabel(
-            title_col,
-            text=store.current_task.get(
-                "subtitle",
-                "VAVE is researching, organising files and writing a draft for you."),
-            font=theme.font(theme.SIZE_BODY),
-            text_color=theme.TEXT_SECONDARY,
-            anchor="w",
-        )
-        self.task_sub_lbl.pack(anchor="w", pady=(5, 0))
+        self.task_title_lbl.pack(side="left")
 
         ctk.CTkButton(
-            head,
-            text="View details",
-            font=theme.font(theme.SIZE_SMALL),
-            fg_color="transparent",
-            hover_color=theme.SURFACE_SUBTLE,
-            text_color=theme.TEXT_SECONDARY,
-            border_width=1,
-            border_color=theme.CARD_BORDER,
-            corner_radius=theme.RADIUS_PILL,
-            width=106, height=30,
+            state, text="Details", font=theme.font(theme.SIZE_LABEL),
+            fg_color="transparent", hover_color=theme.SURFACE_SUBTLE,
+            text_color=theme.TEXT_MUTED,
+            border_width=1, border_color=theme.CARD_BORDER,
+            corner_radius=theme.RADIUS_PILL, width=74, height=26,
             command=lambda: store.open_drawer("task", store.current_task),
-        ).pack(side="right", anchor="n", pady=(2, 0))
+        ).pack(side="right")
 
-        ctk.CTkFrame(card.body, fg_color=theme.DIVIDER, height=1).pack(
-            fill="x", padx=22, pady=(20, 0))
+        self.task_sub_lbl = ctk.CTkLabel(
+            parent,
+            text=store.current_task.get(
+                "subtitle",
+                "Researching, organising files and writing a draft for you."),
+            font=theme.font(theme.SIZE_SMALL),
+            text_color=theme.TEXT_SECONDARY, anchor="w", justify="left",
+        )
+        self.task_sub_lbl.pack(fill="x", pady=(9, 0))
 
-        self.steps_row = ctk.CTkFrame(card.body, fg_color="transparent")
-        self.steps_row.pack(fill="x", padx=22, pady=(16, 20))
+        self.steps_row = ctk.CTkFrame(parent, fg_color="transparent")
+        self.steps_row.pack(fill="x", pady=(14, 0))
         self._render_task_steps()
+
+        self._rule(parent)
 
     def _render_task_steps(self):
         for child in self.steps_row.winfo_children():
             child.destroy()
         self.step_icons = []
 
-        steps = store.current_task.get("steps", [])
-        if not steps:
-            return
-
-        # Markers for the whole run, then the name of the step in hand. Four
-        # full labels never fit, and three of them are not what you are
-        # waiting on anyway.
-        markers = ctk.CTkFrame(self.steps_row, fg_color="transparent")
-        markers.pack(side="left")
-
-        active_index, active_text = 0, ""
-        for index, step in enumerate(steps):
+        for step in store.current_task.get("steps", []):
             status = step.get("status")
+            row = ctk.CTkFrame(self.steps_row, fg_color="transparent")
+            row.pack(fill="x", pady=2)
+
             if status == "done":
-                colour, glyph = theme.SUCCESS, "\u25cf"
-            elif status == "active":
-                colour, glyph = theme.ACCENT, "\u25cf"
-                active_index, active_text = index, step.get("text", "")
+                tick = icons.image("check", 12, theme.SUCCESS, 2.4)
+                self.step_icons.append(tick)
+                marker = ctk.CTkLabel(row, text="" if tick else "✓", image=tick,
+                                      width=16, font=theme.font(10, "bold"),
+                                      text_color=theme.SUCCESS)
+                colour = theme.TEXT_MUTED
             else:
-                colour, glyph = theme.CARD_BORDER, "\u25cf"
+                dot = theme.ACCENT if status == "active" else theme.CARD_BORDER
+                marker = ctk.CTkLabel(row, text="●", width=16,
+                                      font=theme.font(9, "bold"), text_color=dot)
+                colour = (theme.TEXT_PRIMARY if status == "active"
+                          else theme.TEXT_MUTED)
 
-            ctk.CTkLabel(markers, text=glyph, font=theme.font(9, "bold"),
-                         text_color=colour).pack(side="left", padx=(0, 6))
-
-        if not active_text:
-            # Everything finished, or nothing started yet.
-            done = sum(1 for s in steps if s.get("status") == "done")
-            active_text = "All steps finished" if done == len(steps) else "Starting"
-            active_index = max(done - 1, 0)
-
-        ctk.CTkLabel(
-            self.steps_row,
-            text=active_text,
-            font=theme.font(theme.SIZE_SMALL, "bold"),
-            text_color=theme.TEXT_PRIMARY,
-        ).pack(side="left", padx=(10, 0))
-
-        ctk.CTkLabel(
-            self.steps_row,
-            text=f"Step {active_index + 1} of {len(steps)}",
-            font=theme.font(theme.SIZE_SMALL),
-            text_color=theme.TEXT_MUTED,
-        ).pack(side="right")
+            marker.pack(side="left", padx=(0, 8))
+            ctk.CTkLabel(
+                row, text=step.get("text", ""),
+                font=theme.font(theme.SIZE_SMALL,
+                                "bold" if status == "active" else "normal"),
+                text_color=colour,
+            ).pack(side="left")
 
     def _update_task_ui(self):
         self.task_title_lbl.configure(text=store.current_task.get("title", ""))
         self.task_sub_lbl.configure(text=store.current_task.get("subtitle", ""))
         self._render_task_steps()
 
-    # -- what it is connected to ----------------------------------------------
-
-    def _build_connected(self):
+    def _build_connected(self, parent):
         from assistant.api.server import get_local_server
         from gui import integrations
 
-        # Each column says what is true right now. A row that always reads
+        # Each line says what is true right now. A list that always reads
         # "Connected" teaches the user to ignore all four.
         google = integrations.google_status()
         phone_paired = get_local_server().running
@@ -312,61 +281,68 @@ class HomePage(ctk.CTkScrollableFrame):
             ("My Phone", "Ready to pair" if phone_paired else "Not connected",
              phone_paired, "devices", "phone"),
             ("Google", google["label"], google["connected"], "google", "google"),
-            ("Internet", "Ready", True, "web", "globe"),
+            ("The web", "Ready", True, "web", "globe"),
         ]
 
-        self._section_label("Connected")
+        self._label(parent, "Connected")
 
-        card = Card(self, elevation=theme.ELEVATION_LOW, border=theme.CARD_BORDER)
-        card.pack(fill="x", padx=self.GUTTER - card.inset, pady=(0, 34))
+        for name, status, is_live, route, glyph in entries:
+            row = ctk.CTkFrame(parent, fg_color="transparent")
+            row.pack(fill="x", pady=4)
 
-        grid = card.body
-        grid.grid_columnconfigure((0, 2, 4, 6), weight=1, uniform="env")
-
-        for index, (name, status, is_live, route, glyph) in enumerate(entries):
-            column = index * 2
-
-            if index:
-                ctk.CTkFrame(grid, fg_color=theme.DIVIDER, width=1, height=44).grid(
-                    row=0, column=column - 1, sticky="ns", pady=18)
-
-            cell = ctk.CTkFrame(grid, fg_color="transparent")
-            cell.grid(row=0, column=column, sticky="nsew", padx=14, pady=18)
-
-            icon = icons.image(glyph, theme.ICON_CARD,
-                               theme.TEXT_PRIMARY if is_live else theme.TEXT_MUTED)
+            icon = icons.image(glyph, 15,
+                               theme.TEXT_SECONDARY if is_live else theme.TEXT_MUTED)
             self._icons.append(icon)
-
-            top = ctk.CTkFrame(cell, fg_color="transparent")
-            top.pack(fill="x")
-
             if icon is not None:
-                ctk.CTkLabel(top, text="", image=icon, width=18).pack(
-                    side="left", padx=(0, 8))
+                ctk.CTkLabel(row, text="", image=icon, width=18).pack(
+                    side="left", padx=(0, 12))
 
             ctk.CTkLabel(
-                top,
-                text=name,
-                font=theme.font(theme.SIZE_BODY, "bold"),
+                row, text=name, font=theme.font(theme.SIZE_SMALL),
                 text_color=theme.TEXT_PRIMARY if is_live else theme.TEXT_SECONDARY,
             ).pack(side="left")
 
-            status_row = ctk.CTkFrame(cell, fg_color="transparent")
-            status_row.pack(fill="x", pady=(7, 0))
-
             ctk.CTkLabel(
-                status_row,
-                text="●",
-                font=theme.font(8, "bold"),
+                row, text=status, font=theme.font(theme.SIZE_SMALL),
                 text_color=theme.SUCCESS if is_live else theme.TEXT_MUTED,
-            ).pack(side="left", padx=(1, 7))
+            ).pack(side="right")
 
+            row.bind("<Button-1>", lambda e, r=route: self.on_navigate(r))
+
+        self._rule(parent)
+
+    def _build_log(self, parent):
+        self._label(parent, "Just now", "Live")
+        self.log_holder = ctk.CTkFrame(parent, fg_color="transparent")
+        self.log_holder.pack(fill="both", expand=True)
+        self._render_log()
+
+    def _render_log(self):
+        if not hasattr(self, "log_holder") or not self.log_holder.winfo_exists():
+            return
+
+        for child in self.log_holder.winfo_children():
+            child.destroy()
+
+        # Only the most recent few: this is a pulse, not an archive. The full
+        # record is the Activity page.
+        for item in list(store.system_logs)[-5:][::-1]:
+            row = ctk.CTkFrame(self.log_holder, fg_color="transparent")
+            row.pack(fill="x", pady=4)
+
+            status = item.get("status", "working")
+            colour = {"completed": theme.SUCCESS, "waiting": theme.WARNING,
+                      "approval": theme.WARNING, "failed": theme.DANGER,
+                      "info": theme.TEXT_MUTED}.get(status, theme.ACCENT)
+
+            ctk.CTkLabel(row, text="●", font=theme.font(8, "bold"),
+                         text_color=colour, width=14).pack(
+                side="left", anchor="n", pady=(4, 0))
+            ctk.CTkLabel(row, text=item.get("time", ""),
+                         font=theme.font(theme.SIZE_LABEL),
+                         text_color=theme.TEXT_MUTED).pack(side="right", anchor="n")
             ctk.CTkLabel(
-                status_row,
-                text=status,
-                font=theme.font(theme.SIZE_SMALL),
-                text_color=theme.TEXT_SECONDARY if is_live else theme.TEXT_MUTED,
-            ).pack(side="left")
-
-            for widget in (cell, top, status_row):
-                widget.bind("<Button-1>", lambda e, r=route: self.on_navigate(r))
+                row, text=item.get("text", ""), font=theme.font(theme.SIZE_SMALL),
+                text_color=theme.TEXT_SECONDARY, anchor="w", justify="left",
+                wraplength=300,
+            ).pack(side="left", fill="x", expand=True)

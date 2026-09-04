@@ -20,72 +20,72 @@ Rules the rest of the UI follows:
 import sys
 
 # Overall Appearance
-APPEARANCE_MODE = "light"
+APPEARANCE_MODE = "dark"
 DEFAULT_COLOR_THEME = "blue"
 
-# Primary Surfaces. Bone paper and ivory card; neither is pure white.
-MAIN_BG = "#F4F1EC"
-CARD_BG = "#FCFBF9"
-CARD_BORDER = "#E5DFD4"       # Warm hairline, meant to be barely there
-CARD_HOVER = "#F6F3EE"
-# A quiet fill for chips and inset rows, one step off the card.
-SURFACE_SUBTLE = "#EFEBE3"
-# Divider inside a surface, lighter than the outer border.
-DIVIDER = "#EAE4DA"
+# Primary Surfaces. Near-black ground with panels lifted a few points above
+# it - the contrast between them is what gives the interface depth, so neither
+# is ever pure black.
+MAIN_BG = "#0C0C0D"
+CARD_BG = "#17171A"
+CARD_BORDER = "#2A2A2E"       # Hairline, meant to be felt rather than seen
+CARD_HOVER = "#1B1B1E"
+SURFACE_SUBTLE = "#1A1A1D"
+DIVIDER = "#202023"
 
-# Sidebar: warm ink, close to black but never quite there.
-SIDEBAR_BG = "#1C1A17"
-SIDEBAR_HOVER = "#262320"
-SIDEBAR_ACTIVE = "#302C27"
-SIDEBAR_BORDER = "#2A2622"
-SIDEBAR_TEXT = "#F2EFE9"
-SIDEBAR_TEXT_MUTED = "#8B857B"
-SIDEBAR_LABEL = "#6B655B"
-# Icon colour for the selected row: the accent, lifted to read on ink.
-SIDEBAR_ACCENT = "#9DB8A5"
+# The sidebar sinks below the page rather than rising above it.
+SIDEBAR_BG = "#080809"
+SIDEBAR_HOVER = "#161618"
+SIDEBAR_ACTIVE = "#1E1E21"
+SIDEBAR_BORDER = "#1C1C1F"
+SIDEBAR_TEXT = "#F2F0EC"
+SIDEBAR_TEXT_MUTED = "#77767A"
+SIDEBAR_LABEL = "#4F4E52"
+SIDEBAR_ACCENT = "#D9A441"
 
-# Text Colors
-TEXT_PRIMARY = "#1F1D19"      # Warm ink
-TEXT_SECONDARY = "#5C564C"    # Balanced warm grey
-TEXT_MUTED = "#948D82"        # Soft muted grey
-TEXT_LIGHT = "#FCFBF9"
+# Text. Warm off-white on black reads as paper; pure white reads as a screen.
+TEXT_PRIMARY = "#F2F0EC"
+TEXT_SECONDARY = "#A5A3A0"
+TEXT_MUTED = "#6E6D71"
+TEXT_LIGHT = "#0C0C0D"        # Type that sits *on* the accent
 
-# Single restrained accent: deep forest. Dark enough to carry ivory text,
-# quiet enough to sit beside ink without announcing itself.
-ACCENT = "#33513F"
-ACCENT_HOVER = "#284031"
-ACCENT_LIGHT = "#EBEFEA"
-ACCENT_BORDER = "#CBD8CE"
-# A second, non-competing tone for quiet emphasis: aged brass.
-BRASS = "#9C7B45"
-BRASS_LIGHT = "#F4EFE5"
+# One accent: aged gold. Warm enough to feel considered, dark enough not to
+# glow. Nothing else on screen is allowed to be this colour.
+ACCENT = "#D9A441"
+ACCENT_HOVER = "#C08F32"
+ACCENT_LIGHT = "#211B0F"
+ACCENT_BORDER = "#3A2F1A"
+BRASS = "#D9A441"
+BRASS_LIGHT = "#211B0F"
 
-# Semantic colors. Deep and muted: they carry meaning, not emphasis.
-SUCCESS = "#3F6B4F"           # Forest, same family as the accent
-SUCCESS_HOVER = "#325740"
-SUCCESS_LIGHT = "#EBF0EC"
-SUCCESS_BORDER = "#CBDACF"
+# Semantic colours, all desaturated to sit on black without vibrating.
+SUCCESS = "#6FAE7F"
+SUCCESS_HOVER = "#5C9A6C"
+SUCCESS_LIGHT = "#121A14"
+SUCCESS_BORDER = "#25382A"
 
-WARNING = "#946A28"           # Ochre
-WARNING_HOVER = "#7A561F"
-WARNING_LIGHT = "#F6F1E7"
-WARNING_BORDER = "#E3D5BB"
+WARNING = "#D9A441"
+WARNING_HOVER = "#C08F32"
+WARNING_LIGHT = "#211B0F"
+WARNING_BORDER = "#3A2F1A"
 
-DANGER = "#9A4438"            # Brick, destructive actions only
-DANGER_HOVER = "#82382E"
-DANGER_LIGHT = "#F6EDEB"
-DANGER_BORDER = "#E2C9C3"
+DANGER = "#D2705F"
+DANGER_HOVER = "#B85C4C"
+DANGER_LIGHT = "#1F1311"
+DANGER_BORDER = "#3B241F"
 
 # INFO is the accent under another name so neutral states stay in one family.
 INFO = ACCENT
 INFO_LIGHT = ACCENT_LIGHT
 INFO_BORDER = ACCENT_BORDER
 
-# Kept so older imports keep working; new UI should not introduce another
-# colour family.
 PURPLE = ACCENT
 PURPLE_LIGHT = ACCENT_LIGHT
 PURPLE_BORDER = ACCENT_BORDER
+
+# Page rhythm. One gutter everywhere, so nothing is aligned by eye.
+PAGE_GUTTER = 40
+COLUMN_GAP = 28
 
 # Shape
 RADIUS_CARD = 14
@@ -95,8 +95,8 @@ RADIUS_PILL = 999
 
 # Elevation presets for gui/surfaces.card_image, as (opacity, blur, offset).
 ELEVATION_FLAT = (0.0, 0, 0)
-ELEVATION_LOW = (0.09, 8, 2)
-ELEVATION_HIGH = (0.15, 14, 5)
+ELEVATION_LOW = (0.30, 10, 3)
+ELEVATION_HIGH = (0.45, 18, 6)
 
 # Icon sizes, so a glyph is never sized by eye at the call site.
 ICON_NAV = 17
@@ -104,7 +104,7 @@ ICON_INLINE = 16
 ICON_CARD = 18
 
 # Type scale.
-SIZE_DISPLAY = 30
+SIZE_DISPLAY = 29
 SIZE_HEADING = 19
 SIZE_TITLE = 15
 SIZE_BODY = 12
@@ -146,7 +146,7 @@ FALLBACK_FONT = "Helvetica"
 
 def configure_theme(ctk):
     """Sets CustomTkinter appearance mode."""
-    ctk.set_appearance_mode("light")
+    ctk.set_appearance_mode("dark")
     ctk.set_default_color_theme("blue")
 
 
