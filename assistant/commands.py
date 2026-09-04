@@ -6,6 +6,7 @@ from assistant.speech import speak, listen
 from assistant.config import get_setting, update_setting
 from assistant.system_tasks import (
     open_app,
+    close_app,
     tell_time,
     tell_date,
     tell_battery,
@@ -186,6 +187,14 @@ def handle_app_command(command):
         reserved = ["notes", "my notes", "file", "the door", "link"]
         if target and target not in reserved:
             open_app(target)
+            return True
+
+    # Generic "close <target>" or "kill <target>"
+    if command_lower.startswith("close ") or command_lower.startswith("kill "):
+        target = command_lower.split(" ", 1)[1].strip()
+        reserved = ["notes", "my notes", "file", "the door", "switch", "all"]
+        if target and target not in reserved:
+            close_app(target)
             return True
 
     return False

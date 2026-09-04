@@ -316,6 +316,56 @@ def open_app(app_name):
         logger.info("Error:", error)
         return False
 
+
+def close_app(app_name):
+    """
+    Closes or terminates a running application by name.
+    """
+    clean_name = str(app_name).lower().strip().replace("close ", "").replace("kill ", "")
+    display_name = clean_name.replace("_", " ").title()
+    import psutil
+
+    proc_map = {
+        "notepad": ["notepad.exe"],
+        "calculator": ["calculatorapp.exe", "calc.exe", "calculator.exe"],
+        "calc": ["calculatorapp.exe", "calc.exe"],
+        "chrome": ["chrome.exe"],
+        "google chrome": ["chrome.exe"],
+        "vscode": ["code.exe"],
+        "vs code": ["code.exe"],
+        "code": ["code.exe"],
+        "discord": ["discord.exe"],
+        "spotify": ["spotify.exe"],
+        "netflix": ["netflix.exe"],
+        "cmd": ["cmd.exe"],
+        "terminal": ["windowsterminal.exe", "cmd.exe", "powershell.exe"],
+        "edge": ["msedge.exe"],
+        "brave": ["brave.exe"],
+        "word": ["winword.exe"],
+        "excel": ["excel.exe"],
+        "powerpoint": ["powerpnt.exe"],
+    }
+
+    target_exes = [x.lower() for x in proc_map.get(clean_name, [f"{clean_name}.exe", clean_name])]
+    closed = False
+
+    for proc in psutil.process_iter(["name", "pid"]):
+        try:
+            p_name = proc.info["name"].lower()
+            if p_name in target_exes or clean_name in p_name:
+                proc.terminate()
+                closed = True
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+
+    if closed:
+        speak(f"Closed {display_name}.")
+        return f"Closed {display_name} successfully."
+    else:
+        speak(f"No running process found for {display_name}.")
+        return f"No running process found for {display_name}."
+
+
 def tell_time():
     current_time = datetime.datetime.now().strftime("%I:%M %p")
     speak(f"The time is {current_time}")

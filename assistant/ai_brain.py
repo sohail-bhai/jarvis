@@ -58,6 +58,7 @@ AVAILABLE_FUNCTIONS = {
     "create_google_calendar_event": create_google_calendar_event,
     "create_google_doc": create_google_doc,
     "open_app": system_tasks.open_app,
+    "close_app": system_tasks.close_app,
     "tell_time": system_tasks.tell_time,
     "tell_date": system_tasks.tell_date,
     "tell_battery": system_tasks.tell_battery,
@@ -219,6 +220,23 @@ LLM_TOOLS = [
                     "content": {"type": "string", "description": "Initial text content to insert into the document."}
                 },
                 "required": ["title"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "close_app",
+            "description": "Closes or terminates a running desktop application by name (e.g. 'notepad', 'chrome', 'netflix', 'spotify', 'calculator').",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "app_name": {
+                        "type": "string",
+                        "description": "The name of the application to close."
+                    }
+                },
+                "required": ["app_name"]
             }
         }
     },
