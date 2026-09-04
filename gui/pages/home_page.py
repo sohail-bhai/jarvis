@@ -90,7 +90,7 @@ class HomePage(ctk.CTkScrollableFrame):
 
         # Right date badge
         now = datetime.datetime.now()
-        date_str = now.strftime("%a, %-d %b %Y") if hasattr(now, "strftime") else "Thu, 4 Sep 2025"
+        date_str = f"{now.strftime('%a')}, {now.day} {now.strftime('%b %Y')}" if hasattr(now, "strftime") else "Thu, 4 Sep 2025"
         date_badge = ctk.CTkLabel(
             header_frame,
             text=date_str,

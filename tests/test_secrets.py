@@ -7,6 +7,7 @@ value appears only inside the control plane, at the moment a tool runs.
 import os
 import shutil
 import stat
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -43,8 +44,9 @@ class KeyTests(SecretTestCase):
 
         self.assertTrue(path.exists())
         self.assertEqual(key, path.read_bytes())
-        mode = stat.S_IMODE(path.stat().st_mode)
-        self.assertEqual(0, mode & (stat.S_IRWXG | stat.S_IRWXO))
+        if sys.platform != "win32":
+            mode = stat.S_IMODE(path.stat().st_mode)
+            self.assertEqual(0, mode & (stat.S_IRWXG | stat.S_IRWXO))
 
     def test_an_existing_key_is_reused(self):
         path = Path(self.tempdir) / "secret.key"
