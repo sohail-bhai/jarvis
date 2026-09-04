@@ -1,8 +1,6 @@
 import logging
 logger = logging.getLogger(__name__)
 
-import chromadb
-from chromadb.config import Settings
 import uuid
 from pathlib import Path
 from assistant.speech import speak
@@ -17,6 +15,8 @@ memory_collection = None
 _memory_enabled = False
 
 try:
+    import chromadb
+    from chromadb.config import Settings
     chroma_client = chromadb.PersistentClient(path=str(DATA_DIR / "chroma_db"))
     memory_collection = chroma_client.get_or_create_collection(
         name="jarvis_memory",
