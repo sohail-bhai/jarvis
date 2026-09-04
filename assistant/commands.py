@@ -145,10 +145,11 @@ def handle_volume_command(command):
     return False
 
 def open_website(command):
+    command_lower = command.lower()
     websites = get_setting("websites", {})
 
     for site_name, url in websites.items():
-        if f"open {site_name}" in command:
+        if f"open {site_name.lower()}" in command_lower:
             speak(f"Opening {site_name}")
             webbrowser.open(url)
             return True
@@ -157,9 +158,9 @@ def open_website(command):
 
 def handle_app_command(command):
     """
-    Handles opening common desktop applications:
-    notepad, chrome, calculator, vscode, file explorer, cmd.
+    Handles opening desktop applications and websites via smart launcher.
     """
+    command_lower = command.lower().strip()
     app_aliases = {
         "notepad": "notepad",
         "google chrome": "chrome",
@@ -175,9 +176,18 @@ def handle_app_command(command):
         "cmd": "cmd",
     }
     for alias, app_name in app_aliases.items():
-        if f"open {alias}" in command:
+        if f"open {alias}" in command_lower:
             open_app(app_name)
             return True
+
+    # Generic "open <target>" routing through smart launcher
+    if command_lower.startswith("open "):
+        target = command_lower[5:].strip()
+        reserved = ["notes", "my notes", "file", "the door", "link"]
+        if target and target not in reserved:
+            open_app(target)
+            return True
+
     return False
 
 def google_search(command):

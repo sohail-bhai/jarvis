@@ -28,25 +28,138 @@ def get_os():
 def clamp_number(value, minimum=0, maximum=100):
     return max(minimum, min(maximum, int(value)))
 
+def _find_installed_app(query, system):
+    """
+    Search installed desktop applications on Windows, macOS, or Linux.
+    Returns (path, display_name) or (None, None).
+    """
+    clean_q = query.lower().replace(" ", "").replace("_", "").replace("-", "")
+
+    if system == "windows":
+        try:
+            import winreg
+        except ImportError:
+            winreg = None
+
+        dirs = [
+            os.path.expandvars(r"%ProgramData%\Microsoft\Windows\Start Menu\Programs"),
+            os.path.expandvars(r"%APPDATA%\Microsoft\Windows\Start Menu\Programs"),
+        ]
+        candidates = []
+        bad_words = {"uninstall", "remove", "setup", "reset", "documentation", "help", "readme", "website", "update"}
+
+        for folder in dirs:
+            if os.path.exists(folder):
+                for root, _, files in os.walk(folder):
+                    for f in files:
+                        if f.lower().endswith(".lnk"):
+                            name = f[:-4].lower()
+                            if not any(bw in name for bw in bad_words):
+                                candidates.append((name, os.path.join(root, f), f[:-4]))
+
+        # Exact normalized match
+        for name, path, orig in candidates:
+            if clean_q == name.replace(" ", "").replace("_", "").replace("-", ""):
+                return path, orig
+
+        # Word-in-name match
+        for name, path, orig in candidates:
+            words = name.replace("_", " ").replace("-", " ").split()
+            if query.lower() in words or any(w.startswith(query.lower()) for w in words):
+                return path, orig
+
+        # Substring match
+        for name, path, orig in candidates:
+            if query.lower() in name:
+                return path, orig
+
+        # Registry App Paths
+        if winreg:
+            for hive in [winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER]:
+                try:
+                    with winreg.OpenKey(hive, r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths") as key:
+                        num = winreg.QueryInfoKey(key)[0]
+                        for i in range(num):
+                            sub = winreg.EnumKey(key, i)
+                            clean = sub.lower().replace(".exe", "")
+                            if clean == clean_q or query.lower() in clean:
+                                val = winreg.QueryValue(key, sub)
+                                if val and os.path.exists(val):
+                                    return val, clean.title()
+                except Exception:
+                    pass
+
+    elif system == "darwin":
+        for app_dir in ["/Applications", os.path.expanduser("~/Applications")]:
+            if os.path.exists(app_dir):
+                for item in os.listdir(app_dir):
+                    if item.lower().endswith(".app"):
+                        name = item[:-4].lower()
+                        if query.lower() in name or clean_q in name.replace(" ", ""):
+                            return os.path.join(app_dir, item), item[:-4]
+
+    else:
+        desk_dir = "/usr/share/applications"
+        if os.path.exists(desk_dir):
+            for item in os.listdir(desk_dir):
+                if item.lower().endswith(".desktop") and query.lower() in item.lower():
+                    return os.path.join(desk_dir, item), item[:-8]
+
+    return None, None
+
+
 def open_app(app_name):
+    """
+    3-tier smart application & website launcher:
+    Tier 1: Built-in known app aliases.
+    Tier 2: Search installed applications on local disk.
+    Tier 3: Fallback to browser (configured websites or web search/URL).
+    """
+    import webbrowser
+    import urllib.parse
+    from assistant.config import get_setting
+
     system = get_os()
+    raw_query = str(app_name).strip()
+    query = raw_query.lower()
+    if query.startswith("open "):
+        query = query[5:].strip()
+
+    display_name = query.replace("_", " ").title()
 
     try:
+        # Tier 1: Built-in known app aliases
         if system == "windows":
             windows_apps = {
                 "chrome": "start chrome",
+                "google chrome": "start chrome",
                 "notepad": "notepad",
                 "calculator": "calc",
+                "calc": "calc",
                 "vscode": "code",
+                "vs code": "code",
+                "code": "code",
                 "file_explorer": "explorer",
+                "file explorer": "explorer",
+                "explorer": "explorer",
                 "cmd": "start cmd",
+                "terminal": "start cmd",
+                "command prompt": "start cmd",
+                "powershell": "start powershell",
+                "paint": "mspaint",
+                "task manager": "taskmgr",
+                "taskmgr": "taskmgr",
+                "settings": "start ms-settings:",
+                "edge": "start msedge",
+                "microsoft edge": "start msedge",
+                "word": "start winword",
+                "excel": "start excel",
+                "powerpoint": "start powerpnt",
             }
-            command = windows_apps.get(app_name)
-            if command:
-                speak(f"Opening {app_name.replace('_', ' ')}")
-                os.system(command)
-            else:
-                speak("This app is not added yet.")
+            if query in windows_apps:
+                speak(f"Opening {display_name}")
+                os.system(windows_apps[query])
+                return True
 
         elif system == "darwin":
             mac_apps = {
@@ -57,12 +170,10 @@ def open_app(app_name):
                 "file_explorer": "open .",
                 "cmd": "open -a Terminal",
             }
-            command = mac_apps.get(app_name)
-            if command:
-                speak(f"Opening {app_name.replace('_', ' ')}")
-                os.system(command)
-            else:
-                speak("This app is not added yet.")
+            if query in mac_apps:
+                speak(f"Opening {display_name}")
+                os.system(mac_apps[query])
+                return True
 
         else:
             linux_apps = {
@@ -73,16 +184,77 @@ def open_app(app_name):
                 "file_explorer": "xdg-open .",
                 "cmd": "gnome-terminal",
             }
-            command = linux_apps.get(app_name)
-            if command:
-                speak(f"Opening {app_name.replace('_', ' ')}")
-                subprocess.Popen(command, shell=True)
+            if query in linux_apps:
+                speak(f"Opening {display_name}")
+                subprocess.Popen(linux_apps[query], shell=True)
+                return True
+
+        # Tier 2: Search installed applications on local machine
+        app_path, found_name = _find_installed_app(query, system)
+        if app_path:
+            speak(f"Opening {found_name}")
+            if system == "windows":
+                os.startfile(app_path)
+            elif system == "darwin":
+                subprocess.Popen(["open", app_path])
             else:
-                speak("This app is not added yet.")
+                subprocess.Popen([app_path], shell=True)
+            return True
+
+        # Tier 3: Fallback to opening in browser
+        websites = get_setting("websites", {})
+        if query in websites:
+            speak(f"Opening {display_name} in browser.")
+            webbrowser.open(websites[query])
+            return True
+
+        web_services = {
+            "youtube": "https://www.youtube.com",
+            "netflix": "https://www.netflix.com",
+            "reddit": "https://www.reddit.com",
+            "twitter": "https://twitter.com",
+            "x": "https://x.com",
+            "instagram": "https://www.instagram.com",
+            "facebook": "https://www.facebook.com",
+            "linkedin": "https://www.linkedin.com",
+            "whatsapp": "https://web.whatsapp.com",
+            "telegram": "https://web.telegram.org",
+            "chatgpt": "https://chatgpt.com",
+            "gemini": "https://gemini.google.com",
+            "claude": "https://claude.ai",
+            "spotify": "https://open.spotify.com",
+            "github": "https://github.com",
+            "gmail": "https://mail.google.com",
+            "drive": "https://drive.google.com",
+            "google drive": "https://drive.google.com",
+            "maps": "https://maps.google.com",
+            "google maps": "https://maps.google.com",
+            "prime video": "https://www.primevideo.com",
+            "amazon": "https://www.amazon.com",
+            "twitch": "https://www.twitch.tv",
+            "wikipedia": "https://www.wikipedia.org",
+            "canva": "https://www.canva.com",
+            "notion": "https://www.notion.so",
+            "figma": "https://www.figma.com",
+        }
+        if query in web_services:
+            speak(f"Opening {display_name} in browser.")
+            webbrowser.open(web_services[query])
+            return True
+
+        if " " not in query and query.isalnum():
+            url = f"https://www.{query}.com"
+        else:
+            url = f"https://www.google.com/search?q={urllib.parse.quote_plus(query)}"
+
+        speak(f"Opening {display_name} in browser.")
+        webbrowser.open(url)
+        return True
 
     except Exception as error:
-        speak(f"Could not open {app_name.replace('_', ' ')}.")
+        speak(f"Could not open {display_name}.")
         logger.info("Error:", error)
+        return False
 
 def tell_time():
     current_time = datetime.datetime.now().strftime("%I:%M %p")
