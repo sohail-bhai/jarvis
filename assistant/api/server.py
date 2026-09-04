@@ -69,6 +69,17 @@ class LocalServer:
             logger.warning("Cannot start the phone connection: %s", self._error)
             return False
 
+        # Check the port before starting a thread. Uvicorn reports a bind
+        # failure by logging and calling sys.exit, which raises SystemExit on
+        # its own thread where nothing can catch it - the GUI would then wait
+        # out the whole timeout and blame the wait rather than the port.
+        busy = self._port_in_use()
+        if busy:
+            self._error = (f"Port {self.port} is already in use. Another copy of "
+                           "VAVE, or another program, is using it.")
+            logger.warning("Cannot start the phone connection: %s", self._error)
+            return False
+
         plane = get_control_plane()
         # Held here as well as inside the app, so the GUI can mint a pairing
         # code without going back through HTTP to reach it.
@@ -98,9 +109,31 @@ class LocalServer:
         self._error = f"The server did not start within {int(timeout)} seconds."
         return False
 
+    def _port_in_use(self):
+        """True when something already holds our host and port."""
+        import errno
+        import socket
+
+        probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            # No SO_REUSEADDR here on purpose: we want to know whether a
+            # listener is there, not whether we could share the address.
+            probe.bind((self.host, self.port))
+            return False
+        except OSError as error:
+            return error.errno in (errno.EADDRINUSE, errno.EACCES)
+        finally:
+            probe.close()
+
     def _run(self):
         try:
             self._server.run()
+        except SystemExit:
+            # How uvicorn reports a bind failure once it is already running.
+            if not self._error:
+                self._error = (f"Port {self.port} is already in use. Another copy "
+                               "of VAVE, or another program, is using it.")
+            logger.warning("Phone connection could not bind port %s", self.port)
         except OSError as error:
             # Almost always "address already in use", which is worth saying
             # exactly rather than as a generic failure.

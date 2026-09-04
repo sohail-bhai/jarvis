@@ -45,7 +45,7 @@ class FilesPage(ctk.CTkScrollableFrame):
             fg_color=theme.CARD_BG,
             border_width=1,
             border_color=theme.CARD_BORDER,
-            corner_radius=14,
+            corner_radius=theme.RADIUS_CARD,
         )
         search_card.pack(fill="x", padx=16, pady=(0, 12))
 
@@ -79,7 +79,7 @@ class FilesPage(ctk.CTkScrollableFrame):
                 text_color="#FFFFFF" if cat == "All" else theme.TEXT_SECONDARY,
                 border_width=0 if cat == "All" else 1,
                 border_color=theme.CARD_BORDER,
-                corner_radius=12,
+                corner_radius=theme.RADIUS_CARD,
                 height=28,
                 command=lambda c=cat: self._set_filter(c),
             )
@@ -127,7 +127,7 @@ class FilesPage(ctk.CTkScrollableFrame):
             files = [f for f in files if query in f.get("name", "").lower() or query in f.get("folder", "").lower()]
 
         if not files:
-            empty_box = ctk.CTkFrame(self.results_container, fg_color=theme.CARD_BG, corner_radius=12)
+            empty_box = ctk.CTkFrame(self.results_container, fg_color=theme.CARD_BG, corner_radius=theme.RADIUS_CARD)
             empty_box.pack(fill="x", pady=20, padx=4)
             ctk.CTkLabel(
                 empty_box,
@@ -144,7 +144,7 @@ class FilesPage(ctk.CTkScrollableFrame):
                 fg_color=theme.CARD_BG,
                 border_width=1,
                 border_color=theme.CARD_BORDER,
-                corner_radius=12,
+                corner_radius=theme.RADIUS_CARD,
             )
             card.pack(fill="x", pady=4)
 
@@ -190,7 +190,7 @@ class FilesPage(ctk.CTkScrollableFrame):
                 text_color=theme.TEXT_PRIMARY,
                 border_width=1,
                 border_color=theme.CARD_BORDER,
-                corner_radius=8,
+                corner_radius=theme.RADIUS_CONTROL,
                 width=96,
                 height=28,
                 command=lambda f=file_item: store.add_system_log(f"Sent {f.get('name')} to your phone", "completed"),
@@ -203,7 +203,7 @@ class FilesPage(ctk.CTkScrollableFrame):
                 fg_color=theme.ACCENT,
                 hover_color=theme.ACCENT_HOVER,
                 text_color="#FFFFFF",
-                corner_radius=8,
+                corner_radius=theme.RADIUS_CONTROL,
                 width=54,
                 height=28,
                 command=lambda f=file_item: store.open_drawer("file", f),
