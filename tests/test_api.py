@@ -12,6 +12,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from assistant.api import create_app
+from assistant.control.executor import TaskExecutor
 from assistant.control.service import ControlPlane
 from assistant.control.store import ControlStore
 
@@ -21,7 +22,15 @@ class ApiTestCase(unittest.TestCase):
         self.tempdir = tempfile.mkdtemp(prefix="jarvis-api-test-")
         self.store = ControlStore(Path(self.tempdir) / "control.db")
         self.plane = ControlPlane(store=self.store)
-        self.client = TestClient(create_app(control=self.plane))
+        # A runner that needs no local model, so the API is tested on its own.
+        self.executed = []
+        self.executor = TaskExecutor(plane=self.plane, runner=self._runner)
+        self.client = TestClient(create_app(control=self.plane,
+                                            executor=self.executor))
+
+    def _runner(self, instruction, context):
+        self.executed.append(instruction)
+        return f"Handled: {instruction}"
 
     def tearDown(self):
         self.store.close()
@@ -228,6 +237,54 @@ class ActivityApiTests(ApiTestCase):
 
         # The subscriber list must not grow once the client has gone away.
         self.assertEqual([], self.plane._subscribers)
+
+
+class TaskExecutionTests(ApiTestCase):
+    def test_running_a_task_works_its_steps(self):
+        created = self.client.post("/api/tasks", json={
+            "goal": "Tidy my notes", "steps": ["Reading notes"]}).json()
+
+        response = self.client.post(f"/api/tasks/{created['id']}/run")
+        self.executor.wait(created["id"], timeout=5)
+
+        self.assertEqual(202, response.status_code)
+        self.assertEqual(["Reading notes"], self.executed)
+        detail = self.client.get(f"/api/tasks/{created['id']}").json()
+        self.assertEqual("completed", detail["status"])
+
+    def test_a_task_can_be_created_and_run_in_one_call(self):
+        created = self.client.post("/api/tasks", json={
+            "goal": "Tidy my notes", "steps": ["Reading notes"], "run": True}).json()
+        self.executor.wait(created["id"], timeout=5)
+
+        self.assertEqual(["Reading notes"], self.executed)
+
+    def test_creating_without_run_does_not_start_work(self):
+        self.client.post("/api/tasks", json={
+            "goal": "Tidy my notes", "steps": ["Reading notes"]})
+
+        self.assertEqual([], self.executed)
+
+    def test_running_an_unknown_task_is_a_404(self):
+        response = self.client.post("/api/tasks/no-such-task/run")
+        self.assertEqual(404, response.status_code)
+
+    def test_running_a_finished_task_is_refused(self):
+        created = self.client.post("/api/tasks", json={"goal": "Tidy my notes"}).json()
+        self.client.post(f"/api/tasks/{created['id']}/complete")
+
+        response = self.client.post(f"/api/tasks/{created['id']}/run")
+        self.assertEqual(409, response.status_code)
+
+    def test_running_is_refused_while_stopped(self):
+        created = self.client.post("/api/tasks", json={
+            "goal": "Tidy my notes", "steps": ["Reading notes"]}).json()
+        self.client.post("/api/emergency-stop")
+
+        response = self.client.post(f"/api/tasks/{created['id']}/run")
+
+        self.assertEqual(409, response.status_code)
+        self.assertEqual([], self.executed)
 
 
 if __name__ == "__main__":

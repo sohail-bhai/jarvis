@@ -16,12 +16,13 @@ from assistant.control.models import (
     TaskStatus,
     TaskStep,
 )
+from assistant.control.executor import TaskExecutor, get_executor, reset_executor
 from assistant.control.service import ControlPlane, get_control_plane, reset_control_plane
 from assistant.control.store import ControlStore
 
 __all__ = [
     "ActivityEvent", "Approval", "ApprovalStatus", "ControlPlane", "ControlStore",
     "Device", "DeviceStatus", "EventType", "Helper", "HelperStatus", "Permission",
-    "PermissionStatus", "StepStatus", "Task", "TaskStatus", "TaskStep",
-    "get_control_plane", "reset_control_plane",
+    "PermissionStatus", "StepStatus", "Task", "TaskStatus", "TaskStep", "TaskExecutor",
+    "get_control_plane", "get_executor", "reset_control_plane", "reset_executor",
 ]

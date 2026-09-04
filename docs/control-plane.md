@@ -37,6 +37,7 @@ Putting it behind an API means:
 | `assistant/control/models.py` | The data model: `Task`, `TaskStep`, `Helper`, `Device`, `Permission`, `Approval`, `ActivityEvent`, plus their status enums. Plain dataclasses with no framework dependency. |
 | `assistant/control/store.py` | SQLite persistence. The only module that knows SQL, so moving to PostgreSQL later means rewriting this file alone. |
 | `assistant/control/service.py` | `ControlPlane` — the coordination logic and the only thing clients need. |
+| `assistant/control/executor.py` | `TaskExecutor` - runs a task's steps through the AI brain and writes the outcomes back. |
 | `assistant/api.py` | FastAPI HTTP + WebSocket boundary. |
 
 ## Core concepts
@@ -60,6 +61,13 @@ expiry. Grants are released automatically when their task finishes.
 **Approval** — a consequential action held until the user decides. Requesting
 one moves the task to `waiting_approval`; approving resumes it, declining
 cancels it.
+
+**Execution** — the control plane records steps; `TaskExecutor` runs them. It
+hands each step to `ai_brain.run_task_step()`, which uses the same tools and
+safety guard as the voice loop, then records the outcome on the step. Later
+steps are told what earlier ones produced. The runner is injectable, so the
+coordination logic is testable without a local model and a remote helper can
+be substituted later.
 
 **ActivityEvent** — one line of the timeline, in plain English. This is what
 the System Log renders. It records observable actions only, never model
@@ -97,6 +105,37 @@ plane.resolve_approval(approval.id, approved=True)
 plane.complete_task(task.id, "Your project has been updated.")
 ```
 
+## Running a task
+
+`TaskExecutor` works the steps for you. It stops for a pending approval,
+stops for an emergency stop, checkpoints after every step, and records an
+honest failure with the real reason rather than a silent success.
+
+```python
+from assistant.control import get_executor
+
+executor = get_executor()
+
+task = executor.start(
+    "Summarise my notes",
+    steps=["Reading notes", "Writing the summary"],
+)
+
+executor.wait(task.id, timeout=120)   # optional; work runs in the background
+```
+
+Over HTTP:
+
+```bash
+curl -X POST localhost:8765/api/tasks \
+     -H 'Content-Type: application/json' \
+     -d '{"goal": "Summarise my notes", "steps": ["Reading notes"], "run": true}'
+```
+
+Steps run one at a time on a background thread. An emergency stop cancels the
+task at the next step boundary; it does not interrupt a tool call already in
+flight.
+
 ## Running the API
 
 ```bash
@@ -120,6 +159,7 @@ Interactive documentation is generated at `http://127.0.0.1:8765/docs`.
 | `GET` | `/api/tasks` | List tasks. `?active_only=true` hides finished ones. |
 | `POST` | `/api/tasks` | Create a task from a goal and its steps. |
 | `GET` | `/api/tasks/{id}` | One task with steps, progress and current step. |
+| `POST` | `/api/tasks/{id}/run` | Work the task's steps through the AI brain. Returns `202` as soon as work starts. |
 | `POST` | `/api/tasks/{id}/steps/start` | Mark a step as being worked on. |
 | `POST` | `/api/tasks/{id}/steps/finish` | Finish a step, optionally as failed. |
 | `POST` | `/api/tasks/{id}/complete` | Complete a task with a summary. |
@@ -180,9 +220,12 @@ These are known gaps, not oversights:
   device token is needed before real remote use.
 - **Helper selection is a first match, not a scheduler.** It prefers idle then
   least-recently-used. There is no load balancing or cost awareness.
-- **Steps are recorded, not executed.** The control plane tracks and
-  coordinates work; connecting steps to the existing tool loop in
-  `assistant/ai_brain.py` is separate work.
+- **Steps are not planned automatically.** The caller supplies the steps. A
+  goal with no steps is run as a single piece of work.
+- **A running step cannot be interrupted.** Cancellation and emergency stop
+  are honoured between steps, not inside a tool call that is already running.
+- **Helpers are selected but not marked busy.** Execution does not yet set a
+  helper to `working` or release it afterwards.
 - **Checkpoints are stored but not yet replayed.** `save_checkpoint` persists
   state; automatic recovery onto another helper is not implemented.
 - **Permission expiry is checked on read**, not by a background timer. A grant
@@ -192,9 +235,10 @@ These are known gaps, not oversights:
 ## Tests
 
 ```bash
-python -m unittest tests.test_control_plane tests.test_api
+python -m unittest tests.test_control_plane tests.test_api tests.test_executor
 ```
 
-52 tests cover the task lifecycle, capability matching, permission expiry and
-revocation, the approval flow, emergency stop, and the HTTP and WebSocket
-surface.
+81 tests cover the task lifecycle, capability matching, permission expiry and
+revocation, the approval flow, emergency stop, step execution, failure and
+cancellation paths, and the HTTP and WebSocket surface. The executor tests use
+an injected runner, so none of them need Ollama.

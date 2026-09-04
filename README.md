@@ -82,6 +82,17 @@ python -m assistant.api --host 0.0.0.0  # reachable from a phone
 
 Interactive API documentation: `http://127.0.0.1:8765/docs`
 
+Tasks are not just tracked, they are worked. Post a goal with `"run": true`,
+or `POST /api/tasks/{id}/run`, and JARVIS carries out each step with the same
+tools and safety guard as the voice loop, reporting progress over
+`/ws/activity`:
+
+```bash
+curl -X POST localhost:8765/api/tasks \
+     -H 'Content-Type: application/json' \
+     -d '{"goal": "Summarise my notes", "steps": ["Reading notes"], "run": true}'
+```
+
 > `--host 0.0.0.0` lets anything on your network control this computer, and
 > there is no authentication yet. Only use it on a network you trust.
 

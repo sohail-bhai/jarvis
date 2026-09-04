@@ -22,6 +22,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from assistant.control.executor import get_executor
 from assistant.control.service import get_control_plane
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,8 @@ class CreateTaskRequest(BaseModel):
     steps: list[str] = Field(default_factory=list,
                              description="Observable steps, in plain language.")
     capability: str = Field("", description="Capability needed, e.g. 'research'.")
+    run: bool = Field(False,
+                      description="Start working the steps immediately.")
 
 
 class ResolveApprovalRequest(BaseModel):
@@ -61,8 +64,12 @@ class StepUpdateRequest(BaseModel):
     failed: bool = False
 
 
-def create_app(control=None):
-    """Build the API. Accepts a control plane so tests can inject their own."""
+def create_app(control=None, executor=None):
+    """Build the API.
+
+    Accepts a control plane and an executor so tests, and any embedding app,
+    can inject their own instead of driving the shared ones.
+    """
     app = FastAPI(
         title="JARVIS Control Plane",
         version=API_VERSION,
@@ -79,7 +86,9 @@ def create_app(control=None):
     )
 
     plane = control or get_control_plane()
+    runner = executor or get_executor(plane=plane)
     app.state.control = plane
+    app.state.executor = runner
 
     # -- health and status -------------------------------------------------
 
@@ -125,6 +134,10 @@ def create_app(control=None):
         except RuntimeError as error:
             # Raised while an emergency stop is latched.
             raise HTTPException(status_code=409, detail=str(error))
+
+        if request.run:
+            runner.submit(task.id)
+
         return plane.task_detail(task.id)
 
     @app.get("/api/tasks/{task_id}", tags=["tasks"])
@@ -133,6 +146,26 @@ def create_app(control=None):
         if detail is None:
             raise HTTPException(status_code=404, detail="No such task.")
         return detail
+
+    @app.post("/api/tasks/{task_id}/run", status_code=202, tags=["tasks"])
+    def run_task(task_id: str):
+        """Hand the task's steps to the AI brain and work them in order.
+
+        This returns as soon as the work starts. Progress arrives over
+        /ws/activity, or by polling the task.
+        """
+        if plane.is_stopped:
+            raise HTTPException(status_code=409,
+                                detail="JARVIS is stopped. Resume before starting work.")
+
+        task = plane.get_task(task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="No such task.")
+        if task.status.is_terminal:
+            raise HTTPException(status_code=409, detail="This task already finished.")
+
+        runner.submit(task_id)
+        return plane.task_detail(task_id)
 
     @app.post("/api/tasks/{task_id}/steps/start", tags=["tasks"])
     def start_step(task_id: str, request: StepUpdateRequest):

@@ -48,8 +48,8 @@ Primary user-facing capabilities:
 - `assistant/system_tasks.py`: OS and hardware actions, including app launch, time/date/battery, screenshot, volume, lock, shutdown, and restart.
 - `assistant/config.py`: config defaults, JSON loading/merging, and setting updates.
 - `assistant/notes.py`: note capture, readback, and clearing.
-- `assistant/ai_brain.py`: Ollama-backed agent loop, tool-calling schema, and the `AVAILABLE_FUNCTIONS` tool registry.
-- `assistant/control/`: the control plane. `models.py` (data model), `store.py` (SQLite), `service.py` (`ControlPlane` coordination logic).
+- `assistant/ai_brain.py`: Ollama-backed agent loop (`_agent_loop`), the voice entry point `ask_ai()`, the control plane entry point `run_task_step()`, the tool-calling schema, and the `AVAILABLE_FUNCTIONS` tool registry.
+- `assistant/control/`: the control plane. `models.py` (data model), `store.py` (SQLite), `service.py` (`ControlPlane` coordination logic), `executor.py` (`TaskExecutor`, which runs task steps through `ai_brain.run_task_step`).
 - `assistant/api.py`: FastAPI HTTP + WebSocket boundary over the control plane. Run with `python -m assistant.api`.
 - `assistant/memory.py`: persistent vector memory backed by ChromaDB.
 - `assistant/swarm.py`: parallel sub-agents and actor-critic research.
@@ -227,12 +227,14 @@ Known limits in Version 1.2:
   three. Platform-specific imports must stay lazy so the app still starts.
 - The control plane has no authentication, so the API binds to localhost by
   default. See `docs/control-plane.md` for the full list of known gaps.
-- Control plane steps are recorded and coordinated but are not yet wired to the
-  tool loop in `ai_brain.py`.
+- Control plane steps run through `ai_brain.run_task_step()`, but a step that
+  is already executing cannot be interrupted. Cancellation and emergency stop
+  take effect between steps.
+- Steps must be supplied by the caller. Nothing plans them from a goal yet.
 
 Likely future work:
 
-- Connect control plane tasks to the existing `ai_brain.py` tool loop.
+- Plan steps from a goal automatically instead of requiring the caller to list them.
 - Give `system_tasks.py` real cross-platform implementations.
 - Add authentication to the API before any remote use.
 - Make command routing more structured to reduce accidental matches.
