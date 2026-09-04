@@ -1,13 +1,14 @@
 """
 Sidebar component for the VAVE desktop interface.
 
-Text-only navigation on a neutral dark surface. No icons: seven short labels
-read faster than seven labels plus seven pictures.
+Navigation on a dark surface: one line icon and one short label per row. The
+selected row is filled and its icon takes the accent, so the current page is
+readable at a glance without a second cue.
 """
 from __future__ import annotations
 
 import customtkinter as ctk
-from gui import theme
+from gui import icons, theme
 from gui.store import store
 
 
@@ -29,14 +30,28 @@ class Sidebar(ctk.CTkFrame):
         brand_frame = ctk.CTkFrame(self, fg_color="transparent")
         brand_frame.pack(fill="x", padx=20, pady=(6, 24))
 
+        mark_row = ctk.CTkFrame(brand_frame, fg_color="transparent")
+        mark_row.pack(anchor="w")
+
+        # A small accent mark beside the wordmark: the only piece of colour in
+        # the sidebar that is not tied to state.
+        self.brand_icon = icons.image("sparkle", 15, theme.SIDEBAR_ACCENT)
+        if self.brand_icon is not None:
+            ctk.CTkLabel(
+                mark_row,
+                text="",
+                image=self.brand_icon,
+                width=18,
+            ).pack(side="left", padx=(0, 7))
+
         title_lbl = ctk.CTkLabel(
-            brand_frame,
+            mark_row,
             text="VAVE",
             font=theme.font(18, "bold"),
             text_color=theme.SIDEBAR_TEXT,
             anchor="w",
         )
-        title_lbl.pack(anchor="w")
+        title_lbl.pack(side="left")
 
         tagline_lbl = ctk.CTkLabel(
             brand_frame,
@@ -49,28 +64,40 @@ class Sidebar(ctk.CTkFrame):
 
         # 3. Navigation Items
         self.nav_items = [
-            ("home", "Home"),
-            ("devices", "My Devices"),
-            ("files", "My Files"),
-            ("google", "Google"),
-            ("web", "Web"),
-            ("activity", "Activity"),
-            ("settings", "Settings"),
+            ("home", "Home", "home"),
+            ("devices", "My Devices", "devices"),
+            ("files", "My Files", "files"),
+            ("google", "Google", "google"),
+            ("web", "Web", "globe"),
+            ("activity", "Activity", "activity"),
+            ("settings", "Settings", "settings"),
         ]
+
+        # Two renderings of each glyph: muted when the row is idle, accent when
+        # it is selected. Held on self so Tk does not drop the images.
+        self.nav_icons = {
+            key: (icons.image(glyph, theme.ICON_NAV, theme.SIDEBAR_TEXT_MUTED),
+                  icons.image(glyph, theme.ICON_NAV, theme.SIDEBAR_ACCENT))
+            for key, _, glyph in self.nav_items
+        }
 
         self.nav_container = ctk.CTkFrame(self, fg_color="transparent")
         self.nav_container.pack(fill="x", padx=12, expand=True, anchor="n")
 
-        for page_id, label in self.nav_items:
+        for page_id, label, _ in self.nav_items:
+            selected = page_id == "home"
+            idle_icon, active_icon = self.nav_icons[page_id]
             btn = ctk.CTkButton(
                 self.nav_container,
-                text=f"   {label}",
-                font=theme.font(13, "bold" if page_id == "home" else "normal"),
-                fg_color=theme.SIDEBAR_ACTIVE if page_id == "home" else "transparent",
-                text_color=theme.SIDEBAR_TEXT,
+                text=f"  {label}",
+                image=active_icon if selected else idle_icon,
+                compound="left",
+                font=theme.font(13, "bold" if selected else "normal"),
+                fg_color=theme.SIDEBAR_ACTIVE if selected else "transparent",
+                text_color=theme.SIDEBAR_TEXT if selected else theme.SIDEBAR_TEXT_MUTED,
                 hover_color=theme.SIDEBAR_HOVER,
                 corner_radius=theme.RADIUS_CONTROL,
-                height=36,
+                height=38,
                 anchor="w",
                 command=lambda pid=page_id: self._select_page(pid),
             )
@@ -111,15 +138,20 @@ class Sidebar(ctk.CTkFrame):
 
     def _select_page(self, page_id: str):
         for pid, btn in self.nav_buttons.items():
+            idle_icon, active_icon = self.nav_icons[pid]
             if pid == page_id:
                 btn.configure(
                     fg_color=theme.SIDEBAR_ACTIVE,
                     font=theme.font(13, "bold"),
+                    text_color=theme.SIDEBAR_TEXT,
+                    image=active_icon,
                 )
             else:
                 btn.configure(
                     fg_color="transparent",
                     font=theme.font(13, "normal"),
+                    text_color=theme.SIDEBAR_TEXT_MUTED,
+                    image=idle_icon,
                 )
         self.on_navigate(page_id)
 

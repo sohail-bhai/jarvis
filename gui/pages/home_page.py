@@ -6,12 +6,10 @@ doing right now. Navigation lives in the sidebar, so it is not repeated here.
 """
 from __future__ import annotations
 
-import os
 import datetime
-from PIL import Image
 import customtkinter as ctk
 from typing import Callable
-from gui import theme
+from gui import icons, theme
 from gui.store import store
 
 
@@ -99,43 +97,31 @@ class HomePage(ctk.CTkScrollableFrame):
         self.cmd_entry.pack(side="left", fill="x", expand=True, padx=(4, 8))
         self.cmd_entry.bind("<Return>", lambda e: self._submit_input())
 
-        mic_icon_path = os.path.join(os.path.dirname(__file__), "..", "..", "assets", "icons", "mic_hd.png")
-        if os.path.exists(mic_icon_path):
-            pil_img = Image.open(mic_icon_path)
-            self.mic_ctk_image = ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=(18, 18))
-            mic_btn = ctk.CTkButton(
-                row,
-                text="",
-                image=self.mic_ctk_image,
-                width=32,
-                height=32,
-                corner_radius=16,
-                fg_color="transparent",
-                hover_color=theme.CARD_HOVER,
-                command=self._toggle_voice,
-            )
-        else:
-            mic_btn = ctk.CTkButton(
-                row,
-                text="Voice",
-                font=theme.font(11),
-                width=52,
-                height=32,
-                corner_radius=16,
-                fg_color="transparent",
-                hover_color=theme.CARD_HOVER,
-                text_color=theme.TEXT_SECONDARY,
-                command=self._toggle_voice,
-            )
+        self.mic_icon = icons.image("mic", theme.ICON_CARD, theme.TEXT_SECONDARY)
+        mic_btn = ctk.CTkButton(
+            row,
+            text="" if self.mic_icon else "Voice",
+            image=self.mic_icon,
+            font=theme.font(11),
+            width=34 if self.mic_icon else 54,
+            height=34,
+            corner_radius=17,
+            fg_color="transparent",
+            hover_color=theme.SURFACE_SUBTLE,
+            text_color=theme.TEXT_SECONDARY,
+            command=self._toggle_voice,
+        )
         mic_btn.pack(side="right", padx=(0, 6))
 
+        self.send_icon = icons.image("send", theme.ICON_CARD, theme.TEXT_LIGHT, 2.0)
         send_btn = ctk.CTkButton(
             row,
-            text="↑",
-            font=theme.font(14, "bold"),
-            width=32,
-            height=32,
-            corner_radius=16,
+            text="" if self.send_icon else "Send",
+            image=self.send_icon,
+            font=theme.font(12, "bold"),
+            width=34 if self.send_icon else 54,
+            height=34,
+            corner_radius=17,
             fg_color=theme.ACCENT,
             hover_color=theme.ACCENT_HOVER,
             text_color=theme.TEXT_LIGHT,
@@ -175,7 +161,7 @@ class HomePage(ctk.CTkScrollableFrame):
                 border_width=1,
                 border_color=theme.CARD_BORDER,
                 corner_radius=theme.RADIUS_CONTROL,
-                height=28,
+                height=30,
                 command=lambda t=text: self.on_execute_command(t),
             )
             chip.pack(side="left", padx=(0, 8))
@@ -194,41 +180,69 @@ class HomePage(ctk.CTkScrollableFrame):
         phone_paired = get_local_server().running
 
         cards_data = [
-            ("My Computer", "Online", True, "devices"),
-            ("My Phone", "Ready to pair" if phone_paired else "Not connected", phone_paired, "devices"),
-            ("Google", google["label"], google["connected"], "google"),
-            ("Internet", "Ready", True, "web"),
+            ("My Computer", "Online", True, "devices", "monitor"),
+            ("My Phone", "Ready to pair" if phone_paired else "Not connected",
+             phone_paired, "devices", "phone"),
+            ("Google", google["label"], google["connected"], "google", "google"),
+            ("Internet", "Ready", True, "web", "globe"),
         ]
 
-        for idx, (name, status, is_live, route) in enumerate(cards_data):
+        # Held on the page: Tk discards an image as soon as the last Python
+        # reference to it goes away, and these are built in a loop.
+        self.env_icons = []
+
+        for idx, (name, status, is_live, route, glyph) in enumerate(cards_data):
             card = ctk.CTkFrame(
                 grid,
                 fg_color=theme.CARD_BG,
                 border_width=1,
                 border_color=theme.CARD_BORDER,
                 corner_radius=theme.RADIUS_CARD,
-                height=68,
+                height=76,
             )
             card.grid(row=0, column=idx, padx=(0 if idx == 0 else 8, 0), sticky="nsew")
             card.pack_propagate(False)
 
             content = ctk.CTkFrame(card, fg_color="transparent")
-            content.pack(fill="both", expand=True, padx=14, pady=12)
+            content.pack(fill="both", expand=True, padx=13, pady=12)
+
+            # The chip is tinted only while the thing is actually reachable, so
+            # the row of cards can be read by colour alone.
+            chip_bg = theme.ACCENT_LIGHT if is_live else theme.SURFACE_SUBTLE
+            chip_fg = theme.ACCENT if is_live else theme.TEXT_MUTED
+            icon = icons.image(glyph, theme.ICON_CARD, chip_fg)
+            self.env_icons.append(icon)
+
+            chip = ctk.CTkLabel(
+                content,
+                text="" if icon else name[:1],
+                image=icon,
+                fg_color=chip_bg,
+                text_color=chip_fg,
+                font=theme.font(12, "bold"),
+                corner_radius=theme.RADIUS_CHIP,
+                width=34,
+                height=34,
+            )
+            chip.pack(side="left", padx=(0, 11))
+
+            text_col = ctk.CTkFrame(content, fg_color="transparent")
+            text_col.pack(side="left", fill="both", expand=True)
 
             ctk.CTkLabel(
-                content,
+                text_col,
                 text=name,
                 font=theme.font(12, "bold"),
                 text_color=theme.TEXT_PRIMARY,
                 anchor="w",
-            ).pack(anchor="w")
+            ).pack(anchor="w", pady=(1, 0))
 
-            status_row = ctk.CTkFrame(content, fg_color="transparent")
+            status_row = ctk.CTkFrame(text_col, fg_color="transparent")
             status_row.pack(anchor="w", pady=(3, 0))
 
             ctk.CTkLabel(
                 status_row,
-                text="●",
+                text="\u25cf",
                 font=theme.font(9, "bold"),
                 text_color=theme.SUCCESS if is_live else theme.TEXT_MUTED,
             ).pack(side="left", padx=(0, 5))
@@ -241,7 +255,7 @@ class HomePage(ctk.CTkScrollableFrame):
             ).pack(side="left")
 
             card.bind("<Button-1>", lambda e, r=route: self.on_navigate(r))
-            for child in [content, status_row]:
+            for child in [content, chip, text_col, status_row]:
                 child.bind("<Button-1>", lambda e, r=route: self.on_navigate(r))
 
     def _build_current_task(self):
@@ -310,6 +324,9 @@ class HomePage(ctk.CTkScrollableFrame):
         for child in self.steps_row.winfo_children():
             child.destroy()
 
+        # Rebuilt on every task update, so the images are re-held each time.
+        self.step_icons = []
+
         steps = store.current_task.get("steps", [])
         for idx, step in enumerate(steps):
             col = ctk.CTkFrame(self.steps_row, fg_color="transparent")
@@ -317,15 +334,22 @@ class HomePage(ctk.CTkScrollableFrame):
 
             st = step.get("status")
             if st == "done":
-                icon, color = "✓", theme.SUCCESS
+                glyph, color = "✓", theme.SUCCESS
             elif st == "active":
-                icon, color = "●", theme.ACCENT
+                glyph, color = "●", theme.ACCENT
             else:
-                icon, color = "○", theme.TEXT_MUTED
+                glyph, color = "○", theme.TEXT_MUTED
+
+            if st == "done":
+                tick = icons.image("check", 13, theme.SUCCESS, 2.4)
+                self.step_icons.append(tick)
+            else:
+                tick = None
 
             ctk.CTkLabel(
                 col,
-                text=icon,
+                text="" if tick else glyph,
+                image=tick,
                 font=theme.font(11, "bold"),
                 text_color=color,
             ).pack(side="left", padx=(0, 5))

@@ -12,46 +12,51 @@ APPEARANCE_MODE = "light"
 DEFAULT_COLOR_THEME = "blue"
 
 # Primary Surfaces
-MAIN_BG = "#F6F6F7"
+MAIN_BG = "#F6F7F9"
 CARD_BG = "#FFFFFF"
-CARD_BORDER = "#E6E7EA"
-CARD_HOVER = "#F4F4F6"
+CARD_BORDER = "#E7E9EE"
+CARD_HOVER = "#F3F5F8"
+# A quiet fill for icon chips and inset rows, one step off the card.
+SURFACE_SUBTLE = "#F0F2F6"
 
-# Dark Sidebar Surfaces (neutral graphite, not blue)
-SIDEBAR_BG = "#191A1D"
-SIDEBAR_HOVER = "#232427"
-SIDEBAR_ACTIVE = "#2B2D31"
-SIDEBAR_BORDER = "#26282C"
-SIDEBAR_TEXT = "#F4F4F5"
-SIDEBAR_TEXT_MUTED = "#8E9198"
+# Dark Sidebar Surfaces (graphite with a trace of blue, so it sits with the
+# accent instead of fighting it)
+SIDEBAR_BG = "#1A1C22"
+SIDEBAR_HOVER = "#24262E"
+SIDEBAR_ACTIVE = "#2C3040"
+SIDEBAR_BORDER = "#262933"
+SIDEBAR_TEXT = "#F2F3F5"
+SIDEBAR_TEXT_MUTED = "#9096A2"
+# Icon colour for the selected row: the accent, lifted to read on dark.
+SIDEBAR_ACCENT = "#93A6E6"
 
 # Text Colors
-TEXT_PRIMARY = "#1A1B1E"      # Near-black charcoal
-TEXT_SECONDARY = "#5A5E68"    # Balanced gray
-TEXT_MUTED = "#8E9198"        # Soft muted gray
+TEXT_PRIMARY = "#16181D"      # Near-black charcoal
+TEXT_SECONDARY = "#565B66"    # Balanced gray
+TEXT_MUTED = "#8A8F9A"        # Soft muted gray
 TEXT_LIGHT = "#FFFFFF"
 
 # Single restrained accent. Used for the one primary action on a screen.
-ACCENT = "#3F5AA6"            # Muted indigo
-ACCENT_HOVER = "#354C8C"
-ACCENT_LIGHT = "#EEF1F8"
-ACCENT_BORDER = "#D3DAEB"
+ACCENT = "#4C63B6"            # Soft indigo
+ACCENT_HOVER = "#41569F"
+ACCENT_LIGHT = "#EDF0FA"
+ACCENT_BORDER = "#D2DAF0"
 
 # Semantic colors. Muted on purpose: they carry meaning, not emphasis.
-SUCCESS = "#3F8F6B"           # Muted green
+SUCCESS = "#3E8E6E"           # Muted green
 SUCCESS_HOVER = "#347759"
-SUCCESS_LIGHT = "#EFF5F2"
-SUCCESS_BORDER = "#CFE2D8"
+SUCCESS_LIGHT = "#ECF5F1"
+SUCCESS_BORDER = "#C9E4D8"
 
-WARNING = "#A9762B"           # Muted amber
+WARNING = "#A8792F"           # Muted amber
 WARNING_HOVER = "#8E6222"
-WARNING_LIGHT = "#F7F3EB"
-WARNING_BORDER = "#E7DCC5"
+WARNING_LIGHT = "#F8F4EC"
+WARNING_BORDER = "#E9DCC4"
 
-DANGER = "#B04A45"            # Muted red, destructive actions only
-DANGER_HOVER = "#953D39"
-DANGER_LIGHT = "#F8F0EF"
-DANGER_BORDER = "#E8CFCD"
+DANGER = "#B0524D"            # Muted red, destructive actions only
+DANGER_HOVER = "#95433F"
+DANGER_LIGHT = "#F9F0EF"
+DANGER_BORDER = "#EBD0CE"
 
 # INFO is the accent under another name so neutral states stay in one family.
 INFO = ACCENT
@@ -65,9 +70,15 @@ PURPLE_LIGHT = ACCENT_LIGHT
 PURPLE_BORDER = ACCENT_BORDER
 
 # Shape
-RADIUS_CARD = 12
+RADIUS_CARD = 14
 RADIUS_CONTROL = 10
+RADIUS_CHIP = 9
 RADIUS_PILL = 999
+
+# Icon sizes, so a glyph is never sized by eye at the call site.
+ICON_NAV = 17
+ICON_INLINE = 16
+ICON_CARD = 18
 
 # Platform-tuned typography
 if sys.platform == "darwin":
