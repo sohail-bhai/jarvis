@@ -234,14 +234,20 @@ def google_search(command):
     return False
 
 def youtube_search(command):
+    """Only matches commands that are explicitly a YouTube search request.
+    Handles: 'search youtube for X', 'youtube search X', 'search on youtube for X'.
+    Does NOT match 'open youtube search for X and play ...' — that goes to the AI brain.
+    """
     query = ""
 
-    if "youtube search" in command:
-        query = command.replace("youtube search", "", 1).strip()
-    elif "search youtube for" in command:
-        query = command.replace("search youtube for", "", 1).strip()
-    elif "search on youtube" in command:
-        query = command.replace("search on youtube", "", 1).strip()
+    if command.startswith("youtube search "):
+        query = command[len("youtube search "):].strip()
+    elif command.startswith("search youtube for "):
+        query = command[len("search youtube for "):].strip()
+    elif command.startswith("search on youtube for "):
+        query = command[len("search on youtube for "):].strip()
+    elif command.startswith("search on youtube "):
+        query = command[len("search on youtube "):].strip()
 
     if query:
         speak(f"Searching YouTube for {query}")
@@ -249,6 +255,21 @@ def youtube_search(command):
         webbrowser.open(f"https://www.youtube.com/results?search_query={encoded_query}")
         return True
 
+    return False
+
+def handle_youtube_ai_command(command):
+    """
+    Routes YouTube compound commands (search + interact) to the AI brain.
+    Examples: 'open youtube search for hasini and play the 3rd video'
+              'search youtube for lo-fi and play the first result'
+    The AI brain chains: search_youtube → wait → get_clickable_elements → click_at.
+    """
+    c = command.lower()
+    has_yt = "youtube" in c
+    has_interact = any(w in c for w in ["play", "click", "select", "watch", "open the video", "open the first"])
+    if has_yt and has_interact:
+        ask_ai(command, auto_confirm=True)
+        return True
     return False
 
 def confirm_action(question):
@@ -503,6 +524,9 @@ def execute_single_command(command, auto_confirm=False):
         return True
 
     if open_website(command):
+        return True
+
+    if handle_youtube_ai_command(command):
         return True
 
     if youtube_search(command):

@@ -245,6 +245,7 @@ def open_app(app_name):
             }
             if query in windows_apps:
                 # If window is already open, activate it instead of launching a duplicate blank window
+                target_cls = None  # initialize before try so it's always defined below
                 try:
                     import uiautomation as auto
                     import time

@@ -832,7 +832,13 @@ def get_system_prompt():
         "You have configurable settings that you can change using the update_setting tool. The main settings are:\n"
         "- 'voice_rate': Reading speed (default 170. Higher is faster).\n"
         "- 'voice_volume': Audio volume (default 1.0. Range 0.0 to 1.0).\n\n"
-        "CRITICAL RULE: Always use the provided tools to accomplish the user's tasks, chaining them if necessary."
+        "CRITICAL RULE: Always use the provided tools to accomplish the user's tasks, chaining them if necessary. "
+        "YOUTUBE PLAY EXAMPLE: If asked 'search youtube for hasini and play the 3rd video', do this EXACTLY: "
+        "Step 1: call search_youtube(query='hasini') to open YouTube search results. "
+        "Step 2: call get_clickable_elements() to get all clickable items on screen with their (x,y) coordinates. "
+        "Step 3: Find the 3rd video thumbnail or link in the elements list (skip ads, header buttons, and sidebar items — focus on video title links in the main results grid). "
+        "Step 4: call click_at(x=<x>, y=<y>) on that element. "
+        "NEVER open a URL directly with the video index. ALWAYS use get_clickable_elements then click_at."
     )
 
 conversation_history = []
