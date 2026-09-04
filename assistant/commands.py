@@ -1,6 +1,10 @@
 import re
+import time
+import logging
 import webbrowser
 import urllib.parse
+
+logger = logging.getLogger(__name__)
 
 from assistant.speech import speak, listen
 from assistant.config import get_setting, update_setting
@@ -277,15 +281,140 @@ def check_routines(command):
             
     return False
 
+def split_compound_command(command: str) -> list[str]:
+    """
+    Splits compound commands connected by conjunctions (e.g. 'and', 'then')
+    into sequential individual sub-tasks if subsequent clauses represent distinct actions.
+    """
+    clean = command.strip()
+    if not clean:
+        return []
+
+    clean_lower = clean.lower()
+
+    # 1. Non-splittable command intents (searches, questions, notes, memory facts)
+    non_split_prefixes = (
+        "search ", "google ", "youtube ", "add note ", "note ", "take note ",
+        "write note ", "remember ", "ask ", "what is the difference", "difference between",
+        "tell me about ", "explain ", "how to ", "why is ", "where is "
+    )
+    if any(clean_lower.startswith(prefix) for prefix in non_split_prefixes):
+        return [clean]
+
+    conjunctions = [
+        " and then ",
+        " and after that ",
+        " after that ",
+        " then ",
+        " also ",
+        " and "
+    ]
+
+    action_verbs = {
+        "open", "launch", "start", "run", "close", "read", "type", "write",
+        "press", "click", "scroll", "take", "tell", "mute", "unmute", "set",
+        "volume", "increase", "decrease", "raise", "lower", "lock", "shutdown",
+        "restart", "search", "google", "youtube", "check", "summarize",
+        "send", "show", "switch", "find", "drag", "list", "save", "clear"
+    }
+
+    for conj in conjunctions:
+        if conj in clean_lower:
+            parts = clean.split(conj)
+            valid = True
+            cleaned_parts = []
+            first_verb = parts[0].strip().lower().split()[0] if parts[0].strip() else ""
+
+            for i, p in enumerate(parts):
+                p_str = p.strip()
+                if not p_str:
+                    valid = False
+                    break
+                p_lower = p_str.lower()
+                first_word = p_lower.split()[0] if p_lower.split() else ""
+
+                if i > 0:
+                    if first_word in action_verbs:
+                        cleaned_parts.append(p_str)
+                    elif first_verb in ("open", "launch", "close", "tell") and len(p_str.split()) <= 2:
+                        # Elided command: 'open chrome and notepad' -> 'open notepad'
+                        cleaned_parts.append(f"{first_verb} {p_str}")
+                    else:
+                        valid = False
+                        break
+                else:
+                    cleaned_parts.append(p_str)
+
+            if valid and len(cleaned_parts) >= 2:
+                return cleaned_parts
+
+    return [clean]
+
+def handle_atomic_gui_command(command: str) -> bool:
+    """Directly executes atomic GUI actions like typing or key presses without LLM overhead."""
+    clean = command.strip()
+    clean_lower = clean.lower()
+
+    if clean_lower.startswith("type ") or clean_lower.startswith("write "):
+        first_space = clean.find(" ")
+        text_to_type = clean[first_space + 1:].strip()
+        if text_to_type:
+            from assistant.system_tasks import type_text
+            type_text(text_to_type)
+            speak(f"Typed {text_to_type}")
+            return True
+
+    if clean_lower.startswith("press key ") or clean_lower.startswith("press "):
+        key_name = clean_lower.replace("press key", "press").split("press", 1)[1].strip()
+        if key_name:
+            from assistant.system_tasks import press_key
+            press_key(key_name)
+            speak(f"Pressed {key_name}")
+            return True
+
+    if clean_lower.startswith("scroll down"):
+        from assistant.system_tasks import scroll
+        scroll(-5)
+        speak("Scrolled down.")
+        return True
+
+    if clean_lower.startswith("scroll up"):
+        from assistant.system_tasks import scroll
+        scroll(5)
+        speak("Scrolled up.")
+        return True
+
+    return False
+
 def execute_command(command, auto_confirm=False):
     """
     Main command router for JARVIS Version 1.2.
+    Supports compound multi-task sequencing and individual command dispatch.
     """
-
     if any(word in command for word in ["stop", "exit", "quit", "goodbye"]):
         speak(f"Goodbye {get_setting('user_name', 'Sir')}.")
         return False
 
+    # Check for compound multi-action instructions (e.g. "open notepad and read 10th line")
+    tasks = split_compound_command(command)
+    if len(tasks) >= 2:
+        logger.info(f"[JARVIS Multi-Task] Decomposed '{command}' into {len(tasks)} tasks: {tasks}")
+        speak(f"Executing {len(tasks)} tasks.")
+        for i, task in enumerate(tasks):
+            if i > 0:
+                time.sleep(1.2)
+            call_context.set_origin("routine" if auto_confirm else "user")
+            res = execute_single_command(task, auto_confirm=auto_confirm)
+            if not res:
+                return False
+        return True
+
+    return execute_single_command(command, auto_confirm=auto_confirm)
+
+def execute_single_command(command, auto_confirm=False):
+    """
+    Routes an individual command to its appropriate handler or the AI brain.
+    """
     if handle_model_switch_command(command):
         return True
 
@@ -295,14 +424,10 @@ def execute_command(command, auto_confirm=False):
     if check_routines(command):
         return True
 
-    # Compound multi-action task check (e.g. "open notepad and read the 10th line")
-    # Multi-action instructions must be planned and chained by the AI Brain rather than intercepted by single-action handlers.
-    compound_markers = [" and ", " then ", " after that ", " also "]
-    if any(marker in command.lower() for marker in compound_markers):
-        ask_ai(command, auto_confirm=auto_confirm)
+    if handle_volume_command(command):
         return True
 
-    if handle_volume_command(command):
+    if handle_atomic_gui_command(command):
         return True
 
     if handle_app_command(command):

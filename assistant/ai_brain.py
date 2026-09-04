@@ -800,6 +800,7 @@ def get_system_prompt():
         "You can chain these together to achieve ANYTHING! For example, to open an unknown app, you can use `press_key('win')`, wait a second, use `type_text('app_name')`, and then `press_key('enter')`. "
         "To click a button you don't know the coordinates for, use `get_clickable_elements` to retrieve the exact X/Y of every button on screen, then `click_at` the correct one. "
         "To read text, lines, or content from an open window or document (such as Notepad, Word, editor, or screen), use the `read_screen` tool directly.\n\n"
+        "CRITICAL MULTI-STEP SEQUENCING: When a request requires multiple actions, execute the FIRST step first (e.g. open an application before trying to read from it or type into it). Do not announce in text what you will do without emitting the tool call.\n\n"
         "You have configurable settings that you can change using the update_setting tool. The main settings are:\n"
         "- 'voice_rate': Reading speed (default 170. Higher is faster).\n"
         "- 'voice_volume': Audio volume (default 1.0. Range 0.0 to 1.0).\n\n"

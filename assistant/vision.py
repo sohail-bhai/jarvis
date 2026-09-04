@@ -80,19 +80,21 @@ def read_screen_text():
         except Exception as e:
             logger.info(f"[Vision Error] Tesseract read failed: {e}")
 
-    # Tier 2: UIAutomation structural text extraction from active window
+    # Tier 2: UIAutomation structural text extraction from active and candidate windows
     try:
         import uiautomation as auto
-        active = auto.GetForegroundControl()
-        if not active:
-            for w in auto.GetRootControl().GetChildren():
-                if w.ControlType == auto.ControlType.WindowControl and w.BoundingRectangle.width() > 100:
-                    active = w
-                    break
-        if active:
-            extracted = []
-            for ctrl, depth in auto.WalkControl(active, maxDepth=6):
-                # 1. Check for document/editor text pattern (Notepad, Word, editors)
+        candidates = []
+        fg = auto.GetForegroundControl()
+        if fg and fg.ControlType == auto.ControlType.WindowControl:
+            candidates.append(fg)
+
+        for w in auto.GetRootControl().GetChildren():
+            if w.ControlType == auto.ControlType.WindowControl and w not in candidates:
+                candidates.append(w)
+
+        # 1. First search all candidate windows for rich document/editor text (Notepad, Word, editors)
+        for win in candidates:
+            for ctrl, depth in auto.WalkControl(win, maxDepth=6):
                 doc_text = None
                 try:
                     tp = ctrl.GetTextPattern()
@@ -108,8 +110,15 @@ def read_screen_text():
                     except Exception:
                         pass
                 if doc_text and doc_text.strip():
-                    extracted.append(doc_text.strip())
-                elif ctrl.Name and len(ctrl.Name.strip()) > 1 and ctrl.ControlType in (
+                    normalized = doc_text.replace("\r\n", "\n").replace("\r", "\n").strip()
+                    if normalized:
+                        return normalized
+
+        # 2. If no document text found, collect UI element names from foreground/candidate windows
+        if candidates:
+            extracted = []
+            for ctrl, depth in auto.WalkControl(candidates[0], maxDepth=6):
+                if ctrl.Name and len(ctrl.Name.strip()) > 1 and ctrl.ControlType in (
                     auto.ControlType.TextControl,
                     auto.ControlType.ButtonControl,
                     auto.ControlType.MenuItemControl,
