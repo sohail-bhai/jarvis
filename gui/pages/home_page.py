@@ -174,8 +174,8 @@ class HomePage(ctk.CTkScrollableFrame):
             height=34,
             corner_radius=17,
             fg_color=theme.TEXT_PRIMARY,
-            hover_color=theme.SIDEBAR_BG,
-            text_color="#FFFFFF",
+            hover_color=theme.TEXT_SECONDARY,
+            text_color="#000000",
             command=self._submit_input,
         )
         arrow_btn.pack(side="right")
@@ -470,7 +470,9 @@ class HomePage(ctk.CTkScrollableFrame):
     def _build_bottom_explanation(self):
         bar = ctk.CTkFrame(
             self,
-            fg_color="#EFF2F9",
+            fg_color=theme.CARD_BG,
+            border_width=1,
+            border_color=theme.CARD_BORDER,
             corner_radius=14,
         )
         bar.pack(fill="x", padx=16, pady=(0, 20))

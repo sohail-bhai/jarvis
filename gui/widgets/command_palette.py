@@ -98,8 +98,8 @@ class CommandPalette(ctk.CTkToplevel):
             height=32,
             corner_radius=16,
             fg_color=theme.TEXT_PRIMARY,
-            hover_color=theme.SIDEBAR_BG,
-            text_color="#FFFFFF",
+            hover_color=theme.TEXT_SECONDARY,
+            text_color="#000000",
             command=self._submit,
         )
         submit_btn.pack(side="right", padx=6, pady=5)

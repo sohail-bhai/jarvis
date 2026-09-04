@@ -76,8 +76,8 @@ class WebPage(ctk.CTkScrollableFrame):
             height=32,
             corner_radius=16,
             fg_color=theme.TEXT_PRIMARY,
-            hover_color=theme.SIDEBAR_BG,
-            text_color="#FFFFFF",
+            hover_color=theme.TEXT_SECONDARY,
+            text_color="#000000",
             command=self._submit_web_task,
         )
         arrow_btn.pack(side="right")

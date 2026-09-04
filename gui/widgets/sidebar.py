@@ -78,10 +78,10 @@ class Sidebar(ctk.CTkFrame):
         # 4. Bottom Status Pill (JARVIS Online & Voice Control)
         bottom_frame = ctk.CTkFrame(
             self,
-            fg_color="#1F2432",
+            fg_color=theme.CARD_BG,
             corner_radius=12,
             border_width=1,
-            border_color="#2B3245",
+            border_color=theme.CARD_BORDER,
         )
         bottom_frame.pack(side="bottom", fill="x", padx=14, pady=16)
 

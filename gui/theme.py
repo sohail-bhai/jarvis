@@ -5,74 +5,73 @@ Designed to feel like a calm, modern, minimal personal assistant.
 import sys
 
 # Overall Appearance
-APPEARANCE_MODE = "light"
+APPEARANCE_MODE = "dark"
 DEFAULT_COLOR_THEME = "blue"
 
-# Primary Surfaces
-MAIN_BG = "#F3F4F8"
-CARD_BG = "#FFFFFF"
-CARD_BORDER = "#E5E7EB"
-CARD_HOVER = "#F9FAFB"
+# True Dark Mode Surfaces (Linear / Vercel style)
+MAIN_BG = "#000000"           # Pure black background for depth
+CARD_BG = "#09090B"           # Zinc 950 (very deep, slightly warm black)
+CARD_BORDER = "#27272A"       # Zinc 800 (subtle border)
+CARD_HOVER = "#18181B"        # Zinc 900 (slight lift)
 
-# Dark Sidebar Surfaces (matching reference image)
-SIDEBAR_BG = "#161922"
-SIDEBAR_HOVER = "#232836"
-SIDEBAR_ACTIVE = "#2C3244"
-SIDEBAR_BORDER = "#252B3B"
-SIDEBAR_TEXT = "#F9FAFB"
-SIDEBAR_TEXT_MUTED = "#9CA3AF"
+# Sidebar Surfaces (Blends with main background)
+SIDEBAR_BG = "#000000"
+SIDEBAR_HOVER = "#18181B"
+SIDEBAR_ACTIVE = "#27272A"
+SIDEBAR_BORDER = "#27272A"
+SIDEBAR_TEXT = "#FAFAFA"
+SIDEBAR_TEXT_MUTED = "#A1A1AA"
 
 # Text Colors
-TEXT_PRIMARY = "#111827"      # Deep charcoal
-TEXT_SECONDARY = "#4B5563"    # Balanced gray
-TEXT_MUTED = "#9CA3AF"        # Soft muted gray
+TEXT_PRIMARY = "#FFFFFF"      # Pure white for high contrast
+TEXT_SECONDARY = "#A1A1AA"    # Zinc 400 (legible but soft)
+TEXT_MUTED = "#71717A"        # Zinc 500
 TEXT_LIGHT = "#FFFFFF"
 
-# Restrained Accents & Semantics
-ACCENT = "#4F46E5"            # Indigo
-ACCENT_HOVER = "#4338CA"
-ACCENT_LIGHT = "#EEF2FF"
-ACCENT_BORDER = "#C7D2FE"
+# Refined Accents (Less saturated, more elegant)
+ACCENT = "#818CF8"            # Indigo 400
+ACCENT_HOVER = "#6366F1"      # Indigo 500
+ACCENT_LIGHT = "#1E1B4B"      # Indigo 950 (dark glow)
+ACCENT_BORDER = "#3730A3"     # Indigo 800
 
-SUCCESS = "#10B981"           # Emerald green
-SUCCESS_HOVER = "#059669"
-SUCCESS_LIGHT = "#ECFDF5"
-SUCCESS_BORDER = "#A7F3D0"
+SUCCESS = "#34D399"           # Emerald 400
+SUCCESS_HOVER = "#10B981"
+SUCCESS_LIGHT = "#064E3B"
+SUCCESS_BORDER = "#065F46"
 
-WARNING = "#F59E0B"           # Amber
-WARNING_HOVER = "#D97706"
-WARNING_LIGHT = "#FFFBEB"
-WARNING_BORDER = "#FDE68A"
+WARNING = "#FBBF24"           # Amber 400
+WARNING_HOVER = "#F59E0B"
+WARNING_LIGHT = "#78350F"
+WARNING_BORDER = "#92400E"
 
-DANGER = "#EF4444"            # Rose / Red
-DANGER_HOVER = "#DC2626"
-DANGER_LIGHT = "#FEF2F2"
-DANGER_BORDER = "#FECACA"
+DANGER = "#F87171"            # Red 400
+DANGER_HOVER = "#EF4444"
+DANGER_LIGHT = "#7F1D1D"
+DANGER_BORDER = "#991B1B"
 
-INFO = "#3B82F6"              # Sky / Blue
-INFO_LIGHT = "#EFF6FF"
-INFO_BORDER = "#BFDBFE"
+INFO = "#60A5FA"              # Blue 400
+INFO_LIGHT = "#1E3A8A"
+INFO_BORDER = "#1E40AF"
 
-PURPLE = "#8B5CF6"
-PURPLE_LIGHT = "#FAF5FF"
-PURPLE_BORDER = "#DDD6FE"
+PURPLE = "#A78BFA"            # Violet 400
+PURPLE_LIGHT = "#4C1D95"
+PURPLE_BORDER = "#5B21B6"
 
 # Platform-tuned typography
 if sys.platform == "darwin":
     FONT_FAMILY = "SF Pro Display"
 elif sys.platform == "win32":
-    FONT_FAMILY = "Segoe UI"
+    FONT_FAMILY = "Segoe UI Variable Display"  # Modern Windows 11 font if available
 else:
-    FONT_FAMILY = "DejaVu Sans"
+    FONT_FAMILY = "Inter"
 
-FALLBACK_FONT = "Helvetica"
+FALLBACK_FONT = "Segoe UI"
 
 
 def configure_theme(ctk):
     """Sets CustomTkinter appearance mode."""
-    ctk.set_appearance_mode("light")
+    ctk.set_appearance_mode("dark")
     ctk.set_default_color_theme("blue")
-
 
 def font(size=14, weight="normal"):
     """Convenience font helper."""
