@@ -30,7 +30,7 @@ class SystemLogPanel(ctk.CTkFrame):
 
         title = ctk.CTkLabel(
             header,
-            text="SYSTEM LOG",
+            text=theme.tracked("System log"),
             font=theme.label_font(),
             text_color=theme.TEXT_MUTED,
         )
@@ -39,7 +39,7 @@ class SystemLogPanel(ctk.CTkFrame):
         live_badge = ctk.CTkLabel(
             header,
             text="● Live",
-            font=theme.font(10),
+            font=theme.font(theme.SIZE_LABEL),
             text_color=theme.SUCCESS,
             fg_color="transparent",
             width=44,

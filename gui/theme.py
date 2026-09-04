@@ -1,16 +1,19 @@
 """
 Theme definitions for the VAVE Desktop UI.
 
-The palette is warm-neutral paper with near-black ink and a single deep navy
-accent. It avoids the cool grey and violet that every assistant interface
-arrives in, because a tool people keep open all day should look like a desk,
-not like a product demo.
+The look is a quiet gallery: bone paper, ivory cards that lift off it on a warm
+shadow, ink text, and a single deep forest accent. No pure white, no pure
+black, no saturated colour anywhere - the contrast comes from weight and space
+rather than from hue.
+
+Type does the heavy lifting. Headings are set in a serif, everything
+functional in a geometric sans, and small labels are tracked-out uppercase.
+That pairing is what stops an interface reading as a template.
 
 Rules the rest of the UI follows:
-  - Colour marks state, never decoration. A tinted surface means something
-    is live, waiting or wrong.
-  - Structure comes from hairlines and whitespace, not from boxing every
-    element in its own bordered card.
+  - Colour marks state, never decoration.
+  - Depth comes from painted shadows (gui/surfaces.py), not from borders on
+    everything.
   - One accent. If two things on a screen both want it, one of them is not
     the primary action.
 """
@@ -20,94 +23,123 @@ import sys
 APPEARANCE_MODE = "light"
 DEFAULT_COLOR_THEME = "blue"
 
-# Primary Surfaces. Warm paper rather than blue-grey.
-MAIN_BG = "#F7F6F3"
-CARD_BG = "#FFFFFF"
-CARD_BORDER = "#E4E1DB"       # Warm hairline, meant to be barely there
-CARD_HOVER = "#F4F2EE"
-# A quiet fill for icon chips and inset rows, one step off the card.
-SURFACE_SUBTLE = "#F1EFEA"
+# Primary Surfaces. Bone paper and ivory card; neither is pure white.
+MAIN_BG = "#F4F1EC"
+CARD_BG = "#FCFBF9"
+CARD_BORDER = "#E5DFD4"       # Warm hairline, meant to be barely there
+CARD_HOVER = "#F6F3EE"
+# A quiet fill for chips and inset rows, one step off the card.
+SURFACE_SUBTLE = "#EFEBE3"
 # Divider inside a surface, lighter than the outer border.
-DIVIDER = "#EDEAE4"
+DIVIDER = "#EAE4DA"
 
-# Sidebar: warm near-black, so it reads as ink beside the paper.
-SIDEBAR_BG = "#191817"
-SIDEBAR_HOVER = "#232120"
-SIDEBAR_ACTIVE = "#2C2A28"
-SIDEBAR_BORDER = "#262422"
-SIDEBAR_TEXT = "#F5F3F0"
-SIDEBAR_TEXT_MUTED = "#8C8781"
-# Section labels above nav groups.
-SIDEBAR_LABEL = "#6E6963"
-# Icon colour for the selected row: the accent, lifted to read on dark.
-SIDEBAR_ACCENT = "#8FAAD8"
+# Sidebar: warm ink, close to black but never quite there.
+SIDEBAR_BG = "#1C1A17"
+SIDEBAR_HOVER = "#262320"
+SIDEBAR_ACTIVE = "#302C27"
+SIDEBAR_BORDER = "#2A2622"
+SIDEBAR_TEXT = "#F2EFE9"
+SIDEBAR_TEXT_MUTED = "#8B857B"
+SIDEBAR_LABEL = "#6B655B"
+# Icon colour for the selected row: the accent, lifted to read on ink.
+SIDEBAR_ACCENT = "#9DB8A5"
 
 # Text Colors
-TEXT_PRIMARY = "#1A1917"      # Warm near-black
-TEXT_SECONDARY = "#57534E"    # Balanced warm grey
-TEXT_MUTED = "#8A857E"        # Soft muted grey
-TEXT_LIGHT = "#FFFFFF"
+TEXT_PRIMARY = "#1F1D19"      # Warm ink
+TEXT_SECONDARY = "#5C564C"    # Balanced warm grey
+TEXT_MUTED = "#948D82"        # Soft muted grey
+TEXT_LIGHT = "#FCFBF9"
 
-# Single restrained accent: deep navy. Dark enough to carry white text, quiet
-# enough to sit next to black ink without shouting.
-ACCENT = "#24457A"
-ACCENT_HOVER = "#1C3862"
-ACCENT_LIGHT = "#EDF1F7"
-ACCENT_BORDER = "#CCD8E8"
+# Single restrained accent: deep forest. Dark enough to carry ivory text,
+# quiet enough to sit beside ink without announcing itself.
+ACCENT = "#33513F"
+ACCENT_HOVER = "#284031"
+ACCENT_LIGHT = "#EBEFEA"
+ACCENT_BORDER = "#CBD8CE"
+# A second, non-competing tone for quiet emphasis: aged brass.
+BRASS = "#9C7B45"
+BRASS_LIGHT = "#F4EFE5"
 
 # Semantic colors. Deep and muted: they carry meaning, not emphasis.
-SUCCESS = "#2F7A55"           # Evergreen
-SUCCESS_HOVER = "#276646"
-SUCCESS_LIGHT = "#EDF4F0"
-SUCCESS_BORDER = "#C6DED2"
+SUCCESS = "#3F6B4F"           # Forest, same family as the accent
+SUCCESS_HOVER = "#325740"
+SUCCESS_LIGHT = "#EBF0EC"
+SUCCESS_BORDER = "#CBDACF"
 
-WARNING = "#A16414"           # Burnt amber
-WARNING_HOVER = "#85520F"
-WARNING_LIGHT = "#F8F3EA"
-WARNING_BORDER = "#E6D8BF"
+WARNING = "#946A28"           # Ochre
+WARNING_HOVER = "#7A561F"
+WARNING_LIGHT = "#F6F1E7"
+WARNING_BORDER = "#E3D5BB"
 
-DANGER = "#A33A32"            # Brick, destructive actions only
-DANGER_HOVER = "#8A302A"
-DANGER_LIGHT = "#F8EEEC"
-DANGER_BORDER = "#E5C9C5"
+DANGER = "#9A4438"            # Brick, destructive actions only
+DANGER_HOVER = "#82382E"
+DANGER_LIGHT = "#F6EDEB"
+DANGER_BORDER = "#E2C9C3"
 
 # INFO is the accent under another name so neutral states stay in one family.
 INFO = ACCENT
 INFO_LIGHT = ACCENT_LIGHT
 INFO_BORDER = ACCENT_BORDER
 
-# Kept so older imports keep working; new UI should not introduce a
-# fifth color family.
+# Kept so older imports keep working; new UI should not introduce another
+# colour family.
 PURPLE = ACCENT
 PURPLE_LIGHT = ACCENT_LIGHT
 PURPLE_BORDER = ACCENT_BORDER
 
-# Shape. Restrained radii: large ones read as a consumer app, square ones as a
-# developer console.
-RADIUS_CARD = 10
-RADIUS_CONTROL = 8
+# Shape
+RADIUS_CARD = 14
+RADIUS_CONTROL = 9
 RADIUS_CHIP = 8
 RADIUS_PILL = 999
+
+# Elevation presets for gui/surfaces.card_image, as (opacity, blur, offset).
+ELEVATION_FLAT = (0.0, 0, 0)
+ELEVATION_LOW = (0.09, 8, 2)
+ELEVATION_HIGH = (0.15, 14, 5)
 
 # Icon sizes, so a glyph is never sized by eye at the call site.
 ICON_NAV = 17
 ICON_INLINE = 16
 ICON_CARD = 18
 
-# Type scale. Named, so a heading is never one point off its twin elsewhere.
-SIZE_DISPLAY = 25
-SIZE_TITLE = 16
+# Type scale.
+SIZE_DISPLAY = 30
+SIZE_HEADING = 19
+SIZE_TITLE = 15
 SIZE_BODY = 12
 SIZE_SMALL = 11
-SIZE_LABEL = 10
+SIZE_LABEL = 9
 
-# Platform-tuned typography
+
+def _first_available(candidates, fallback):
+    """Pick the first font actually installed, so nothing renders as Fixed."""
+    try:
+        import subprocess
+
+        installed = subprocess.run(["fc-list", ":", "family"],
+                                   capture_output=True, text=True, timeout=4).stdout
+    except Exception:
+        return fallback
+
+    lowered = installed.lower()
+    for name in candidates:
+        if name.lower() in lowered:
+            return name
+    return fallback
+
+
 if sys.platform == "darwin":
-    FONT_FAMILY = "SF Pro Display"
+    FONT_FAMILY = "SF Pro Text"
+    DISPLAY_FAMILY = "New York"
 elif sys.platform == "win32":
     FONT_FAMILY = "Segoe UI"
+    DISPLAY_FAMILY = "Georgia"
 else:
-    FONT_FAMILY = "DejaVu Sans"
+    # Geometric sans for the interface, serif for headings. The pairing is the
+    # single biggest reason this does not look like every other dashboard.
+    FONT_FAMILY = _first_available(["Montserrat", "Cantarell", "Noto Sans"], "DejaVu Sans")
+    DISPLAY_FAMILY = _first_available(["Noto Serif", "Liberation Serif"], "DejaVu Serif")
 
 FALLBACK_FONT = "Helvetica"
 
@@ -119,10 +151,20 @@ def configure_theme(ctk):
 
 
 def font(size=14, weight="normal"):
-    """Convenience font helper."""
+    """Interface type: the geometric sans."""
     return (FONT_FAMILY, size, weight)
 
 
+def display(size=SIZE_DISPLAY, weight="normal"):
+    """Editorial type: the serif, for headings only."""
+    return (DISPLAY_FAMILY, size, weight)
+
+
 def label_font():
-    """Small caps-style label used above groups and on quiet metadata."""
+    """Tracked-out uppercase label used above groups and on quiet metadata."""
     return (FONT_FAMILY, SIZE_LABEL, "bold")
+
+
+def tracked(text: str) -> str:
+    """Letter-spacing, the only way Tk offers it: spaces between characters."""
+    return " ".join(text.upper())

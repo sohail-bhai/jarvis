@@ -28,7 +28,7 @@ class Sidebar(ctk.CTkFrame):
 
         # 1. Brand Section
         brand_frame = ctk.CTkFrame(self, fg_color="transparent")
-        brand_frame.pack(fill="x", padx=20, pady=(6, 24))
+        brand_frame.pack(fill="x", padx=22, pady=(20, 26))
 
         mark_row = ctk.CTkFrame(brand_frame, fg_color="transparent")
         mark_row.pack(anchor="w")
@@ -46,8 +46,8 @@ class Sidebar(ctk.CTkFrame):
 
         title_lbl = ctk.CTkLabel(
             mark_row,
-            text="VAVE",
-            font=theme.font(18, "bold"),
+            text=theme.tracked("Vave"),
+            font=theme.display(17),
             text_color=theme.SIDEBAR_TEXT,
             anchor="w",
         )
@@ -55,8 +55,8 @@ class Sidebar(ctk.CTkFrame):
 
         tagline_lbl = ctk.CTkLabel(
             brand_frame,
-            text="Your AI, Everywhere",
-            font=theme.font(11),
+            text="Your AI, everywhere",
+            font=theme.font(theme.SIZE_SMALL),
             text_color=theme.SIDEBAR_TEXT_MUTED,
             anchor="w",
         )
@@ -93,11 +93,11 @@ class Sidebar(ctk.CTkFrame):
             if group_label:
                 ctk.CTkLabel(
                     self.nav_container,
-                    text=f"  {group_label}",
+                    text=f"   {theme.tracked(group_label)}",
                     font=theme.label_font(),
                     text_color=theme.SIDEBAR_LABEL,
                     anchor="w",
-                ).pack(fill="x", pady=(14, 5))
+                ).pack(fill="x", pady=(18, 6))
             else:
                 ctk.CTkFrame(self.nav_container, fg_color="transparent",
                              height=8).pack(fill="x")
@@ -106,7 +106,10 @@ class Sidebar(ctk.CTkFrame):
 
         # 4. Bottom status line
         bottom_frame = ctk.CTkFrame(self, fg_color="transparent")
-        bottom_frame.pack(side="bottom", fill="x", padx=20, pady=18)
+        bottom_frame.pack(side="bottom", fill="x", padx=22, pady=(0, 22))
+
+        ctk.CTkFrame(self, fg_color=theme.SIDEBAR_BORDER, height=1).pack(
+            side="bottom", fill="x", padx=22, pady=(0, 18))
 
         status_row = ctk.CTkFrame(bottom_frame, fg_color="transparent")
         status_row.pack(fill="x")
@@ -121,8 +124,8 @@ class Sidebar(ctk.CTkFrame):
 
         self.status_title = ctk.CTkLabel(
             status_row,
-            text="  VAVE Online",
-            font=theme.font(12, "bold"),
+            text="  Online",
+            font=theme.font(theme.SIZE_SMALL, "bold"),
             text_color=theme.SIDEBAR_TEXT,
         )
         self.status_title.pack(side="left")
@@ -130,7 +133,7 @@ class Sidebar(ctk.CTkFrame):
         self.status_sub = ctk.CTkLabel(
             bottom_frame,
             text="All systems running",
-            font=theme.font(10),
+            font=theme.font(theme.SIZE_LABEL),
             text_color=theme.SIDEBAR_TEXT_MUTED,
             anchor="w",
         )
@@ -144,15 +147,15 @@ class Sidebar(ctk.CTkFrame):
             idle_icon, active_icon = self.nav_icons[page_id]
             btn = ctk.CTkButton(
                 self.nav_container,
-                text=f"  {label}",
+                text=f"   {label}",
                 image=active_icon if selected else idle_icon,
                 compound="left",
-                font=theme.font(13, "bold" if selected else "normal"),
+                font=theme.font(theme.SIZE_BODY, "bold" if selected else "normal"),
                 fg_color=theme.SIDEBAR_ACTIVE if selected else "transparent",
                 text_color=theme.SIDEBAR_TEXT if selected else theme.SIDEBAR_TEXT_MUTED,
                 hover_color=theme.SIDEBAR_HOVER,
                 corner_radius=theme.RADIUS_CONTROL,
-                height=38,
+                height=36,
                 anchor="w",
                 command=lambda pid=page_id: self._select_page(pid),
             )
@@ -170,14 +173,14 @@ class Sidebar(ctk.CTkFrame):
             if pid == page_id:
                 btn.configure(
                     fg_color=theme.SIDEBAR_ACTIVE,
-                    font=theme.font(13, "bold"),
+                    font=theme.font(theme.SIZE_BODY, "bold"),
                     text_color=theme.SIDEBAR_TEXT,
                     image=active_icon,
                 )
             else:
                 btn.configure(
                     fg_color="transparent",
-                    font=theme.font(13, "normal"),
+                    font=theme.font(theme.SIZE_BODY, "normal"),
                     text_color=theme.SIDEBAR_TEXT_MUTED,
                     image=idle_icon,
                 )
