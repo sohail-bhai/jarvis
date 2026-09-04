@@ -26,3 +26,9 @@ data/browser_last.png
 
 # What JARVIS learned about sites you visit
 data/site_notes.json
+
+# Google OAuth client secret from the Cloud Console, and the tokens it earns.
+# These identify you to Google. Keep them on the machine that uses them.
+credentials.json
+token.json
+token_workspace.json

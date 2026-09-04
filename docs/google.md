@@ -50,6 +50,10 @@ JSON.
 /home/rav/Projects/jarvis/jarvis/credentials.json
 ```
 
+That file is your client secret. It is listed in `.gitignore`, along with
+`token.json` and `token_workspace.json`, so it stays on this machine and never
+reaches the repository. Do not paste its contents into a chat or an issue.
+
 **6. Connect.** Either:
 
 - Desktop app → **Google** → **Connect Google**, or
