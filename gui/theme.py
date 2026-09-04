@@ -83,6 +83,10 @@ PURPLE = ACCENT
 PURPLE_LIGHT = ACCENT_LIGHT
 PURPLE_BORDER = ACCENT_BORDER
 
+# Page rhythm. One gutter everywhere, so nothing is aligned by eye.
+PAGE_GUTTER = 40
+COLUMN_GAP = 28
+
 # Shape
 RADIUS_CARD = 14
 RADIUS_CONTROL = 9

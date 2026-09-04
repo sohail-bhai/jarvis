@@ -24,8 +24,7 @@ from assistant.events import (
 from assistant import logging_setup
 from gui import theme, ui_queue
 from gui.store import store
-from gui.widgets.sidebar import Sidebar
-from gui.widgets.topbar import TopBar
+from gui.widgets.topnav import TopNav
 from gui.widgets.system_log import SystemLogPanel
 from gui.widgets.drawer import DetailDrawer
 from gui.widgets.command_palette import CommandPalette
@@ -96,44 +95,36 @@ class JarvisDashboardApp(ctk.CTk):
         self.after(100, self._poll_events)
 
     def _build_layout(self):
-        # Sidebar (0), Content (1), Right Panel (2). Only the content column
-        # grows; the other two are fixed so the page never gets squeezed into
-        # a strip when the window is small.
-        self.grid_columnconfigure(0, weight=0, minsize=220)
-        self.grid_columnconfigure(1, weight=1, minsize=560)
-        self.grid_columnconfigure(2, weight=0)
-        self.grid_rowconfigure(0, weight=1)
+        """One column under one bar.
 
-        # Left Sidebar
-        self.sidebar = Sidebar(
+        The rail and the permanent right-hand panel are gone: between them they
+        cost 520px of a window this app is rarely given, and everything they
+        held is either in the nav or on the page that needs it.
+        """
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+
+        self.topnav = TopNav(
             self,
             on_navigate=self.navigate_to,
-            on_voice_toggle=self.toggle_voice_listening,
-        )
-        self.sidebar.grid(row=0, column=0, sticky="nsew")
-
-        # Center Column: TopBar + Dynamic Page Content
-        center_frame = ctk.CTkFrame(self, fg_color="transparent")
-        center_frame.grid(row=0, column=1, sticky="nsew")
-        center_frame.grid_rowconfigure(1, weight=1)
-        center_frame.grid_columnconfigure(0, weight=1)
-
-        self.topbar = TopBar(
-            center_frame,
             on_open_command_palette=self.open_command_palette,
             on_open_notifications=self.open_notifications,
         )
-        self.topbar.grid(row=0, column=0, sticky="ew", padx=10, pady=(6, 0))
+        self.topnav.grid(row=0, column=0, sticky="ew")
+        # Older code talks to a sidebar and a topbar; both jobs belong to one
+        # widget now, so point the old names at it rather than chase callers.
+        self.sidebar = self.topnav
+        self.topbar = self.topnav
 
-        # Dynamic Content Container
-        self.page_container = ctk.CTkFrame(center_frame, fg_color="transparent")
-        self.page_container.grid(row=1, column=0, sticky="nsew", padx=10, pady=6)
+        self.page_container = ctk.CTkFrame(self, fg_color="transparent")
+        self.page_container.grid(row=1, column=0, sticky="nsew")
         self.page_container.grid_rowconfigure(0, weight=1)
         self.page_container.grid_columnconfigure(0, weight=1)
 
-        # Cache Pages
         self.pages = {
-            "home": HomePage(self.page_container, on_navigate=self.navigate_to, on_execute_command=self.handle_user_command, on_voice_toggle=self.toggle_voice_listening),
+            "home": HomePage(self.page_container, on_navigate=self.navigate_to,
+                             on_execute_command=self.handle_user_command,
+                             on_voice_toggle=self.toggle_voice_listening),
             "devices": DevicesPage(self.page_container),
             "files": FilesPage(self.page_container),
             "google": GooglePage(self.page_container),
@@ -142,46 +133,11 @@ class JarvisDashboardApp(ctk.CTk):
             "settings": SettingsPage(self.page_container),
         }
 
-        # Mount initial page
         self.current_page_widget = self.pages["home"]
         self.current_page_widget.grid(row=0, column=0, sticky="nsew")
 
-        # Right Column: System Log Panel & Reusable Drawer
-        right_container = ctk.CTkFrame(self, fg_color="transparent", width=286)
-        right_container.grid(row=0, column=2, sticky="nsew", padx=(0, 14), pady=14)
-        right_container.grid_propagate(False)
-        right_container.grid_rowconfigure(0, weight=1)
-        right_container.grid_columnconfigure(0, weight=1)
-
-        self.system_log_panel = SystemLogPanel(right_container)
-        self.system_log_panel.grid(row=0, column=0, sticky="nsew")
-
-        self.detail_drawer = DetailDrawer(right_container, on_close=self.close_drawer)
-        # detail_drawer initially hidden
-
-        self.right_container = right_container
-        self._right_visible = True
-        # The System Log is the first thing to give way: below this width it
-        # costs the page more than it tells the user.
-        self.bind("<Configure>", self._on_resize)
-
-    # Width at which the right-hand panel stops earning its space.
-    RIGHT_PANEL_MIN_WIDTH = 1080
-
-    def _on_resize(self, event):
-        if event.widget is not self:
-            return
-
-        wanted = event.width >= self.RIGHT_PANEL_MIN_WIDTH
-        if wanted == self._right_visible:
-            return
-
-        self._right_visible = wanted
-        if wanted:
-            self.right_container.grid(row=0, column=2, sticky="nsew",
-                                      padx=(0, 14), pady=14)
-        else:
-            self.right_container.grid_remove()
+        # The drawer slides in over the page instead of living beside it.
+        self.detail_drawer = DetailDrawer(self, on_close=self.close_drawer)
 
     def navigate_to(self, page_id: str):
         if page_id not in self.pages:
@@ -196,29 +152,19 @@ class JarvisDashboardApp(ctk.CTk):
         self.current_page_widget.grid(row=0, column=0, sticky="nsew")
 
         # Update TopBar title
-        title_map = {
-            "home": "Home",
-            "devices": "My Devices",
-            "files": "My Files",
-            "google": "Google Workspace",
-            "web": "Web Assistant",
-            "activity": "Activity History",
-            "settings": "Settings",
-        }
-        self.topbar.set_title(title_map.get(page_id, "VAVE"))
         # Navigation also happens from cards and the command palette, so the
-        # sidebar has to follow the app rather than only lead it.
-        self.sidebar.highlight(page_id)
+        # nav has to follow the app rather than only lead it.
+        self.topnav.highlight(page_id)
         store.set_page(page_id)
 
     def open_drawer(self, drawer_type: str, data: any):
         self.detail_drawer.set_content(drawer_type, data)
-        self.system_log_panel.grid_forget()
-        self.detail_drawer.grid(row=0, column=0, sticky="nsew")
+        self.detail_drawer.place(relx=1.0, rely=0, relheight=1, anchor="ne",
+                                 width=390)
+        self.detail_drawer.lift()
 
     def close_drawer(self):
-        self.detail_drawer.grid_forget()
-        self.system_log_panel.grid(row=0, column=0, sticky="nsew")
+        self.detail_drawer.place_forget()
         store.close_drawer()
 
     def open_command_palette(self):
@@ -275,11 +221,11 @@ class JarvisDashboardApp(ctk.CTk):
     def toggle_voice_listening(self):
         if self.listening_active:
             self.listening_active = False
-            self.sidebar.update_voice_state(False)
+            self.topnav.update_voice_state(False)
             store.add_system_log("Voice listening stopped.", "info")
         else:
             self.listening_active = True
-            self.sidebar.update_voice_state(True)
+            self.topnav.update_voice_state(True)
             store.add_system_log("Listening for voice commands...", "working")
 
             def _voice_loop():
@@ -290,7 +236,7 @@ class JarvisDashboardApp(ctk.CTk):
                     logger.error(f"Voice loop ended: {ex}")
                 finally:
                     self.listening_active = False
-                    self.after(0, lambda: self.sidebar.update_voice_state(False))
+                    self.after(0, lambda: self.topnav.update_voice_state(False))
 
             self.listener_thread = threading.Thread(target=_voice_loop, daemon=True)
             self.listener_thread.start()
