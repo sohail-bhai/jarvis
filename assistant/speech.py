@@ -244,6 +244,25 @@ def speak(text):
         logger.info(f"{assistant_name.upper()}: {safe_text}")
     _notify(_assistant_response_callback, text)
 
+    # Automatically send response back to Telegram if command originated from Telegram
+    try:
+        from assistant import call_context
+        if call_context.get_origin() == "telegram":
+            from assistant.telegram_sync import send_telegram_message
+            tok = get_setting("telegram_bot_token", "")
+            cid = get_setting("telegram_chat_id", "")
+            if tok and cid:
+                if tok.startswith("secret://"):
+                    try:
+                        from assistant.control.store import ControlStore
+                        from assistant.control.secrets import SecretStore, load_key
+                        tok = SecretStore(ControlStore(), key=load_key()).resolve(tok)
+                    except Exception:
+                        pass
+                send_telegram_message(tok, cid, text)
+    except Exception as e:
+        logger.debug(f"Telegram speech forward note: {e}")
+
     if not _speech_enabled:
         return
 

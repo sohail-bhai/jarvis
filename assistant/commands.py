@@ -340,11 +340,11 @@ def execute_command(command, auto_confirm=False):
         provide_morning_briefing()
         return True
 
-    if "time" in command:
+    if re.search(r"\btime\b", command):
         tell_time()
-    elif "date" in command:
+    elif re.search(r"\bdate\b", command):
         tell_date()
-    elif "battery" in command:
+    elif re.search(r"\bbattery\b", command):
         tell_battery()
 
     elif "screenshot" in command or "screen shot" in command:
