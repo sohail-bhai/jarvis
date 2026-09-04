@@ -82,10 +82,10 @@ class HomePage(ctk.CTkScrollableFrame):
 
         ctk.CTkLabel(
             header,
-            text=datetime.datetime.now().strftime("%A, %-d %B"),
-            font=theme.font(theme.SIZE_SMALL),
+            text=theme.tracked(datetime.datetime.now().strftime("%a %-d %b")),
+            font=theme.label_font(),
             text_color=theme.TEXT_MUTED,
-        ).pack(side="right", pady=(18, 0))
+        ).pack(side="right", anchor="n", pady=(2, 0))
 
     # -- the one thing you came here to do -----------------------------------
 
