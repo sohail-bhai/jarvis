@@ -410,9 +410,11 @@ def handle_line_write_command(command: str) -> bool:
 _QUIT_PATTERN = re.compile(
     r"^\s*(?:please\s+)?"
     r"(?:goodbye|bye|good\s*night|see\s+you|"
-    r"(?:shut\s*down|close|kill|stop|exit|quit|terminate)"
-    r"(?:\s+(?:yourself|jarvis|vave|the\s+assistant|the\s+program|the\s+app))?|"
+    r"(?:shut\s*down|close|kill|stop|exit|quit|terminate)|"
     r"(?:power|turn)\s+(?:off|down))"
+    # Only an addressee that unambiguously means the assistant itself. "the app"
+    # and "the window" are deliberately absent: those mean the foreground app.
+    r"(?:\s+(?:yourself|jarvis|vave|the\s+assistant))?"
     r"\s*[.!]?\s*$",
     re.IGNORECASE,
 )

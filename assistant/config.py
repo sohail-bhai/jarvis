@@ -14,6 +14,17 @@ DEFAULT_CONFIG = {
     "voice_rate": 170,
     "voice_volume": 1.0,
     "llm_model": "qwen2.5:3b",
+    # Two brains, picked per task. The small one is quick and handles the
+    # atomic desktop work well; the large one is for genuine reasoning -
+    # planning, research, code, anything with several moving parts. Escalation
+    # is automatic, and falls back to the fast model if the big one won't load.
+    "llm_model_fast": "qwen2.5:3b",
+    "llm_model_smart": "qwen3.5:9b",
+    "model_escalation_enabled": True,
+    # Choosing a tool is not a creative act. Ollama's own default of 0.8 made
+    # the same request pick a different action on each run.
+    "llm_tool_temperature": 0.1,
+    "llm_chat_temperature": 0.7,
     # Where Ollama is listening. Point this elsewhere for a second instance
     # (a CPU-only one, say) or for Ollama on another machine.
     "ollama_url": "http://localhost:11434",

@@ -1325,6 +1325,16 @@ def get_system_prompt():
         "an x/y that a tool actually returned; and if a scan comes back nearly "
         "empty the window is probably not in focus, so `focus_window` and scan "
         "again rather than guessing.\n\n"
+
+        "FIND OUT INSTEAD OF ASKING. You can see the machine, so a question you "
+        "could answer with a tool is not a question for the user. Asked to "
+        "rename a file, do not ask which window it is in - call `list_windows` "
+        "and look. Asked to undo, do not ask what happened - `press_key"
+        "('ctrl+z')` in the window that has focus. Asked to copy what is on "
+        "screen, that is `press_key('ctrl+a')` then `press_key('ctrl+c')`. Only "
+        "ask the user for something genuinely outside the machine, like which of "
+        "two real files they meant, and only after you have looked. Never answer "
+        "an instruction with a question you could have answered yourself.\n\n"
         "WEBSITES & BROWSERS: ALWAYS use the Playwright browser tools. NEVER use get_clickable_elements or click_at for web tasks — they do not work in browsers.\n"
         "The correct web flow is ALWAYS:\n"
         "  Step 1: Call `browse(url)` OR `search_youtube(query)` OR `search_google(query)` to open the page.\n"
@@ -1436,18 +1446,31 @@ def query_local_llm_chat(messages, model="qwen2.5:3b", tools=None):
 
     # Fallback to Local Ollama
     url = str(get_setting("ollama_url", "http://localhost:11434")).rstrip("/") + "/api/chat"
-    
+
+    offering_tools = tools is not False
+
+    # Ollama defaults to a temperature of 0.8, which is a reasonable setting for
+    # writing prose and a poor one for choosing a tool. Left at the default, the
+    # same request picked press_key('win+r') on one run and answered in prose on
+    # the next. Deciding which action to take is not a creative act, so sampling
+    # is pulled right down whenever tools are on the table, and left alone when
+    # the model is only talking.
+    options = {"num_ctx": 8192}
+    if offering_tools:
+        options["temperature"] = float(get_setting("llm_tool_temperature", 0.1))
+        options["top_p"] = 0.9
+    else:
+        options["temperature"] = float(get_setting("llm_chat_temperature", 0.7))
+
     payload = {
         "model": model,
         "messages": messages,
         "stream": False,
         "keep_alive": "60m",
-        "options": {
-            "num_ctx": 8192
-        }
+        "options": options,
     }
-    
-    if tools is not False:
+
+    if offering_tools:
         payload["tools"] = tools if tools is not None else LLM_TOOLS
     
     data = json.dumps(payload).encode('utf-8')
@@ -1463,6 +1486,93 @@ def query_local_llm_chat(messages, model="qwen2.5:3b", tools=None):
     except Exception as e:
         logger.info(f"[AI Brain Error] {e}")
         return None
+
+# Models that answered a request with nothing this session, usually because
+# they could not be loaded into memory. Remembered so a 9B that will not fit is
+# tried once and then left alone, rather than costing every later task a long
+# timeout before it falls back.
+_unavailable_models = set()
+
+# Words that mark work worth a bigger model: several moving parts, a judgement
+# to make, prose to write. Deliberately not the atomic desktop actions - the
+# small model was measured handling click/type/press/close well, and it answers
+# in a fraction of the time, so a window that needs closing stays on 3B.
+_ESCALATION_HINTS = (
+    "research", "compare", "summarise", "summarize", "summary", "explain",
+    "analyse", "analyze", "review", "plan", "draft", "write", "rewrite",
+    "essay", "report", "article", "email", "reply", "presentation", "slides",
+    "spreadsheet", "code", "debug", "refactor", "fix the", "why does",
+    "why is", "how should", "figure out", "work out", "decide", "recommend",
+    "suggest", "translate", "and then", "after that", "step by step",
+)
+
+
+def _pinned_model():
+    """The model the user asked for by name, or None if they never said.
+
+    `switch to high performance` writes straight to `llm_model`, and that has
+    to keep working: an explicit choice outranks anything guessed from the
+    wording of a task.
+    """
+    pinned = str(get_setting("llm_model", "") or "").strip()
+    fast = str(get_setting("llm_model_fast", "qwen2.5:3b") or "").strip()
+    return pinned if pinned and pinned != fast else None
+
+
+def select_model(instruction=""):
+    """The model to use for this request.
+
+    Small and quick by default; the larger one when the request calls for
+    reasoning rather than a keystroke. A model already known to be unloadable
+    is never chosen, so escalation cannot strand a task.
+    """
+    fast = str(get_setting("llm_model_fast", "qwen2.5:3b") or "qwen2.5:3b")
+    smart = str(get_setting("llm_model_smart", "") or "")
+
+    pinned = _pinned_model()
+    if pinned:
+        return pinned if pinned not in _unavailable_models else fast
+
+    if (not smart or smart in _unavailable_models
+            or not get_setting("model_escalation_enabled", True)):
+        return fast
+
+    text = str(instruction or "").lower()
+    if any(hint in text for hint in _ESCALATION_HINTS):
+        return smart
+    # A long request is usually a compound one, whatever words it happens to use.
+    if len(text.split()) >= 18:
+        return smart
+    return fast
+
+
+def chat_with_fallback(messages, model=None, tools=None, instruction=""):
+    """Ask `model`, dropping to the fast model if it cannot answer at all.
+
+    A large model that will not fit in memory returns nothing, and without this
+    the task simply dies - which is exactly what `switch to high performance`
+    did on a machine too full to load 9B. Losing the bigger brain should cost
+    quality, not the task.
+    """
+    chosen = model or select_model(instruction)
+    fast = str(get_setting("llm_model_fast", "qwen2.5:3b") or "qwen2.5:3b")
+
+    # Already known not to load. Asking again costs a full timeout per step, so
+    # a multi-step task would crawl for no benefit.
+    if chosen in _unavailable_models:
+        chosen = fast
+
+    reply = query_local_llm_chat(messages, model=chosen, tools=tools)
+    if reply:
+        return reply
+
+    if chosen == fast:
+        return reply
+
+    _unavailable_models.add(chosen)
+    logger.info(f"[VAVE] {chosen} did not respond; continuing on {fast}.")
+    return query_local_llm_chat(messages, model=fast, tools=tools)
+
 
 # The task-execution loop tells the model it is working a single control plane
 # step, so it finishes the step instead of chatting about it.
@@ -1498,13 +1608,25 @@ def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps
     """
     previous_tool_calls_repr = None
 
+    # Chosen once from what was actually asked, then kept for the whole task.
+    # Re-deciding each step would swap models mid-task, and Ollama unloads one
+    # to load the other - the task would spend longer switching than thinking.
+    latest_request = next((str(m.get("content") or "")
+                           for m in reversed(conversation)
+                           if m.get("role") == "user"), "")
+    model_name = select_model(latest_request)
+
+    # How many tools actually ran, and whether the turn has already been pushed
+    # once for stopping short. Both feed the check at the end of the loop.
+    tools_run = 0
+    nudged = False
+
     def _keep_going():
         if should_continue is not None and not should_continue:
             raise StepCancelled("Stopped part-way.")
 
     for step in range(max_steps):
         _keep_going()
-        model_name = get_setting("llm_model", "qwen2.5:3b")
 
         # Inject dynamic context into the payload without mutating history
         current_messages = list(conversation)
@@ -1513,8 +1635,8 @@ def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps
         if auto_confirm:
             current_messages.insert(-1, {"role": "system", "content": "CRITICAL EXCEPTION: You are executing a Routine. IGNORE the rule about asking for permission. DO NOT ask 'Shall I proceed?'. Execute the tool immediately."})
 
-        message = query_local_llm_chat(current_messages, model=model_name,
-                                       tools=tools)
+        message = chat_with_fallback(current_messages, model=model_name,
+                                     tools=tools)
 
         if not message:
             return None
@@ -1560,6 +1682,7 @@ def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps
                             args_dict = resolve_secrets(args_dict)
                         args_dict = guard.coerce_args(func_to_call, args_dict)
                         result = guard.call(func_to_call, **args_dict)
+                        tools_run += 1
                         result_str = str(result) if result is not None else "Success"
 
                         if len(result_str) > 2000:
@@ -1595,11 +1718,65 @@ def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps
             # After executing all tools in this step, loop continues to ask LLM what's next
             continue
 
-        # No tool calls means the model answered in words. That ends the turn.
-        return message.get("content", "")
+        # No tool calls means the model answered in words. Usually that ends the
+        # turn - but an instruction answered with a question is not an answer.
+        # Measured: "undo what I just did" came back as "I need to know which
+        # action you want to undo", and "make the notepad window go away"
+        # focused the window then asked what to do next. Both had press_key and
+        # close_window on the menu. So the turn gets one push back before it is
+        # allowed to end, and if the model insists, its words stand.
+        said = message.get("content", "")
+        if not nudged and tools is not False and _stopped_short(latest_request, said,
+                                                               tools_run):
+            nudged = True
+            logger.info("[VAVE] Model stopped short of the goal; pushing once.")
+            conversation.append({
+                "role": "system",
+                "content": (
+                    "That did not finish the request. You have tools for this "
+                    "and you can look at the machine yourself, so do not ask "
+                    "the user - call `list_windows`, `get_clickable_elements` "
+                    "or `read_screen` to find out, then act. Carry out the "
+                    "request now with the tools you have."
+                ),
+            })
+            continue
+
+        return said
 
     # The loop ran out of steps. Report what was said last rather than nothing.
     return ""
+
+
+# Openings that make an utterance a request for information rather than an
+# instruction to act. A question deserves a spoken answer, so it must never be
+# pushed back for "not doing anything".
+_QUESTION_OPENERS = (
+    "what", "who", "when", "where", "why", "how", "which", "whose",
+    "is ", "are ", "was ", "were ", "do ", "does ", "did ", "can ", "could ",
+    "should ", "would ", "will ", "am ", "have ", "has ", "tell me", "explain",
+    "describe", "summarise", "summarize", "any ", "anything",
+)
+
+
+def _stopped_short(request, reply, tools_run):
+    """True when an instruction came back unfinished instead of carried out.
+
+    Two shapes count: nothing was done at all, or the reply hands the decision
+    back to the user. Both leave the machine exactly as it was, which for an
+    instruction is a failure however politely it is worded.
+    """
+    asked = str(request or "").strip().lower()
+    if not asked or asked.endswith("?"):
+        return False
+    if asked.startswith(_QUESTION_OPENERS):
+        return False
+
+    answer = str(reply or "").strip()
+    if tools_run == 0:
+        return True
+    # A question mark means the model is waiting on the user, not reporting.
+    return "?" in answer
 
 
 def _memory_message(query):
