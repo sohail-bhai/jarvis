@@ -4,10 +4,8 @@ Contains global search trigger (Ctrl+K), notification bell, and user avatar.
 """
 from __future__ import annotations
 
-import os
-from PIL import Image
 import customtkinter as ctk
-from gui import theme
+from gui import icons, theme
 from gui.store import store
 
 
@@ -44,68 +42,54 @@ class TopBar(ctk.CTkFrame):
             right_frame,
             text="R",
             font=theme.font(12, "bold"),
-            text_color="#374151",
-            fg_color="#E5E7EB",
-            corner_radius=14,
-            width=28,
-            height=28,
+            text_color=theme.TEXT_SECONDARY,
+            fg_color=theme.SURFACE_SUBTLE,
+            corner_radius=15,
+            width=30,
+            height=30,
         )
-        avatar.pack(side="right", padx=(8, 0), pady=13)
+        avatar.pack(side="right", padx=(10, 0), pady=12)
 
-        # Notification Bell (Modern aesthetic icon with optional badge)
-        bell_icon_path = os.path.join(os.path.dirname(__file__), "..", "..", "assets", "icons", "bell_hd.png")
-        if os.path.exists(bell_icon_path):
-            pil_bell = Image.open(bell_icon_path)
-            self.bell_ctk_image = ctk.CTkImage(light_image=pil_bell, dark_image=pil_bell, size=(18, 18))
-            self.bell_btn = ctk.CTkButton(
-                right_frame,
-                image=self.bell_ctk_image,
-                text=" 1",
-                font=theme.font(11, "bold"),
-                fg_color=theme.CARD_BG,
-                hover_color=theme.CARD_HOVER,
-                text_color=theme.TEXT_PRIMARY,
-                border_width=1,
-                border_color=theme.CARD_BORDER,
-                corner_radius=14,
-                width=48,
-                height=28,
-                compound="left",
-                command=self.on_open_notifications,
-            )
-        else:
-            self.bell_btn = ctk.CTkButton(
-                right_frame,
-                text="1",
-                font=theme.font(11, "bold"),
-                fg_color=theme.CARD_BG,
-                hover_color=theme.CARD_HOVER,
-                text_color=theme.TEXT_PRIMARY,
-                border_width=1,
-                border_color=theme.CARD_BORDER,
-                corner_radius=14,
-                width=46,
-                height=28,
-                command=self.on_open_notifications,
-            )
-        self.bell_btn.pack(side="right", padx=4, pady=13)
+        # Notification bell, drawn at the size and colour it is shown at
+        # rather than loaded from a bundled bitmap.
+        self.bell_image = icons.image("bell", theme.ICON, theme.TEXT_SECONDARY)
+        self.bell_btn = ctk.CTkButton(
+            right_frame,
+            image=self.bell_image,
+            text="1",
+            font=theme.font(11, "bold"),
+            fg_color=theme.CARD_BG,
+            hover_color=theme.CARD_HOVER,
+            text_color=theme.TEXT_PRIMARY,
+            border_width=1,
+            border_color=theme.CARD_BORDER,
+            corner_radius=15,
+            width=52 if self.bell_image else 44,
+            height=30,
+            compound="left",
+            command=self.on_open_notifications,
+        )
+        self.bell_btn.pack(side="right", padx=4, pady=12)
 
         # Center: Command Search Box Trigger
         center_frame = ctk.CTkFrame(self, fg_color="transparent")
         center_frame.pack(side="right", expand=True, fill="x", padx=(30, 20), pady=8)
 
+        self.search_image = icons.image("search", theme.ICON_SM, theme.TEXT_MUTED)
         self.search_btn = ctk.CTkButton(
             center_frame,
-            text=" ✦  Ask VAVE anything...                                            ⌘K / Ctrl+K",
+            image=self.search_image,
+            text="   Ask VAVE anything\u2026",
             font=theme.font(12),
             fg_color=theme.CARD_BG,
             hover_color=theme.CARD_HOVER,
             text_color=theme.TEXT_MUTED,
             border_width=1,
             border_color=theme.CARD_BORDER,
-            corner_radius=16,
-            height=34,
+            corner_radius=theme.RADIUS,
+            height=36,
             anchor="w",
+            compound="left",
             command=self.on_open_command_palette,
         )
         self.search_btn.pack(fill="x")
@@ -114,13 +98,8 @@ class TopBar(ctk.CTkFrame):
         self.title_lbl.configure(text=title)
 
     def set_unread_count(self, count: int):
-        if hasattr(self, "bell_ctk_image"):
-            if count > 0:
-                self.bell_btn.configure(text=f" {count}", width=48)
-            else:
-                self.bell_btn.configure(text="", width=32)
+        if count > 0:
+            self.bell_btn.configure(text=str(count),
+                                    width=52 if self.bell_image else 44)
         else:
-            if count > 0:
-                self.bell_btn.configure(text=str(count))
-            else:
-                self.bell_btn.configure(text="")
+            self.bell_btn.configure(text="", width=36)

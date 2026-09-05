@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import customtkinter as ctk
 from typing import Dict, Any, Callable
-from gui import theme
+from gui import icons, theme
 from gui.store import store
 
 
@@ -36,9 +36,13 @@ class DetailDrawer(ctk.CTkFrame):
         )
         self.title_lbl.pack(side="left")
 
+        self._glyphs = []
+        close_glyph = icons.image("x", theme.ICON_SM, theme.TEXT_SECONDARY)
+        self._glyphs.append(close_glyph)
         close_btn = ctk.CTkButton(
             self.header,
-            text="✕",
+            image=close_glyph,
+            text="" if close_glyph else "X",
             font=theme.font(12),
             width=28,
             height=28,
@@ -103,7 +107,11 @@ class DetailDrawer(ctk.CTkFrame):
         for cap in data.get("capabilities", []):
             row = ctk.CTkFrame(self.content_area, fg_color="transparent")
             row.pack(fill="x", pady=2)
-            ctk.CTkLabel(row, text="✓", font=theme.font(12, "bold"), text_color=theme.SUCCESS, width=18).pack(side="left")
+            tick = icons.image("check", 13, theme.SUCCESS, stroke_width=2.4)
+            self._glyphs.append(tick)
+            ctk.CTkLabel(row, image=tick, text="" if tick else "+",
+                         font=theme.font(12, "bold"), text_color=theme.SUCCESS,
+                         width=18).pack(side="left")
             ctk.CTkLabel(row, text=cap, font=theme.font(12), text_color=theme.TEXT_SECONDARY).pack(side="left", padx=4)
 
         # Connected AI Helpers
@@ -186,7 +194,7 @@ class DetailDrawer(ctk.CTkFrame):
         ).pack(fill="x", pady=(4, 8))
 
         actions = [
-            ("Open File", theme.ACCENT, "#FFFFFF"),
+            ("Open File", theme.ACCENT, theme.ON_ACCENT),
             ("Send to Phone", theme.CARD_BG, theme.TEXT_PRIMARY),
             ("Give to VAVE to analyze", theme.CARD_BG, theme.TEXT_PRIMARY),
             ("Share File", theme.CARD_BG, theme.TEXT_PRIMARY),
@@ -237,13 +245,18 @@ class DetailDrawer(ctk.CTkFrame):
 
             st = step.get("status")
             if st == "done":
-                icon, color = "✓", theme.SUCCESS
+                mark, color = "check", theme.SUCCESS
             elif st == "active":
-                icon, color = "●", theme.INFO
+                mark, color = None, theme.ACCENT_DEEP
             else:
-                icon, color = "○", theme.TEXT_MUTED
+                mark, color = None, theme.TEXT_MUTED
 
-            ctk.CTkLabel(row, text=icon, font=theme.font(12, "bold"), text_color=color, width=18).pack(side="left")
+            glyph = icons.image(mark, 13, color, stroke_width=2.4) if mark else None
+            self._glyphs.append(glyph)
+            ctk.CTkLabel(row, image=glyph,
+                         text="" if glyph else ("\u25cf" if st == "active" else "\u25cb"),
+                         font=theme.font(11, "bold"), text_color=color,
+                         width=18).pack(side="left")
             ctk.CTkLabel(row, text=step.get("text", ""), font=theme.font(12), text_color=theme.TEXT_PRIMARY).pack(side="left", padx=4)
 
         # Helper attribution
@@ -349,7 +362,7 @@ class DetailDrawer(ctk.CTkFrame):
             font=theme.font(12, "bold"),
             fg_color=theme.ACCENT,
             hover_color=theme.ACCENT_HOVER,
-            text_color="#FFFFFF",
+            text_color=theme.ON_ACCENT,
             corner_radius=8,
             height=34,
             command=lambda: store.resolve_approval(True),

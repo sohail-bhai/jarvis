@@ -84,10 +84,10 @@ class AppStore:
         
         # Connected Environment
         self.environment = [
-            {"id": "comp", "name": "My Computer", "status": "Online", "color": "blue", "icon": "💻", "route": "devices"},
-            {"id": "phone", "name": "My Phone", "status": "Connected", "color": "green", "icon": "📱", "route": "devices"},
-            {"id": "drive", "name": "Google Drive", "status": "Connected", "color": "amber", "icon": "📁", "route": "google"},
-            {"id": "net", "name": "Internet", "status": "Ready", "color": "indigo", "icon": "🌐", "route": "web"},
+            {"id": "comp", "name": "My Computer", "status": "Online", "color": "blue", "icon": "monitor", "route": "devices"},
+            {"id": "phone", "name": "My Phone", "status": "Connected", "color": "green", "icon": "phone", "route": "devices"},
+            {"id": "drive", "name": "Google Drive", "status": "Connected", "color": "amber", "icon": "folder", "route": "google"},
+            {"id": "net", "name": "Internet", "status": "Ready", "color": "blue", "icon": "globe", "route": "web"},
         ]
         
         # Devices Data
@@ -97,7 +97,7 @@ class AppStore:
                 "name": "My Computer",
                 "type": "Primary Desktop",
                 "status": "Online",
-                "icon": "💻",
+                "icon": "monitor",
                 "capabilities": ["Access your files", "Run local tasks", "Use your browser"],
                 "connected_helpers": ["VAVE Core", "Coding Assistant"],
                 "recent_activity": "Completed project tests & file indexing",
@@ -109,7 +109,7 @@ class AppStore:
                 "name": "My Phone",
                 "type": "Mobile Device",
                 "status": "Connected",
-                "icon": "📱",
+                "icon": "phone",
                 "capabilities": ["Send and receive files", "Read phone notifications", "Execute remote quick tasks"],
                 "connected_helpers": ["Phone Notification Sync", "Telegram Connector"],
                 "recent_activity": "Synced 2 notifications at 2:15 PM",
@@ -121,7 +121,7 @@ class AppStore:
                 "name": "My Laptop",
                 "type": "Work Laptop",
                 "status": "Online",
-                "icon": "💻",
+                "icon": "monitor",
                 "capabilities": ["Sync project folders", "Run light test suites", "Read screen context"],
                 "connected_helpers": ["Workspace Mirror"],
                 "recent_activity": "Synchronized 'Hackwave' repo 40m ago",
@@ -133,7 +133,7 @@ class AppStore:
                 "name": "My Server",
                 "type": "GPU Workstation",
                 "status": "Online",
-                "icon": "🖥️",
+                "icon": "monitor",
                 "capabilities": ["Run heavy tasks", "Train local models", "Host background builds"],
                 "connected_helpers": ["Local LLM Ollama Worker"],
                 "recent_activity": "Processed embeddings for memory store",
@@ -152,7 +152,7 @@ class AppStore:
                 "modified": "Yesterday",
                 "size": "12 MB",
                 "type": "presentation",
-                "icon": "📊",
+                "icon": "slides",
             },
             {
                 "id": "f-2",
@@ -162,7 +162,7 @@ class AppStore:
                 "modified": "Aug 31",
                 "size": "4.2 MB",
                 "type": "pdf",
-                "icon": "📄",
+                "icon": "document",
             },
             {
                 "id": "f-3",
@@ -172,7 +172,7 @@ class AppStore:
                 "modified": "Sep 01",
                 "size": "850 KB",
                 "type": "spreadsheet",
-                "icon": "📈",
+                "icon": "sheet",
             },
             {
                 "id": "f-4",
@@ -182,7 +182,7 @@ class AppStore:
                 "modified": "2 days ago",
                 "size": "45 MB",
                 "type": "data",
-                "icon": "🗄️",
+                "icon": "sheet",
             },
             {
                 "id": "f-5",
@@ -192,7 +192,7 @@ class AppStore:
                 "modified": "Today",
                 "size": "15 KB",
                 "type": "text",
-                "icon": "📝",
+                "icon": "document",
             },
             {
                 "id": "f-6",
@@ -202,7 +202,7 @@ class AppStore:
                 "modified": "3 days ago",
                 "size": "78 MB",
                 "type": "video",
-                "icon": "🎬",
+                "icon": "file",
             },
         ]
         
@@ -217,10 +217,10 @@ class AppStore:
                 "recent_docs": "18 files",
             },
             "drive_items": [
-                {"name": "Hackwave Architecture", "type": "Document", "date": "Updated 2h ago", "icon": "📄"},
-                {"name": "Hackwave Final Presentation", "type": "Presentation", "date": "Updated yesterday", "icon": "📊"},
-                {"name": "Project Budget", "type": "Spreadsheet", "date": "Updated Sep 01", "icon": "📈"},
-                {"name": "College Submission Guidelines", "type": "PDF", "date": "Updated Aug 28", "icon": "📑"},
+                {"name": "Hackwave Architecture", "type": "Document", "date": "Updated 2h ago", "icon": "document"},
+                {"name": "Hackwave Final Presentation", "type": "Presentation", "date": "Updated yesterday", "icon": "slides"},
+                {"name": "Project Budget", "type": "Spreadsheet", "date": "Updated Sep 01", "icon": "sheet"},
+                {"name": "College Submission Guidelines", "type": "PDF", "date": "Updated Aug 28", "icon": "file"},
             ],
             "emails": [
                 {"sender": "Hackathon Team", "subject": "Final submission details & booth setup", "time": "11:20 AM", "unread": True},
@@ -361,13 +361,22 @@ class AppStore:
         self.active_drawer = None
         self._notify("drawer_closed", None)
 
+    # A long session used to keep every line ever written, and the panel
+    # rebuilt all of them on each new one. Older lines live in the Activity
+    # timeline, so the live panel only needs the recent tail.
+    MAX_SYSTEM_LOGS = 120
+
     def add_system_log(self, text: str, status: str = "working"):
         # Every log line passes through here, so this is the one place a
         # credential has to be stripped before it can reach the screen.
         now_str = datetime.datetime.now().strftime("%I:%M %p").lstrip("0")
         entry = {"time": now_str, "text": redact(text), "status": status}
         self.system_logs.append(entry)
-        self._notify("system_log_added", entry)
+        dropped = False
+        while len(self.system_logs) > self.MAX_SYSTEM_LOGS:
+            self.system_logs.pop(0)
+            dropped = True
+        self._notify("system_log_added", {"entry": entry, "dropped": dropped})
 
     def trigger_approval(self, title: str, description: str, on_approve: Callable[[], None], on_reject: Optional[Callable[[], None]] = None):
         self.pending_approval = {

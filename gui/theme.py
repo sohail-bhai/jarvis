@@ -1,6 +1,10 @@
 """
 Theme definitions for the VAVE Desktop UI.
-Designed to feel like a calm, modern, minimal personal assistant.
+
+One neutral grey ground, white cards, a single blue accent, and semantic
+colours used only where they carry meaning. Purple is deliberately absent:
+a second decorative hue makes the interface read as a demo rather than as a
+tool. Sizes live here as tokens so nothing is spaced by eye at the call site.
 """
 import sys
 
@@ -9,71 +13,193 @@ APPEARANCE_MODE = "light"
 DEFAULT_COLOR_THEME = "blue"
 
 # Primary Surfaces
-MAIN_BG = "#F3F4F8"
+MAIN_BG = "#FBF7F2"           # Warm off-white ground
 CARD_BG = "#FFFFFF"
-CARD_BORDER = "#E5E7EB"
-CARD_HOVER = "#F9FAFB"
+CARD_BORDER = "#F0E5D8"
+CARD_HOVER = "#FFF9F2"
+SURFACE_SUBTLE = "#FFF4E8"    # One step off a card: icon chips, inset rows
 
-# Dark Sidebar Surfaces (matching reference image)
-SIDEBAR_BG = "#161922"
-SIDEBAR_HOVER = "#232836"
-SIDEBAR_ACTIVE = "#2C3244"
-SIDEBAR_BORDER = "#252B3B"
-SIDEBAR_TEXT = "#F9FAFB"
-SIDEBAR_TEXT_MUTED = "#9CA3AF"
+# Sidebar Surfaces. The rail is white like the rest of the app; the current
+# row is the only place the pastel is used as a full fill.
+SIDEBAR_BG = "#FFFFFF"
+SIDEBAR_HOVER = "#FFF4E8"
+SIDEBAR_ACTIVE = "#FFD4A1"
+SIDEBAR_BORDER = "#F0E5D8"
+SIDEBAR_TEXT = "#2A211A"
+SIDEBAR_TEXT_MUTED = "#8B7B6B"
 
 # Text Colors
-TEXT_PRIMARY = "#111827"      # Deep charcoal
-TEXT_SECONDARY = "#4B5563"    # Balanced gray
-TEXT_MUTED = "#9CA3AF"        # Soft muted gray
+TEXT_PRIMARY = "#241C14"      # Warm charcoal
+TEXT_SECONDARY = "#5A4E43"
+TEXT_MUTED = "#96887A"
 TEXT_LIGHT = "#FFFFFF"
 
-# Restrained Accents & Semantics
-ACCENT = "#4F46E5"            # Indigo
-ACCENT_HOVER = "#4338CA"
-ACCENT_LIGHT = "#EEF2FF"
-ACCENT_BORDER = "#C7D2FE"
+# The pastel is a fill, not an ink: at #FFD4A1 it cannot carry text or a
+# glyph on white, so anything drawn on a light surface uses ACCENT_DEEP and
+# anything drawn on the pastel uses ON_ACCENT.
+ACCENT = "#FFD4A1"            # Pastel orange fill
+ACCENT_HOVER = "#FFC684"
+ACCENT_DEEP = "#B4712B"       # Readable orange for glyphs, links, dots
+ACCENT_DEEP_HOVER = "#95591D"
+ACCENT_LIGHT = "#FFF3E4"
+ACCENT_BORDER = "#FFD4A1"
+ON_ACCENT = "#3B2A18"         # Text and glyphs sitting on the pastel
 
-SUCCESS = "#10B981"           # Emerald green
-SUCCESS_HOVER = "#059669"
-SUCCESS_LIGHT = "#ECFDF5"
-SUCCESS_BORDER = "#A7F3D0"
+SUCCESS = "#2F8F6B"
+SUCCESS_HOVER = "#247355"
+SUCCESS_LIGHT = "#EDF8F3"
+SUCCESS_BORDER = "#B6E2D1"
 
-WARNING = "#F59E0B"           # Amber
-WARNING_HOVER = "#D97706"
-WARNING_LIGHT = "#FFFBEB"
-WARNING_BORDER = "#FDE68A"
+WARNING = "#B4712B"
+WARNING_HOVER = "#95591D"
+WARNING_LIGHT = "#FFF3E4"
+WARNING_BORDER = "#FFD4A1"
 
-DANGER = "#EF4444"            # Rose / Red
-DANGER_HOVER = "#DC2626"
-DANGER_LIGHT = "#FEF2F2"
-DANGER_BORDER = "#FECACA"
+DANGER = "#C0453B"            # Destructive only
+DANGER_HOVER = "#A2372F"
+DANGER_LIGHT = "#FDF1F0"
+DANGER_BORDER = "#F1C7C3"
 
-INFO = "#3B82F6"              # Sky / Blue
-INFO_LIGHT = "#EFF6FF"
-INFO_BORDER = "#BFDBFE"
+INFO = "#B4712B"              # Status ink matches the accent ink
+INFO_LIGHT = "#FFF3E4"
+INFO_BORDER = "#FFD4A1"
 
-PURPLE = "#8B5CF6"
-PURPLE_LIGHT = "#FAF5FF"
-PURPLE_BORDER = "#DDD6FE"
+NEUTRAL = "#7A6B5D"
+NEUTRAL_LIGHT = "#F6F1EA"
+NEUTRAL_BORDER = "#F0E5D8"
 
-# Platform-tuned typography
-if sys.platform == "darwin":
-    FONT_FAMILY = "SF Pro Display"
-elif sys.platform == "win32":
-    FONT_FAMILY = "Segoe UI"
-else:
-    FONT_FAMILY = "DejaVu Sans"
+# Shape tokens
+RADIUS_SM = 8
+RADIUS = 12
+RADIUS_LG = 16
+
+# Icon sizes
+ICON_SM = 15
+ICON = 17
+ICON_LG = 20
+
+# Typography. Tk silently falls back to a default face for a family the
+# machine does not have, which is how the interface ended up in a different
+# font on each desktop, so the first family actually installed is used.
+_FONT_CANDIDATES = {
+    "darwin": ["SF Pro Display", "SF Pro Text", "Helvetica Neue"],
+    "win32": ["Segoe UI Variable Text", "Segoe UI"],
+}
+_LINUX_FONTS = ["Inter", "Cantarell", "Noto Sans", "Ubuntu", "DejaVu Sans",
+                "Liberation Sans"]
 
 FALLBACK_FONT = "Helvetica"
+FONT_FAMILY = _FONT_CANDIDATES.get(sys.platform, _LINUX_FONTS)[0]
+
+_resolved_family = None
+
+
+def _family():
+    """The best installed face, looked up once the Tk root exists."""
+    global _resolved_family
+    if _resolved_family:
+        return _resolved_family
+
+    wanted = _FONT_CANDIDATES.get(sys.platform, _LINUX_FONTS)
+    try:
+        import tkinter.font as tkfont
+
+        installed = set(tkfont.families())
+        for name in wanted:
+            if name in installed:
+                _resolved_family = name
+                break
+    except Exception:
+        # No root yet, or no display: answer with the first choice and let a
+        # later call resolve it properly.
+        return wanted[0]
+
+    _resolved_family = _resolved_family or FALLBACK_FONT
+    return _resolved_family
+
+# Text was small enough on a normal monitor that people leaned in to read it.
+# One factor here lifts every label at once, so the type stays in proportion.
+FONT_SCALE = 1.15
 
 
 def configure_theme(ctk):
-    """Sets CustomTkinter appearance mode."""
+    """Sets CustomTkinter appearance mode and the shared widget palette.
+
+    CustomTkinter ships a blue built-in theme, which left switches, sliders
+    and scrollbars blue in an otherwise warm interface. Patching the theme
+    table once here keeps every stock widget on the palette without passing
+    colours at each call site.
+    """
     ctk.set_appearance_mode("light")
     ctk.set_default_color_theme("blue")
 
+    palette = ctk.ThemeManager.theme
+
+    def paint(widget, **values):
+        entry = palette.get(widget)
+        if not entry:
+            return
+        for key, value in values.items():
+            if key in entry:
+                entry[key] = [value, value]
+
+    paint("CTkSwitch",
+          progress_color=ACCENT_DEEP,
+          fg_color=NEUTRAL_BORDER,
+          button_color=CARD_BG,
+          button_hover_color=ACCENT_LIGHT,
+          text_color=TEXT_PRIMARY)
+    paint("CTkScrollbar",
+          button_color=CARD_BORDER,
+          button_hover_color=ACCENT)
+    paint("CTkEntry",
+          fg_color=CARD_BG,
+          border_color=CARD_BORDER,
+          text_color=TEXT_PRIMARY,
+          placeholder_text_color=TEXT_MUTED)
+    paint("CTkTextbox",
+          fg_color=CARD_BG,
+          border_color=CARD_BORDER,
+          text_color=TEXT_PRIMARY)
+    paint("CTkButton",
+          fg_color=ACCENT,
+          hover_color=ACCENT_HOVER,
+          text_color=ON_ACCENT,
+          border_color=CARD_BORDER)
+    paint("CTkProgressBar",
+          fg_color=NEUTRAL_LIGHT,
+          progress_color=ACCENT_DEEP)
+    paint("CTkSlider",
+          button_color=ACCENT_DEEP,
+          button_hover_color=ACCENT_DEEP_HOVER,
+          progress_color=ACCENT,
+          fg_color=NEUTRAL_BORDER)
+    paint("CTkCheckBox",
+          fg_color=ACCENT_DEEP,
+          hover_color=ACCENT_DEEP_HOVER,
+          border_color=CARD_BORDER,
+          checkmark_color=CARD_BG,
+          text_color=TEXT_PRIMARY)
+    paint("CTkSegmentedButton",
+          fg_color=NEUTRAL_LIGHT,
+          selected_color=ACCENT,
+          selected_hover_color=ACCENT_HOVER,
+          unselected_color=CARD_BG,
+          unselected_hover_color=CARD_HOVER,
+          text_color=ON_ACCENT)
+    paint("CTkOptionMenu",
+          fg_color=ACCENT,
+          button_color=ACCENT_HOVER,
+          button_hover_color=ACCENT_DEEP,
+          text_color=ON_ACCENT)
+    paint("CTkComboBox",
+          fg_color=CARD_BG,
+          border_color=CARD_BORDER,
+          button_color=ACCENT,
+          button_hover_color=ACCENT_HOVER,
+          text_color=TEXT_PRIMARY)
+
 
 def font(size=14, weight="normal"):
-    """Convenience font helper."""
-    return (FONT_FAMILY, size, weight)
+    """Convenience font helper, scaled so the interface reads at arm's length."""
+    return (_family(), max(9, round(size * FONT_SCALE)), weight)

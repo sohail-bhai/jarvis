@@ -5,7 +5,7 @@ Clean, dark slate aesthetic matching the reference design.
 from __future__ import annotations
 
 import customtkinter as ctk
-from gui import theme
+from gui import icons, theme
 from gui.store import store
 
 
@@ -47,41 +47,57 @@ class Sidebar(ctk.CTkFrame):
 
         # 3. Navigation Items
         self.nav_items = [
-            ("home", "Home", "⌂"),
-            ("devices", "My Devices", "💻"),
-            ("files", "My Files", "📁"),
-            ("google", "Google", "G"),
-            ("web", "Web", "🌐"),
-            ("activity", "Activity", "⏱"),
-            ("settings", "Settings", "⚙"),
+            ("home", "Home", "home"),
+            ("devices", "My Devices", "devices"),
+            ("files", "My Files", "files"),
+            ("google", "Google", "google"),
+            ("web", "Web", "globe"),
+            ("activity", "Activity", "activity"),
+            ("settings", "Settings", "settings"),
         ]
 
         self.nav_container = ctk.CTkFrame(self, fg_color="transparent")
         self.nav_container.pack(fill="x", padx=12, expand=True, anchor="n")
 
-        for page_id, label, icon in self.nav_items:
+        # Tk drops an image the moment Python stops referencing it, so both
+        # states of every glyph are held here for the life of the sidebar.
+        self._icons = {}
+
+        for page_id, label, icon_name in self.nav_items:
+            selected = page_id == "home"
+            self._icons[page_id] = {
+                "on": icons.image(icon_name, theme.ICON, theme.ON_ACCENT),
+                "off": icons.image(icon_name, theme.ICON, theme.SIDEBAR_TEXT_MUTED),
+            }
+            image = self._icons[page_id]["on" if selected else "off"]
+
             btn = ctk.CTkButton(
                 self.nav_container,
-                text=f"  {icon}   {label}",
-                font=theme.font(13, "bold" if page_id == "home" else "normal"),
-                fg_color=theme.SIDEBAR_ACTIVE if page_id == "home" else "transparent",
-                text_color=theme.SIDEBAR_TEXT,
+                text=label if image else f"  {label}",
+                image=image,
+                compound="left",
+                font=theme.font(13, "bold" if selected else "normal"),
+                fg_color=theme.SIDEBAR_ACTIVE if selected else "transparent",
+                text_color=theme.ON_ACCENT if selected else theme.SIDEBAR_TEXT_MUTED,
                 hover_color=theme.SIDEBAR_HOVER,
-                corner_radius=10,
-                height=38,
+                corner_radius=theme.RADIUS_SM,
+                height=40,
                 anchor="w",
                 command=lambda pid=page_id: self._select_page(pid),
             )
-            btn.pack(fill="x", pady=3)
+            # CustomTkinter has no icon-to-label gap, so the label carries it.
+            if image:
+                btn.configure(text=f"   {label}")
+            btn.pack(fill="x", pady=2)
             self.nav_buttons[page_id] = btn
 
         # 4. Bottom Status Pill (VAVE Online & Voice Control)
         bottom_frame = ctk.CTkFrame(
             self,
-            fg_color="#1F2432",
+            fg_color=theme.SIDEBAR_HOVER,
             corner_radius=12,
             border_width=1,
-            border_color="#2B3245",
+            border_color=theme.SIDEBAR_BORDER,
         )
         bottom_frame.pack(side="bottom", fill="x", padx=14, pady=16)
 
@@ -120,16 +136,16 @@ class Sidebar(ctk.CTkFrame):
     def highlight(self, page_id: str):
         """Mark one row as current, without navigating anywhere."""
         for pid, btn in self.nav_buttons.items():
-            if pid == page_id:
-                btn.configure(
-                    fg_color=theme.SIDEBAR_ACTIVE,
-                    font=theme.font(13, "bold"),
-                )
-            else:
-                btn.configure(
-                    fg_color="transparent",
-                    font=theme.font(13, "normal"),
-                )
+            selected = pid == page_id
+            glyphs = self._icons.get(pid, {})
+            btn.configure(
+                fg_color=theme.SIDEBAR_ACTIVE if selected else "transparent",
+                text_color=theme.ON_ACCENT if selected else theme.SIDEBAR_TEXT_MUTED,
+                font=theme.font(13, "bold" if selected else "normal"),
+            )
+            image = glyphs.get("on" if selected else "off")
+            if image:
+                btn.configure(image=image)
 
     def _toggle_voice(self):
         self.on_voice_toggle()

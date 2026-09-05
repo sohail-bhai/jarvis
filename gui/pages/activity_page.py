@@ -49,9 +49,9 @@ class ActivityPage(ctk.CTkScrollableFrame):
                 filters_row,
                 text=f,
                 font=theme.font(11, "bold" if f == "All" else "normal"),
-                fg_color=theme.SIDEBAR_BG if f == "All" else theme.CARD_BG,
-                hover_color=theme.SIDEBAR_HOVER if f == "All" else theme.CARD_HOVER,
-                text_color="#FFFFFF" if f == "All" else theme.TEXT_SECONDARY,
+                fg_color=theme.ACCENT if f == "All" else theme.CARD_BG,
+                hover_color=theme.ACCENT_HOVER if f == "All" else theme.CARD_HOVER,
+                text_color=theme.ON_ACCENT if f == "All" else theme.TEXT_SECONDARY,
                 border_width=0 if f == "All" else 1,
                 border_color=theme.CARD_BORDER,
                 corner_radius=12,
@@ -72,8 +72,8 @@ class ActivityPage(ctk.CTkScrollableFrame):
         for cat, btn in self.filter_buttons.items():
             if cat == category:
                 btn.configure(
-                    fg_color=theme.SIDEBAR_BG,
-                    text_color="#FFFFFF",
+                    fg_color=theme.ACCENT,
+                    text_color=theme.ON_ACCENT,
                     border_width=0,
                     font=theme.font(11, "bold"),
                 )
@@ -140,7 +140,7 @@ class ActivityPage(ctk.CTkScrollableFrame):
                 font=theme.font(11),
                 fg_color="transparent",
                 hover_color=theme.MAIN_BG,
-                text_color=theme.ACCENT,
+                text_color=theme.ACCENT_DEEP,
                 width=60,
                 command=lambda act=item: store.open_drawer("activity", act),
             )

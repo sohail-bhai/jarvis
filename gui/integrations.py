@@ -5,9 +5,12 @@ truthful state. Nothing here returns a credential value - only whether one is
 present - because credentials must never reach the interface or the logs.
 """
 
+import logging
 import os
 import shutil
 import socket
+import threading
+import time
 from pathlib import Path
 
 from assistant.config import get_setting
@@ -151,6 +154,65 @@ def screen_reading_status():
             "detail": "Install the Tesseract program to enable screen reading."}
 
 
+# Some of these checks talk to the network or to a local server, and they used
+# to run on the UI thread while a page was being built, which froze the window
+# for as long as the timeouts allowed. Answers are cached for a few seconds and
+# refreshed in the background instead, so a page draws immediately from the
+# last known state.
+_CACHE_TTL_SECONDS = 20.0
+_cache: dict = {}
+_inflight: set = set()
+_cache_lock = threading.Lock()
+
+
+def cached(name, on_refresh=None):
+    """The last known answer for one check, refreshing it in the background.
+
+    `on_refresh` is called from the worker thread when a newer answer arrives,
+    so a page can redraw itself; use gui.ui_queue to get back to the UI thread.
+    """
+    checker = _CHECKS.get(name)
+    if checker is None:
+        raise KeyError(name)
+
+    now = time.monotonic()
+    with _cache_lock:
+        entry = _cache.get(name)
+        fresh = entry is not None and (now - entry[0]) < _CACHE_TTL_SECONDS
+        if not fresh and name not in _inflight:
+            _inflight.add(name)
+            start = True
+        else:
+            start = False
+
+    if start:
+        def _work():
+            try:
+                value = checker()
+            except Exception:
+                value = {"connected": False, "label": "Unavailable",
+                         "detail": "VAVE could not check this right now."}
+            with _cache_lock:
+                _cache[name] = (time.monotonic(), value)
+                _inflight.discard(name)
+            if on_refresh:
+                try:
+                    on_refresh(value)
+                except Exception:
+                    logging.getLogger(__name__).debug(
+                        "status refresh callback failed", exc_info=True)
+
+        threading.Thread(target=_work, daemon=True).start()
+
+    if entry is not None:
+        return entry[1]
+    return {"connected": False, "label": "Checking\u2026",
+            "detail": "VAVE is checking this now."}
+
+
+_CHECKS = {}
+
+
 def all_integrations():
     """Rows for the Settings > Connected Services list."""
     return [
@@ -164,3 +226,17 @@ def all_integrations():
         ("Browser tasks", browser_automation_status()),
         ("Window watching", overwatch_status()),
     ]
+
+
+_CHECKS.update({
+    "google": google_status,
+    "gmail": gmail_status,
+    "phone": phone_status,
+    "internet": internet_status,
+    "local_ai": local_ai_status,
+    "featherless": featherless_status,
+    "computer": computer_status,
+    "overwatch": overwatch_status,
+    "browser": browser_automation_status,
+    "screen": screen_reading_status,
+})

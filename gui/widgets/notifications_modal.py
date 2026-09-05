@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import customtkinter as ctk
 from typing import Callable
-from gui import theme
+from gui import icons, theme
 from gui.store import store
 
 
@@ -45,9 +45,11 @@ class NotificationsModal(ctk.CTkToplevel):
             text_color=theme.TEXT_PRIMARY,
         ).pack(side="left")
 
+        self._close_glyph = icons.image("x", theme.ICON_SM, theme.TEXT_SECONDARY)
         ctk.CTkButton(
             hdr,
-            text="✕",
+            image=self._close_glyph,
+            text="" if self._close_glyph else "X",
             font=theme.font(11),
             width=26,
             height=26,

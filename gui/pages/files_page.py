@@ -5,7 +5,7 @@ Universal file search across Computer, Phone, Server, and Google Drive.
 from __future__ import annotations
 
 import customtkinter as ctk
-from gui import theme
+from gui import icons, theme
 from gui.store import store
 
 
@@ -18,6 +18,8 @@ class FilesPage(ctk.CTkScrollableFrame):
         )
         self.selected_filter = "All"
         self.filter_buttons = {}
+        # Tk drops an image nothing references, so glyphs are kept here.
+        self._glyphs = []
 
         # 1. Header
         header = ctk.CTkFrame(self, fg_color="transparent")
@@ -52,9 +54,13 @@ class FilesPage(ctk.CTkScrollableFrame):
         search_row = ctk.CTkFrame(search_card, fg_color="transparent")
         search_row.pack(fill="x", padx=14, pady=8)
 
+        search_glyph = icons.image("search", theme.ICON, theme.TEXT_MUTED)
+        self._glyphs.append(search_glyph)
         ctk.CTkLabel(
             search_row,
-            text="🔍",
+            image=search_glyph,
+            text="" if search_glyph else "",
+            text_color=theme.TEXT_MUTED,
             font=theme.font(13),
         ).pack(side="left", padx=(0, 8))
 
@@ -80,9 +86,9 @@ class FilesPage(ctk.CTkScrollableFrame):
                 filters_row,
                 text=cat,
                 font=theme.font(11, "bold" if cat == "All" else "normal"),
-                fg_color=theme.SIDEBAR_BG if cat == "All" else theme.CARD_BG,
-                hover_color=theme.SIDEBAR_HOVER if cat == "All" else theme.CARD_HOVER,
-                text_color="#FFFFFF" if cat == "All" else theme.TEXT_SECONDARY,
+                fg_color=theme.ACCENT if cat == "All" else theme.CARD_BG,
+                hover_color=theme.ACCENT_HOVER if cat == "All" else theme.CARD_HOVER,
+                text_color=theme.ON_ACCENT if cat == "All" else theme.TEXT_SECONDARY,
                 border_width=0 if cat == "All" else 1,
                 border_color=theme.CARD_BORDER,
                 corner_radius=12,
@@ -103,8 +109,8 @@ class FilesPage(ctk.CTkScrollableFrame):
         for cat, btn in self.filter_buttons.items():
             if cat == category:
                 btn.configure(
-                    fg_color=theme.SIDEBAR_BG,
-                    text_color="#FFFFFF",
+                    fg_color=theme.ACCENT,
+                    text_color=theme.ON_ACCENT,
                     border_width=0,
                     font=theme.font(11, "bold"),
                 )
@@ -157,10 +163,18 @@ class FilesPage(ctk.CTkScrollableFrame):
             row = ctk.CTkFrame(card, fg_color="transparent")
             row.pack(fill="x", padx=14, pady=12)
 
+            glyph = icons.image(file_item.get("icon", "file"), theme.ICON,
+                                theme.TEXT_SECONDARY)
+            self._glyphs.append(glyph)
             ctk.CTkLabel(
                 row,
-                text=file_item.get("icon", "📄"),
-                font=theme.font(20),
+                image=glyph,
+                text="" if glyph else "\u25a1",
+                fg_color=theme.SURFACE_SUBTLE,
+                text_color=theme.TEXT_SECONDARY,
+                corner_radius=theme.RADIUS_SM,
+                width=32,
+                height=32,
             ).pack(side="left", padx=(0, 12))
 
             info_col = ctk.CTkFrame(row, fg_color="transparent")
@@ -208,7 +222,7 @@ class FilesPage(ctk.CTkScrollableFrame):
                 font=theme.font(11, "bold"),
                 fg_color=theme.ACCENT,
                 hover_color=theme.ACCENT_HOVER,
-                text_color="#FFFFFF",
+                text_color=theme.ON_ACCENT,
                 corner_radius=8,
                 width=54,
                 height=28,

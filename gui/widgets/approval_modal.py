@@ -5,7 +5,7 @@ Prompts for permission with plain-English context and clear action buttons.
 from __future__ import annotations
 
 import customtkinter as ctk
-from gui import theme
+from gui import icons, theme
 from gui.store import store
 
 
@@ -37,11 +37,14 @@ class ApprovalModal(ctk.CTkToplevel):
         hdr = ctk.CTkFrame(container, fg_color="transparent")
         hdr.pack(fill="x", pady=(0, 10))
 
+        self._warn_glyph = icons.image("warning", theme.ICON_LG, theme.WARNING)
         ctk.CTkLabel(
             hdr,
-            text="⚠️",
-            font=theme.font(16),
-        ).pack(side="left", padx=(0, 8))
+            image=self._warn_glyph,
+            text="" if self._warn_glyph else "!",
+            text_color=theme.WARNING,
+            font=theme.font(16, "bold"),
+        ).pack(side="left", padx=(0, 10))
 
         ctk.CTkLabel(
             hdr,
@@ -94,7 +97,7 @@ class ApprovalModal(ctk.CTkToplevel):
             font=theme.font(12, "bold"),
             fg_color=theme.ACCENT,
             hover_color=theme.ACCENT_HOVER,
-            text_color="#FFFFFF",
+            text_color=theme.ON_ACCENT,
             corner_radius=10,
             height=36,
             command=self._approve,

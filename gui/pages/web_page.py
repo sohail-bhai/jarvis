@@ -5,7 +5,7 @@ Shows web searches, background research tasks, and live browser progress.
 from __future__ import annotations
 
 import customtkinter as ctk
-from gui import theme, ui_queue
+from gui import icons, theme, ui_queue
 from gui.tasks import start_web_task
 from gui.store import store
 
@@ -17,6 +17,8 @@ class WebPage(ctk.CTkScrollableFrame):
             fg_color="transparent",
             scrollbar_button_color=theme.CARD_BORDER,
         )
+        # Tk drops an image nothing references, so glyphs are kept here.
+        self._glyphs = []
 
         # 1. Header
         header = ctk.CTkFrame(self, fg_color="transparent")
@@ -51,11 +53,15 @@ class WebPage(ctk.CTkScrollableFrame):
         row = ctk.CTkFrame(input_card, fg_color="transparent")
         row.pack(fill="x", padx=14, pady=10)
 
+        globe_glyph = icons.image("globe", theme.ICON, theme.ACCENT_DEEP)
+        self._glyphs.append(globe_glyph)
         ctk.CTkLabel(
             row,
-            text="🌐",
-            font=theme.font(16),
-        ).pack(side="left", padx=(0, 8))
+            image=globe_glyph,
+            text="" if globe_glyph else "@",
+            text_color=theme.ACCENT_DEEP,
+            font=theme.font(14),
+        ).pack(side="left", padx=(0, 10))
 
         self.web_entry = ctk.CTkEntry(
             row,
@@ -69,16 +75,19 @@ class WebPage(ctk.CTkScrollableFrame):
         self.web_entry.pack(side="left", fill="x", expand=True)
         self.web_entry.bind("<Return>", lambda e: self._submit_web_task())
 
+        send_glyph = icons.image("send", theme.ICON, theme.ON_ACCENT)
+        self._glyphs.append(send_glyph)
         arrow_btn = ctk.CTkButton(
             row,
-            text="↑",
-            font=theme.font(14, "bold"),
-            width=32,
-            height=32,
-            corner_radius=16,
-            fg_color=theme.TEXT_PRIMARY,
-            hover_color=theme.SIDEBAR_BG,
-            text_color="#FFFFFF",
+            image=send_glyph,
+            text="" if send_glyph else "Go",
+            font=theme.font(12, "bold"),
+            width=34,
+            height=34,
+            corner_radius=17,
+            fg_color=theme.ACCENT,
+            hover_color=theme.ACCENT_HOVER,
+            text_color=theme.ON_ACCENT,
             command=self._submit_web_task,
         )
         arrow_btn.pack(side="right")
@@ -215,13 +224,18 @@ class WebPage(ctk.CTkScrollableFrame):
             row.pack(fill="x", padx=12, pady=4)
 
             if step.get("done"):
-                icon, col = "✓", theme.SUCCESS
+                mark, col = "check", theme.SUCCESS
             elif step.get("active"):
-                icon, col = "●", theme.INFO
+                mark, col = None, theme.ACCENT_DEEP
             else:
-                icon, col = "○", theme.TEXT_MUTED
+                mark, col = None, theme.TEXT_MUTED
 
-            ctk.CTkLabel(row, text=icon, font=theme.font(11, "bold"), text_color=col, width=18).pack(side="left")
+            glyph = icons.image(mark, 12, col, stroke_width=2.4) if mark else None
+            self._glyphs.append(glyph)
+            ctk.CTkLabel(row, image=glyph,
+                         text="" if glyph else ("\u25cf" if step.get("active") else "\u25cb"),
+                         font=theme.font(10, "bold"), text_color=col,
+                         width=18).pack(side="left")
             ctk.CTkLabel(row, text=step["text"], font=theme.font(11), text_color=theme.TEXT_PRIMARY).pack(side="left", padx=4)
 
     def _build_recent_tasks(self):

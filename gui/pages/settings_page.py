@@ -6,7 +6,7 @@ What VAVE Remembers (Memory), and AI Helpers.
 from __future__ import annotations
 
 import customtkinter as ctk
-from gui import theme
+from gui import icons, theme
 from gui.store import store
 
 
@@ -19,6 +19,8 @@ class SettingsPage(ctk.CTkScrollableFrame):
         )
         self.active_section = "General"
         self.section_buttons = {}
+        # Tk drops an image nothing references, so glyphs are kept here.
+        self._glyphs = []
 
         # 1. Header
         header = ctk.CTkFrame(self, fg_color="transparent")
@@ -45,25 +47,36 @@ class SettingsPage(ctk.CTkScrollableFrame):
         nav_row.pack(fill="x", padx=16, pady=(0, 16))
 
         sections = [
-            ("General", "⚙"),
-            ("Security", "🛡"),
-            ("Memory", "🧠"),
-            ("Connected Services", "🔗"),
-            ("AI Helpers", "🤖"),
+            ("General", "settings"),
+            ("Security", "shield"),
+            ("Memory", "memory"),
+            ("Connected Services", "link"),
+            ("AI Helpers", "helper"),
         ]
 
-        for sec_name, icon in sections:
+        # Both states of every tab glyph, so switching never re-rasterises.
+        self._tab_icons = {}
+
+        for sec_name, icon_name in sections:
+            selected = sec_name == "General"
+            self._tab_icons[sec_name] = {
+                "on": icons.image(icon_name, theme.ICON_SM, theme.ON_ACCENT),
+                "off": icons.image(icon_name, theme.ICON_SM, theme.TEXT_SECONDARY),
+            }
+            glyph = self._tab_icons[sec_name]["on" if selected else "off"]
             btn = ctk.CTkButton(
                 nav_row,
-                text=f"{icon}  {sec_name}",
-                font=theme.font(11, "bold" if sec_name == "General" else "normal"),
-                fg_color=theme.SIDEBAR_BG if sec_name == "General" else theme.CARD_BG,
-                hover_color=theme.SIDEBAR_HOVER if sec_name == "General" else theme.CARD_HOVER,
-                text_color="#FFFFFF" if sec_name == "General" else theme.TEXT_SECONDARY,
-                border_width=0 if sec_name == "General" else 1,
+                image=glyph,
+                compound="left",
+                text=f"   {sec_name}" if glyph else sec_name,
+                font=theme.font(11, "bold" if selected else "normal"),
+                fg_color=theme.ACCENT if selected else theme.CARD_BG,
+                hover_color=theme.ACCENT_HOVER if selected else theme.CARD_HOVER,
+                text_color=theme.ON_ACCENT if selected else theme.TEXT_SECONDARY,
+                border_width=0 if selected else 1,
                 border_color=theme.CARD_BORDER,
-                corner_radius=12,
-                height=28,
+                corner_radius=theme.RADIUS_SM,
+                height=32,
                 command=lambda name=sec_name: self._switch_section(name),
             )
             btn.pack(side="left", padx=3)
@@ -78,20 +91,16 @@ class SettingsPage(ctk.CTkScrollableFrame):
     def _switch_section(self, name: str):
         self.active_section = name
         for s_name, btn in self.section_buttons.items():
-            if s_name == name:
-                btn.configure(
-                    fg_color=theme.SIDEBAR_BG,
-                    text_color="#FFFFFF",
-                    border_width=0,
-                    font=theme.font(11, "bold"),
-                )
-            else:
-                btn.configure(
-                    fg_color=theme.CARD_BG,
-                    text_color=theme.TEXT_SECONDARY,
-                    border_width=1,
-                    font=theme.font(11, "normal"),
-                )
+            selected = s_name == name
+            btn.configure(
+                fg_color=theme.ACCENT if selected else theme.CARD_BG,
+                text_color=theme.ON_ACCENT if selected else theme.TEXT_SECONDARY,
+                border_width=0 if selected else 1,
+                font=theme.font(11, "bold" if selected else "normal"),
+            )
+            glyph = self._tab_icons.get(s_name, {}).get("on" if selected else "off")
+            if glyph:
+                btn.configure(image=glyph)
         self._render_content()
 
     def _render_content(self):
@@ -214,11 +223,11 @@ class SettingsPage(ctk.CTkScrollableFrame):
 
         ctk.CTkButton(
             stop_inner,
-            text="🛑 Stop VAVE",
+            text="Stop VAVE",
             font=theme.font(12, "bold"),
             fg_color=theme.DANGER,
             hover_color=theme.DANGER_HOVER,
-            text_color="#FFFFFF",
+            text_color=theme.ON_ACCENT,
             corner_radius=8,
             height=34,
             command=self._confirm_emergency_stop,
@@ -271,7 +280,7 @@ class SettingsPage(ctk.CTkScrollableFrame):
             font=theme.font(11, "bold"),
             fg_color=theme.DANGER,
             hover_color=theme.DANGER_HOVER,
-            text_color="#FFFFFF",
+            text_color=theme.ON_ACCENT,
             corner_radius=8,
             command=_do_stop,
         ).pack(side="left", expand=True, fill="x", padx=(6, 0))
@@ -325,8 +334,13 @@ class SettingsPage(ctk.CTkScrollableFrame):
         from assistant.api.server import get_local_server
         from gui import integrations
 
-        google = integrations.google_status()
-        local_ai = integrations.local_ai_status()
+        # Cached so opening this tab never waits on a network timeout.
+        def _refresh(_value):
+            from gui import ui_queue
+            ui_queue.post_to(self, self._render_content)
+
+        google = integrations.cached("google", _refresh)
+        local_ai = integrations.cached("local_ai", _refresh)
         featherless = integrations.featherless_status()
         phone = get_local_server().running
 
@@ -465,9 +479,9 @@ class SettingsPage(ctk.CTkScrollableFrame):
             entry_row,
             text="Save key",
             font=theme.font(11),
-            fg_color=theme.SIDEBAR_BG,
+            fg_color=theme.ACCENT,
             hover_color=theme.SIDEBAR_HOVER,
-            text_color="#FFFFFF",
+            text_color=theme.ON_ACCENT,
             corner_radius=8,
             width=80,
             height=30,

@@ -16,7 +16,7 @@ import customtkinter as ctk
 
 from assistant.workspace import auth as workspace_auth
 from assistant.workspace.gateway import gateway
-from gui import theme, ui_queue
+from gui import icons, theme, ui_queue
 from gui.store import store
 
 TABS = ["Overview", "Drive", "Gmail", "Calendar", "Docs"]
@@ -47,15 +47,16 @@ def _readable_date(raw) -> str:
 
 
 def _icon_for(mime: str) -> str:
+    """The drawn glyph that matches a Drive item's type."""
     if "presentation" in mime:
-        return "📊"
+        return "slides"
     if "spreadsheet" in mime:
-        return "📈"
-    if "pdf" in mime:
-        return "📑"
+        return "sheet"
     if "folder" in mime:
-        return "📁"
-    return "📄"
+        return "folder"
+    if "pdf" in mime:
+        return "file"
+    return "document"
 
 
 class GooglePage(ctk.CTkScrollableFrame):
@@ -67,6 +68,8 @@ class GooglePage(ctk.CTkScrollableFrame):
         )
         self.active_tab = "Overview"
         self.tab_buttons = {}
+        # Tk drops an image nothing references, so glyphs are kept here.
+        self._glyphs = []
         # What the gateway last told us. None means "not asked yet", which is
         # not the same as "not connected".
         self.status = None
@@ -103,7 +106,7 @@ class GooglePage(ctk.CTkScrollableFrame):
             font=theme.font(11, "bold"),
             fg_color=theme.ACCENT,
             hover_color=theme.ACCENT_HOVER,
-            text_color="#FFFFFF",
+            text_color=theme.ON_ACCENT,
             corner_radius=8,
             height=28,
             width=130,
@@ -143,9 +146,9 @@ class GooglePage(ctk.CTkScrollableFrame):
                 tabs_row,
                 text=name,
                 font=theme.font(11, "bold" if name == "Overview" else "normal"),
-                fg_color=theme.SIDEBAR_BG if name == "Overview" else theme.CARD_BG,
-                hover_color=theme.SIDEBAR_HOVER if name == "Overview" else theme.CARD_HOVER,
-                text_color="#FFFFFF" if name == "Overview" else theme.TEXT_SECONDARY,
+                fg_color=theme.ACCENT if name == "Overview" else theme.CARD_BG,
+                hover_color=theme.ACCENT_HOVER if name == "Overview" else theme.CARD_HOVER,
+                text_color=theme.ON_ACCENT if name == "Overview" else theme.TEXT_SECONDARY,
                 border_width=0 if name == "Overview" else 1,
                 border_color=theme.CARD_BORDER,
                 corner_radius=12,
@@ -202,7 +205,7 @@ class GooglePage(ctk.CTkScrollableFrame):
             self.connect_button.configure(text="Connect Google", command=self._connect,
                                           fg_color=theme.ACCENT,
                                           hover_color=theme.ACCENT_HOVER,
-                                          text_color="#FFFFFF")
+                                          text_color=theme.ON_ACCENT)
 
         self._render_tab_content()
 
@@ -246,8 +249,8 @@ class GooglePage(ctk.CTkScrollableFrame):
         for name, btn in self.tab_buttons.items():
             if name == tab_name:
                 btn.configure(
-                    fg_color=theme.SIDEBAR_BG,
-                    text_color="#FFFFFF",
+                    fg_color=theme.ACCENT,
+                    text_color=theme.ON_ACCENT,
                     border_width=0,
                     font=theme.font(11, "bold"),
                 )
@@ -329,20 +332,20 @@ class GooglePage(ctk.CTkScrollableFrame):
 
         services = (self.status or {}).get("services", {})
         cards = [
-            ("Google Drive", "📁", theme.INFO_LIGHT, theme.INFO_BORDER, "drive"),
-            ("Gmail", "✉", theme.DANGER_LIGHT, theme.DANGER_BORDER, "gmail"),
-            ("Calendar", "📅", theme.SUCCESS_LIGHT, theme.SUCCESS_BORDER, "calendar"),
-            ("Docs & Slides", "📄", theme.WARNING_LIGHT, theme.WARNING_BORDER, "docs"),
+            ("Google Drive", "folder", "drive"),
+            ("Gmail", "mail", "gmail"),
+            ("Calendar", "calendar", "calendar"),
+            ("Docs & Slides", "document", "docs"),
         ]
 
-        for idx, (title, icon, bg, border, key) in enumerate(cards):
+        for idx, (title, icon_name, key) in enumerate(cards):
             card = ctk.CTkFrame(
                 grid,
-                fg_color=bg,
+                fg_color=theme.CARD_BG,
                 border_width=1,
-                border_color=border,
-                corner_radius=12,
-                height=84,
+                border_color=theme.CARD_BORDER,
+                corner_radius=theme.RADIUS,
+                height=98,
             )
             card.grid(row=0, column=idx, padx=4, sticky="nsew")
             card.pack_propagate(False)
@@ -350,7 +353,15 @@ class GooglePage(ctk.CTkScrollableFrame):
             content = ctk.CTkFrame(card, fg_color="transparent")
             content.pack(fill="both", expand=True, padx=12, pady=12)
 
-            ctk.CTkLabel(content, text=icon, font=theme.font(18)).pack(anchor="w")
+            glyph = icons.image(icon_name, theme.ICON, theme.ACCENT_DEEP)
+            self._glyphs.append(glyph)
+            ctk.CTkLabel(content,
+                         image=glyph,
+                         text="" if glyph else title[0],
+                         fg_color=theme.ACCENT_LIGHT,
+                         text_color=theme.ACCENT_DEEP,
+                         corner_radius=theme.RADIUS_SM,
+                         width=30, height=30).pack(anchor="w")
             ctk.CTkLabel(content, text=title, font=theme.font(11, "bold"),
                          text_color=theme.TEXT_PRIMARY).pack(anchor="w", pady=(2, 0))
             # No invented counts: VAVE has not read these accounts yet.
@@ -369,15 +380,19 @@ class GooglePage(ctk.CTkScrollableFrame):
                      text_color=theme.TEXT_PRIMARY).pack(anchor="w", padx=16, pady=(14, 8))
 
         prompts = [
-            ("Check today's schedule", "📅", "Calendar"),
-            ("Read my unread emails", "✉", "Gmail"),
-            ("Find a file in Drive", "🔍", "Drive"),
-            ("Write a document or deck", "📄", "Docs"),
+            ("Check today's schedule", "calendar", "Calendar"),
+            ("Read my unread emails", "mail", "Gmail"),
+            ("Find a file in Drive", "search", "Drive"),
+            ("Write a document or deck", "document", "Docs"),
         ]
-        for prompt, icon, target in prompts:
+        for prompt, icon_name, target in prompts:
+            glyph = icons.image(icon_name, theme.ICON_SM, theme.TEXT_SECONDARY)
+            self._glyphs.append(glyph)
             ctk.CTkButton(
                 actions_card,
-                text=f"  {icon}   {prompt}",
+                image=glyph,
+                compound="left",
+                text=f"   {prompt}" if glyph else f"  {prompt}",
                 font=theme.font(12),
                 fg_color=theme.MAIN_BG,
                 hover_color=theme.CARD_BORDER,
@@ -428,7 +443,7 @@ class GooglePage(ctk.CTkScrollableFrame):
             font=theme.font(11, "bold"),
             fg_color=theme.ACCENT,
             hover_color=theme.ACCENT_HOVER,
-            text_color="#FFFFFF",
+            text_color=theme.ON_ACCENT,
             corner_radius=8,
             width=80,
             height=26,
@@ -454,7 +469,11 @@ class GooglePage(ctk.CTkScrollableFrame):
             row = ctk.CTkFrame(card, fg_color="transparent")
             row.pack(fill="x", padx=14, pady=12)
 
-            ctk.CTkLabel(row, text=_icon_for(item.get("mimeType", "")),
+            _drive_glyph = icons.image(_icon_for(item.get("mimeType", "")),
+                                       theme.ICON, theme.TEXT_SECONDARY)
+            self._glyphs.append(_drive_glyph)
+            ctk.CTkLabel(row, image=_drive_glyph,
+                         text="" if _drive_glyph else "\u25a1",
                          font=theme.font(18)).pack(side="left", padx=(0, 10))
 
             col = ctk.CTkFrame(row, fg_color="transparent")
@@ -477,7 +496,7 @@ class GooglePage(ctk.CTkScrollableFrame):
                 font=theme.font(11, "bold"),
                 fg_color=theme.ACCENT if link else theme.MAIN_BG,
                 hover_color=theme.ACCENT_HOVER if link else theme.CARD_BORDER,
-                text_color="#FFFFFF" if link else theme.TEXT_MUTED,
+                text_color=theme.ON_ACCENT if link else theme.TEXT_MUTED,
                 corner_radius=8,
                 height=26,
                 state="normal" if link else "disabled",
@@ -545,7 +564,7 @@ class GooglePage(ctk.CTkScrollableFrame):
                 font=theme.font(11, "bold"),
                 fg_color=theme.ACCENT,
                 hover_color=theme.ACCENT_HOVER,
-                text_color="#FFFFFF",
+                text_color=theme.ON_ACCENT,
                 corner_radius=8,
                 height=26,
                 command=lambda message=email: self._draft_reply(message),
@@ -653,7 +672,7 @@ class GooglePage(ctk.CTkScrollableFrame):
             font=theme.font(11, "bold"),
             fg_color=theme.ACCENT,
             hover_color=theme.ACCENT_HOVER,
-            text_color="#FFFFFF",
+            text_color=theme.ON_ACCENT,
             corner_radius=8,
             height=30,
             command=lambda: self._create("google.docs.create", entry.get().strip(),

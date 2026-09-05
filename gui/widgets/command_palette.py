@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import customtkinter as ctk
 from typing import Callable
-from gui import theme
+from gui import icons, theme
 from gui.store import store
 
 
@@ -41,11 +41,15 @@ class CommandPalette(ctk.CTkToplevel):
         header = ctk.CTkFrame(main_frame, fg_color="transparent")
         header.pack(fill="x", pady=(0, 14))
 
+        self._glyphs = []
+        spark = icons.image("sparkle", theme.ICON_LG, theme.ACCENT_DEEP)
+        self._glyphs.append(spark)
         sparkle = ctk.CTkLabel(
             header,
-            text="✦",
+            image=spark,
+            text="" if spark else "*",
             font=theme.font(16, "bold"),
-            text_color=theme.ACCENT,
+            text_color=theme.ACCENT_DEEP,
         )
         sparkle.pack(side="left", padx=(0, 6))
 
@@ -90,16 +94,19 @@ class CommandPalette(ctk.CTkToplevel):
         self.entry.bind("<Return>", lambda e: self._submit())
         self.bind("<Escape>", lambda e: self.destroy())
 
+        send_glyph = icons.image("send", theme.ICON, theme.ON_ACCENT)
+        self._glyphs.append(send_glyph)
         submit_btn = ctk.CTkButton(
             input_container,
-            text="↑",
-            font=theme.font(14, "bold"),
-            width=32,
-            height=32,
-            corner_radius=16,
-            fg_color=theme.TEXT_PRIMARY,
-            hover_color=theme.SIDEBAR_BG,
-            text_color="#FFFFFF",
+            image=send_glyph,
+            text="" if send_glyph else "Go",
+            font=theme.font(12, "bold"),
+            width=34,
+            height=34,
+            corner_radius=17,
+            fg_color=theme.ACCENT,
+            hover_color=theme.ACCENT_HOVER,
+            text_color=theme.ON_ACCENT,
             command=self._submit,
         )
         submit_btn.pack(side="right", padx=6, pady=5)
@@ -114,18 +121,22 @@ class CommandPalette(ctk.CTkToplevel):
         ).pack(fill="x", pady=(0, 8))
 
         suggestions = [
-            ("Continue my project", "▷"),
-            ("Find my presentation", "📄"),
-            ("Check my emails", "✉"),
-            ("Research something online", "🔍"),
-            ("Send this file to my phone", "📱"),
-            ("Find a free time for a meeting tomorrow", "📅"),
+            ("Continue my project", "play"),
+            ("Find my presentation", "slides"),
+            ("Check my emails", "mail"),
+            ("Research something online", "search"),
+            ("Send this file to my phone", "phone"),
+            ("Find a free time for a meeting tomorrow", "calendar"),
         ]
 
-        for text, icon in suggestions:
+        for text, icon_name in suggestions:
+            glyph = icons.image(icon_name, theme.ICON_SM, theme.TEXT_MUTED)
+            self._glyphs.append(glyph)
             btn = ctk.CTkButton(
                 main_frame,
-                text=f"  {icon}   {text}",
+                image=glyph,
+                compound="left",
+                text=f"   {text}" if glyph else f"  {text}",
                 font=theme.font(12),
                 fg_color="transparent",
                 hover_color=theme.MAIN_BG,

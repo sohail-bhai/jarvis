@@ -8,7 +8,7 @@ from __future__ import annotations
 import customtkinter as ctk
 
 from assistant.api.server import get_local_server
-from gui import theme
+from gui import icons, theme
 from gui.store import store
 
 
@@ -21,6 +21,8 @@ class DevicesPage(ctk.CTkScrollableFrame):
         )
 
         self.server = get_local_server()
+        # Tk drops an image nothing references, so glyphs are kept here.
+        self._glyphs = []
 
         # Header
         header = ctk.CTkFrame(self, fg_color="transparent")
@@ -77,9 +79,13 @@ class DevicesPage(ctk.CTkScrollableFrame):
         title_row = ctk.CTkFrame(inner, fg_color="transparent")
         title_row.pack(fill="x")
 
+        phone_glyph = icons.image("phone", theme.ICON, theme.TEXT_PRIMARY)
+        self._glyphs.append(phone_glyph)
         ctk.CTkLabel(
             title_row,
-            text="📱  Connect your phone",
+            image=phone_glyph,
+            text="  Connect your phone" if phone_glyph else "Connect your phone",
+            compound="left",
             font=theme.font(14, "bold"),
             text_color=theme.TEXT_PRIMARY,
         ).pack(side="left")
@@ -117,7 +123,7 @@ class DevicesPage(ctk.CTkScrollableFrame):
             font=theme.font(11, "bold"),
             fg_color=theme.ACCENT,
             hover_color=theme.ACCENT_HOVER,
-            text_color=theme.TEXT_LIGHT,
+            text_color=theme.ON_ACCENT,
             corner_radius=8,
             width=110,
             height=30,
@@ -225,11 +231,20 @@ class DevicesPage(ctk.CTkScrollableFrame):
         top_row = ctk.CTkFrame(inner, fg_color="transparent")
         top_row.pack(fill="x")
 
+        is_live = dev.get("status") in ("Online", "Connected")
+        glyph = icons.image(dev.get("icon", "monitor"), theme.ICON,
+                            theme.ACCENT_DEEP if is_live else theme.TEXT_MUTED)
+        self._glyphs.append(glyph)
         ctk.CTkLabel(
             top_row,
-            text=dev.get("icon", "💻"),
-            font=theme.font(20),
-        ).pack(side="left", padx=(0, 10))
+            image=glyph,
+            text="" if glyph else dev.get("name", "D")[0],
+            fg_color=theme.ACCENT_LIGHT if is_live else theme.SURFACE_SUBTLE,
+            text_color=theme.ACCENT_DEEP if is_live else theme.TEXT_MUTED,
+            corner_radius=theme.RADIUS_SM,
+            width=32,
+            height=32,
+        ).pack(side="left", padx=(0, 12))
 
         title_col = ctk.CTkFrame(top_row, fg_color="transparent")
         title_col.pack(side="left", fill="both", expand=True)

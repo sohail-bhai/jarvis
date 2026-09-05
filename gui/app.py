@@ -49,8 +49,11 @@ class VaveDashboardApp(ctk.CTk):
         super().__init__()
 
         self.title("VAVE — Your AI, Everywhere")
-        self.geometry("1240x740")
-        self.minsize(1050, 640)
+        # The old default window left four environment cards sharing about
+        # 600px, which clipped their labels and made the whole page read as
+        # zoomed out. A wider default gives every column its natural width.
+        self.geometry("1440x880")
+        self.minsize(1160, 720)
         self.configure(fg_color=theme.MAIN_BG)
 
         # 1. Event Bus & Assistant Controller
@@ -95,9 +98,9 @@ class VaveDashboardApp(ctk.CTk):
 
     def _build_layout(self):
         # Configure columns: Sidebar (0), Content (1), Right Panel (2)
-        self.grid_columnconfigure(0, weight=0, minsize=230)
+        self.grid_columnconfigure(0, weight=0, minsize=234)
         self.grid_columnconfigure(1, weight=1)
-        self.grid_columnconfigure(2, weight=0, minsize=290)
+        self.grid_columnconfigure(2, weight=0, minsize=310)
         self.grid_rowconfigure(0, weight=1)
 
         # Left Sidebar
@@ -119,27 +122,33 @@ class VaveDashboardApp(ctk.CTk):
             on_open_command_palette=self.open_command_palette,
             on_open_notifications=self.open_notifications,
         )
-        self.topbar.grid(row=0, column=0, sticky="ew", padx=10, pady=(6, 0))
+        self.topbar.grid(row=0, column=0, sticky="ew", padx=14, pady=(8, 0))
 
         # Dynamic Content Container
         self.page_container = ctk.CTkFrame(center_frame, fg_color="transparent")
-        self.page_container.grid(row=1, column=0, sticky="nsew", padx=10, pady=6)
+        self.page_container.grid(row=1, column=0, sticky="nsew", padx=14, pady=8)
         self.page_container.grid_rowconfigure(0, weight=1)
         self.page_container.grid_columnconfigure(0, weight=1)
 
-        # Cache Pages
-        self.pages = {
-            "home": HomePage(self.page_container, on_navigate=self.navigate_to, on_execute_command=self.handle_user_command, on_voice_toggle=self.toggle_voice_listening),
-            "devices": DevicesPage(self.page_container),
-            "files": FilesPage(self.page_container),
-            "google": GooglePage(self.page_container),
-            "web": WebPage(self.page_container),
-            "activity": ActivityPage(self.page_container),
-            "settings": SettingsPage(self.page_container),
+        # Pages are built the first time they are opened. Building all seven
+        # up front made the window take noticeably longer to appear, and most
+        # sessions never open all of them.
+        self.page_factories = {
+            "home": lambda: HomePage(self.page_container,
+                                     on_navigate=self.navigate_to,
+                                     on_execute_command=self.handle_user_command,
+                                     on_voice_toggle=self.toggle_voice_listening),
+            "devices": lambda: DevicesPage(self.page_container),
+            "files": lambda: FilesPage(self.page_container),
+            "google": lambda: GooglePage(self.page_container),
+            "web": lambda: WebPage(self.page_container),
+            "activity": lambda: ActivityPage(self.page_container),
+            "settings": lambda: SettingsPage(self.page_container),
         }
+        self.pages = {}
 
         # Mount initial page
-        self.current_page_widget = self.pages["home"]
+        self.current_page_widget = self._page("home")
         self.current_page_widget.grid(row=0, column=0, sticky="nsew")
 
         # Right Column: System Log Panel & Reusable Drawer
@@ -154,8 +163,16 @@ class VaveDashboardApp(ctk.CTk):
         self.detail_drawer = DetailDrawer(right_container, on_close=self.close_drawer)
         # detail_drawer initially hidden
 
+    def _page(self, page_id: str):
+        """The page widget, built on first use and kept afterwards."""
+        page = self.pages.get(page_id)
+        if page is None:
+            page = self.page_factories[page_id]()
+            self.pages[page_id] = page
+        return page
+
     def navigate_to(self, page_id: str):
-        if page_id not in self.pages:
+        if page_id not in self.page_factories:
             return
 
         # Hide current page
@@ -163,7 +180,7 @@ class VaveDashboardApp(ctk.CTk):
             self.current_page_widget.grid_forget()
 
         # Mount new page
-        self.current_page_widget = self.pages[page_id]
+        self.current_page_widget = self._page(page_id)
         self.current_page_widget.grid(row=0, column=0, sticky="nsew")
 
         # Update TopBar title

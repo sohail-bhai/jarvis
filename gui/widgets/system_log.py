@@ -7,7 +7,7 @@ from __future__ import annotations
 import customtkinter as ctk
 
 from gui.redaction import redact
-from gui import theme
+from gui import icons, theme
 from gui.store import store
 
 
@@ -70,9 +70,12 @@ class SystemLogPanel(ctk.CTkFrame):
         note_header = ctk.CTkFrame(note_card, fg_color="transparent")
         note_header.pack(fill="x", padx=10, pady=(8, 2))
 
+        self._note_glyph = icons.image("bulb", theme.ICON_SM, theme.TEXT_SECONDARY)
         bulb_lbl = ctk.CTkLabel(
             note_header,
-            text="💡",
+            image=self._note_glyph,
+            text="" if self._note_glyph else "i",
+            text_color=theme.TEXT_SECONDARY,
             font=theme.font(12),
         )
         bulb_lbl.pack(side="left")
@@ -101,58 +104,78 @@ class SystemLogPanel(ctk.CTkFrame):
         store.subscribe(self._on_store_update)
 
     def _on_store_update(self, event: str, data: any):
-        if event == "system_log_added":
+        if event != "system_log_added":
+            return
+
+        # Rebuilding every row on each new line made the whole window stutter
+        # while VAVE was working, which is exactly when it must stay smooth.
+        # One new line adds one row; only a dropped line forces a rebuild.
+        if isinstance(data, dict) and "entry" in data:
+            if data.get("dropped"):
+                self._render_logs()
+            else:
+                self._append_row(data["entry"])
+                self._scroll_to_end()
+        else:
             self._render_logs()
 
     def _render_logs(self):
-        # Clear existing items
         for child in self.scroll_area.winfo_children():
             child.destroy()
+        for item in store.system_logs:
+            self._append_row(item)
+        self._scroll_to_end()
 
-        logs = store.system_logs
-        for item in logs:
-            row = ctk.CTkFrame(self.scroll_area, fg_color="transparent")
-            row.pack(fill="x", pady=6)
+    def _scroll_to_end(self):
+        """Keep the newest line in view without fighting a manual scroll."""
+        try:
+            self.scroll_area._parent_canvas.yview_moveto(1.0)
+        except Exception:
+            pass
 
-            # Time column
-            time_lbl = ctk.CTkLabel(
-                row,
-                text=item.get("time", ""),
-                font=theme.font(10),
-                text_color=theme.TEXT_MUTED,
-                width=48,
-                anchor="w",
-            )
-            time_lbl.pack(side="left", anchor="n", pady=2)
+    def _append_row(self, item):
+        row = ctk.CTkFrame(self.scroll_area, fg_color="transparent")
+        row.pack(fill="x", pady=6)
 
-            # Dot indicator
-            status = item.get("status", "working")
-            if status == "completed":
-                dot_color = theme.SUCCESS
-            elif status == "waiting" or status == "approval":
-                dot_color = theme.WARNING
-            elif status == "info":
-                dot_color = theme.TEXT_MUTED
-            else:
-                dot_color = theme.INFO
+        # Time column
+        time_lbl = ctk.CTkLabel(
+            row,
+            text=item.get("time", ""),
+            font=theme.font(10),
+            text_color=theme.TEXT_MUTED,
+            width=48,
+            anchor="w",
+        )
+        time_lbl.pack(side="left", anchor="n", pady=2)
 
-            dot_lbl = ctk.CTkLabel(
-                row,
-                text="●",
-                font=theme.font(10, "bold"),
-                text_color=dot_color,
-                width=16,
-            )
-            dot_lbl.pack(side="left", anchor="n", pady=1)
+        # Dot indicator
+        status = item.get("status", "working")
+        if status == "completed":
+            dot_color = theme.SUCCESS
+        elif status == "waiting" or status == "approval":
+            dot_color = theme.WARNING
+        elif status == "info":
+            dot_color = theme.TEXT_MUTED
+        else:
+            dot_color = theme.ACCENT_DEEP
 
-            # Description text
-            desc_lbl = ctk.CTkLabel(
-                row,
-                text=item.get("text", ""),
-                font=theme.font(11),
-                text_color=theme.TEXT_PRIMARY,
-                wraplength=170,
-                justify="left",
-                anchor="w",
-            )
-            desc_lbl.pack(side="left", fill="x", expand=True, padx=(4, 0))
+        dot_lbl = ctk.CTkLabel(
+            row,
+            text="\u25cf",
+            font=theme.font(10, "bold"),
+            text_color=dot_color,
+            width=16,
+        )
+        dot_lbl.pack(side="left", anchor="n", pady=1)
+
+        # Description text
+        desc_lbl = ctk.CTkLabel(
+            row,
+            text=item.get("text", ""),
+            font=theme.font(11),
+            text_color=theme.TEXT_PRIMARY,
+            wraplength=170,
+            justify="left",
+            anchor="w",
+        )
+        desc_lbl.pack(side="left", fill="x", expand=True, padx=(4, 0))
