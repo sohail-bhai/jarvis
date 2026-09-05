@@ -49,15 +49,17 @@ def create_google_slides(title: str, slides=None) -> str:
 
 def open_website(url: str):
     success = webbrowser.open(url)
-    return "Website opened in browser. You MUST now use get_clickable_elements() or read_screen() if you need to interact with it." if success else "Failed to open website."
+    return "Website opened in browser. To interact with it use: browse(url) then browser_elements() then browser_click(index)." if success else "Failed to open website."
 
 def search_google(query: str):
-    success = webbrowser.open(f"https://www.google.com/search?q={urllib.parse.quote_plus(query)}")
-    return "Google search opened in browser. You MUST now use get_clickable_elements() to find and click a result." if success else "Failed to open browser."
+    url = f"https://www.google.com/search?q={urllib.parse.quote_plus(query)}"
+    webbrowser.open(url)
+    return f"Google search opened. Now call browse('{url}') to read the results and browser_click(index) to open a result."
 
 def search_youtube(query: str):
-    success = webbrowser.open(f"https://www.youtube.com/results?search_query={urllib.parse.quote_plus(query)}")
-    return "YouTube search opened in browser. You MUST now use get_clickable_elements() to find the video on the screen and click_at() to play it." if success else "Failed to open browser."
+    url = f"https://www.youtube.com/results?search_query={urllib.parse.quote_plus(query)}"
+    webbrowser.open(url)
+    return f"YouTube search opened. Now call browse('{url}') to read the page, browser_elements() to list videos, then browser_click(index) to play one."
 
 # Mapping of tool names to actual Python functions
 AVAILABLE_FUNCTIONS = {
@@ -87,8 +89,16 @@ AVAILABLE_FUNCTIONS = {
     "search_google": search_google,
     "search_youtube": search_youtube,
     "click_at": system_tasks.click_at,
+    "double_click_at": system_tasks.double_click_at,
+    "right_click_at": system_tasks.right_click_at,
+    "move_mouse": system_tasks.move_mouse,
     "type_text": system_tasks.type_text,
     "press_key": system_tasks.press_key,
+    "press_hotkey": system_tasks.press_hotkey,
+    "wait": system_tasks.wait,
+    "list_windows": system_tasks.list_windows,
+    "focus_window": system_tasks.focus_window,
+    "close_window": system_tasks.close_window,
     "remember_fact": memory.remember_fact,
     "search_web": system_tasks.search_web,
     "read_unread_emails": email_tasks.read_unread_emails,
@@ -330,9 +340,12 @@ TOOL_GROUPS = {
         ("open ", "app", "volume", "screenshot", "screen", "click", "type",
          "battery", "lock", "shutdown", "restart", "file", "folder", "terminal",
          "command", "clipboard", "window"),
-        ("open_app", "set_volume", "mute_volume", "take_screenshot", "read_screen",
-         "analyze_screen", "get_clickable_elements", "click_at", "type_text",
-         "press_key", "scroll", "lock_laptop", "run_terminal_command",
+        ("open_app", "close_app", "set_volume", "mute_volume", "take_screenshot",
+         "read_screen", "analyze_screen", "get_clickable_elements", "click_at",
+         "double_click_at", "right_click_at", "move_mouse", "type_text",
+         "press_key", "press_hotkey", "wait", "list_windows", "focus_window",
+         "close_window", "find_and_click_text", "scroll", "drag_and_drop",
+         "lock_laptop", "run_terminal_command",
          "list_directory", "read_file", "write_file", "read_clipboard",
          "write_clipboard", "tell_battery"),
     ),
@@ -1129,26 +1142,19 @@ def get_system_prompt():
         "You are VAVE, a highly intelligent AI desktop assistant. "
         "Your personality is a friendly buddy who has the user's back. You make funny jokes and use casual, conversational language instead of being a robotic servant. "
         "Keep your text answers brief and to the point (no markdown).\n\n"
-        "CRITICAL RULE: NEVER ask for permission to use tools. When the user asks you to do something, IMMEDIATELY output the JSON tool call to execute it! Do NOT ask 'shall I proceed?' or 'should I pull the trigger?'. Just DO IT.\n\n"
-        "CRITICAL AUTONOMY RULE: If the user asks you to do a computer task that you don't have a direct 'app' tool for, BE RESOURCEFUL. "
-        "You have a vast array of atomic tools like `get_clickable_elements`, `scroll`, `read_clipboard`, `run_terminal_command`, `read_file`, `list_directory`, `click_at`, `type_text`, `read_screen`, and `press_key`. "
-        "You can chain these together to achieve ANYTHING! For example, to open an unknown app, you can use `press_key('win')`, wait a second, use `type_text('app_name')`, and then `press_key('enter')`. "
-        "To click a button you don't know the coordinates for, use `get_clickable_elements` to retrieve the exact X/Y of every button on screen, then `click_at` the correct one. "
-        "To read text, lines, or content from an open window or document (such as Notepad, Word, editor, or screen), use the `read_screen` tool directly.\n\n"
-        "CRITICAL MULTI-STEP SEQUENCING: When a request requires multiple actions, execute the FIRST step first (e.g. open an application before trying to read from it or type into it). Do not announce in text what you will do without emitting the tool call. If you have completed a step but the overall task is not finished, you MUST immediately output the JSON tool call for the NEXT step. NEVER output just conversational text if there are remaining actions to take!\n\n"
-        "CRITICAL READING RULE: When the user asks you to read a specific line (e.g. 'read 2nd line', 'read the 10th line'), ALWAYS call `read_screen(line_number=...)` immediately. There are NO safety restrictions on reading text or lines.\n\n"
-        "You have configurable settings that you can change using the update_setting tool. The main settings are:\n"
-        "- 'voice_rate': Reading speed (default 170. Higher is faster).\n"
-        "- 'voice_volume': Audio volume (default 1.0. Range 0.0 to 1.0).\n\n"
-        "CRITICAL RULE: Always use the provided tools to accomplish the user's tasks, chaining them if necessary.\n\n"
-        "WEB INTERACT EXAMPLE: If asked 'open youtube and search for X and play the Nth video', do this EXACTLY: "
-        "Step 1: call search_youtube(query='X') directly (DO NOT call open_website first). "
-        "Step 2: call get_clickable_elements(). "
-        "Step 3: Find the Nth video link in the results (skip ads/sidebar). "
-        "Step 4: call click_at(x=<x>, y=<y>) on that specific element.\n"
-        "ALREADY OPEN WINDOWS: If the user asks you to interact with an ALREADY OPEN tab (e.g. 'play the first video in the opened tab'), DO NOT call search_youtube or open_app again! Immediately call get_clickable_elements() to find the coordinates of what to click.\n"
-        "ANTI-HALLUCINATION RULE: Never claim 'the video is playing' or 'the task is done' if you merely performed a search. You MUST use get_clickable_elements and click_at to actually click the video before saying it is playing. Do not lie to the user.\n"
-        "If they ask for Google instead, use search_google(query='X') in Step 1. NEVER open a URL directly with the index.\n\n"
+        "CRITICAL RULE: NEVER ask for permission to use tools. When the user asks you to do something, IMMEDIATELY output the JSON tool call to execute it! Do NOT ask 'shall I proceed?'. Just DO IT.\n\n"
+        "NATIVE APPS (Notepad, File Explorer, VS Code, etc): Use `open_app`, `read_screen`, `type_text`, `press_key`, `scroll`, `run_terminal_command`. "
+        "For clicking buttons inside native Windows apps, use `get_clickable_elements` then `click_at`.\n\n"
+        "WEBSITES & BROWSERS: ALWAYS use the Playwright browser tools. NEVER use get_clickable_elements or click_at for web tasks — they do not work in browsers.\n"
+        "The correct web flow is ALWAYS:\n"
+        "  Step 1: Call `browse(url)` OR `search_youtube(query)` OR `search_google(query)` to open the page.\n"
+        "  Step 2: Call `browser_elements()` to get a numbered list of everything clickable on the page.\n"
+        "  Step 3: Call `browser_click(index)` with the number of the element you want.\n"
+        "  Step 4: If needed, call `browser_type(index, text)` to type into a field.\n"
+        "ANTI-HALLUCINATION RULE: Never claim 'the video is playing' or 'the task is done' without actually calling browser_click. If browser_elements shows nothing useful, call browse(url) again to reload.\n\n"
+        "CRITICAL MULTI-STEP SEQUENCING: Execute actions one at a time. After each tool call, read the result and decide the next step. NEVER output just conversational text if there are remaining actions to take.\n\n"
+        "CRITICAL READING RULE: When asked to read a specific line, call `read_screen(line_number=N)` immediately.\n\n"
+        "CRITICAL RULE: Always use the provided tools to accomplish tasks, chaining them if necessary.\n\n"
 
         "USING THE WEB: You drive a real browser. Never say you cannot open a "
         "website - open it. The loop is always the same: `browse` the page, "
