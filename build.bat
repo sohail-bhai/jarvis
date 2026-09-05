@@ -1,0 +1,1 @@
+.\venv\Scripts\pyinstaller --name VAVE --windowed --add-data "venv\Lib\site-packages\customtkinter;customtkinter/" --add-data "assistant;assistant/" --add-data "gui;gui/" --icon "assets\icon.ico" vave_gui.py
