@@ -216,5 +216,267 @@ class ToolSelectionTests(unittest.TestCase):
         self.assertIn("browser_click", self._names("click the login button on example.com"))
 
 
+class AtomicIntentRoutingTests(unittest.TestCase):
+    """Settled desktop actions are routed without asking the model.
+
+    Measured misuse that motivated this: asked to "copy everything on this
+    screen", the 3B model called type_text with the sentence "Copy everything
+    on this screen", which would have written those words into the user's
+    document. Asked to "undo what I just did" it replied "I need to know which
+    action you want to undo". Neither has any judgement in it - undo is ctrl+z -
+    so guessing is strictly worse than knowing.
+    """
+
+    @staticmethod
+    def _keys(command):
+        from assistant.commands import _atomic_keystroke_intent
+        found = _atomic_keystroke_intent(command)
+        return found[0] if found else None
+
+    @staticmethod
+    def _close(command):
+        from assistant.commands import _close_window_intent
+        return _close_window_intent(command)
+
+    def test_paraphrases_reach_the_right_keystroke(self):
+        for command, expected in (
+            ("undo what I just did", ["ctrl+z"]),
+            ("undo that", ["ctrl+z"]),
+            ("undo", ["ctrl+z"]),
+            ("undo the last change", ["ctrl+z"]),
+            ("redo that", ["ctrl+y"]),
+            ("copy everything on this screen", ["ctrl+a", "ctrl+c"]),
+            ("copy all the text on the screen", ["ctrl+a", "ctrl+c"]),
+            ("select all and delete", ["ctrl+a", "delete"]),
+            ("select all the text", ["ctrl+a"]),
+            ("highlight everything", ["ctrl+a"]),
+            ("save the document", ["ctrl+s"]),
+            ("save my work", ["ctrl+s"]),
+            ("save it", ["ctrl+s"]),
+            ("paste that here", ["ctrl+v"]),
+            ("cut this", ["ctrl+x"]),
+            ("refresh the page", ["f5"]),
+            ("minimise this window", ["win+down"]),
+            ("dismiss this", ["esc"]),
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(self._keys(command), expected)
+
+    def test_a_shortcut_wins_over_looking_like_a_window(self):
+        # "exit fullscreen" parses as a window named "fullscreen" and "close
+        # the tab" as the whole window; both would lose the user's work, so the
+        # keystroke table is consulted first and has to answer for them.
+        self.assertEqual(self._keys("exit fullscreen"), ["f11"])
+        self.assertEqual(self._keys("close the tab"), ["ctrl+w"])
+
+    def test_getting_rid_of_a_window_is_understood_however_phrased(self):
+        for command, expected in (
+            ("make the notepad window go away", "notepad"),
+            ("close notepad", "notepad"),
+            ("get rid of chrome", "chrome"),
+            ("quit photoshop", "photoshop"),
+            ("make brave disappear", "brave"),
+            ("get spotify off my screen", "spotify"),
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(self._close(command), expected)
+
+    def test_an_unnamed_window_means_the_one_in_focus(self):
+        # close_window() with no title closes the foreground window, so "" and
+        # None have to mean the same thing to both sides.
+        for command in ("close this window", "close it", "close"):
+            with self.subTest(command=command):
+                self.assertEqual(self._close(command), "")
+
+    def test_shutting_down_is_not_closing_a_window(self):
+        # "exit" and "quit" alone are how the user ends the session, and "shut
+        # down" is about the machine. If any of them defaulted to the window in
+        # focus, saying goodbye would close whatever the user was looking at.
+        for command in ("exit", "quit", "shut down", "shut down the laptop",
+                        "closet organizer"):
+            with self.subTest(command=command):
+                self.assertIsNone(self._close(command))
+
+    def test_ordinary_sentences_are_left_for_the_model(self):
+        # A fast path that swallows these is worse than no fast path: the user
+        # asked a question or set a compound goal, and pressing a key answers
+        # neither. "close the deal with the client" is deliberately included -
+        # it parses as a close request, and is only saved by the handler
+        # checking that such a window exists before claiming to have closed it.
+        for command in (
+            "stop the music",
+            "stop the download",
+            "stop overwatch",
+            "what should I save this as",
+            "tell me how to undo a git commit",
+            "copy the file to my desktop",
+            "save this presentation to google drive",
+            "type hello world into notepad and save it",
+            "research undo history in vim and summarise it",
+            "undo the damage that release did to our numbers",
+        ):
+            with self.subTest(command=command):
+                self.assertIsNone(self._keys(command),
+                                  f"{command!r} was hijacked as a keystroke")
+                self.assertIsNone(self._close(command),
+                                  f"{command!r} was hijacked as a window close")
+
+
+class LiteralTypingTests(unittest.TestCase):
+    """"type X" must not swallow the rest of the instruction as text.
+
+    Measured: "type hello world into notepad and save it" typed the words
+    "hello world into notepad and save it" into whatever had focus, because the
+    fast path took everything after "type " as the literal. Falling through to
+    the model costs a second; typing an instruction into the user's document
+    costs them their document.
+    """
+
+    @staticmethod
+    def _literal(remainder):
+        from assistant.commands import _literal_to_type
+        return _literal_to_type(remainder)
+
+    def test_a_compound_request_is_left_for_the_model(self):
+        for remainder in (
+            "hello world into notepad and save it",
+            "a shopping list and then save it",
+            "my name in the address bar",
+            "this in notepad",
+            "notes and close it",
+            "hello then press enter",
+        ):
+            with self.subTest(remainder=remainder):
+                self.assertEqual(self._literal(remainder), "")
+
+    def test_a_plain_literal_is_typed_as_given(self):
+        for remainder in ("hello world", "my email is a@b.com",
+                          "the quick brown fox", "2+2=4"):
+            with self.subTest(remainder=remainder):
+                self.assertEqual(self._literal(remainder), remainder)
+
+    def test_quoting_types_exactly_what_is_quoted(self):
+        # The escape hatch: the user has said where the literal ends, so the
+        # compound markers inside it are text, not instructions.
+        self.assertEqual(self._literal('"hello world into notepad and save it"'),
+                         "hello world into notepad and save it")
+        self.assertEqual(self._literal("'save it into notepad'"),
+                         "save it into notepad")
+
+
+class ModelEscalationTests(unittest.TestCase):
+    """Reasoning work gets the bigger brain; keystrokes stay on the quick one."""
+
+    def setUp(self):
+        import assistant.ai_brain as ai_brain
+        from assistant.config import get_setting
+        self.ai_brain = ai_brain
+        self.fast = get_setting("llm_model_fast", "qwen2.5:3b")
+        self.smart = get_setting("llm_model_smart", "qwen3.5:9b")
+        self._unavailable = dict(ai_brain._unavailable_models)
+        ai_brain._unavailable_models.clear()
+
+    def tearDown(self):
+        self.ai_brain._unavailable_models.clear()
+        self.ai_brain._unavailable_models.update(self._unavailable)
+
+    def test_atomic_desktop_work_stays_on_the_fast_model(self):
+        # Measured: the small model handles these well and answers in a
+        # fraction of the time. Escalating them would cost seconds per task
+        # and buy nothing.
+        for command in ("close notepad", "press ctrl+s", "what time is it",
+                        "open the run dialog and launch calculator"):
+            with self.subTest(command=command):
+                self.assertEqual(self.ai_brain.select_model(command), self.fast)
+
+    def test_reasoning_work_escalates(self):
+        for command in (
+            "research the latest news on quantum computing and summarise it",
+            "compare these two laptops and recommend one",
+            "fix the bug in my python script",
+            "rename the file report.txt to final.txt",
+            "find my hackwave presentation, open it, check the numbers against "
+            "the spreadsheet and then fix the last slide",
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(self.ai_brain.select_model(command), self.smart)
+
+    def test_a_model_that_will_not_load_is_not_chosen_again(self):
+        # `switch to high performance` pins 9B by name. On a machine too full
+        # to load it, every later request would otherwise die.
+        self.ai_brain._unavailable_models[self.smart] = \
+            self.ai_brain._DISABLE_AFTER_MISSES
+        self.assertEqual(
+            self.ai_brain.select_model("research and summarise this"), self.fast)
+
+    def test_a_single_blank_answer_does_not_disable_the_model(self):
+        # One hiccup can be memory pressure that has since passed. Giving up
+        # then would silently downgrade the rest of the session, so a model is
+        # only abandoned after several misses in a row.
+        self.ai_brain._unavailable_models[self.smart] = 1
+        self.assertEqual(
+            self.ai_brain.select_model("research and summarise this"), self.smart)
+
+    def test_losing_the_big_model_costs_quality_not_the_task(self):
+        real = self.ai_brain.query_local_llm_chat
+        asked = []
+
+        def flaky(messages, model=None, tools=None):
+            asked.append(model)
+            if model == self.smart:
+                return None if len(asked) <= 6 else {"role": "assistant",
+                                                     "content": "done"}
+            return {"role": "assistant", "content": "done"}
+
+        self.ai_brain.query_local_llm_chat = flaky
+        try:
+            # Each miss asks 9B, takes the fallback, and records one strike.
+            for run in range(3):
+                reply = self.ai_brain.chat_with_fallback([], model=self.smart)
+                self.assertEqual(reply["content"], "done")
+            self.assertEqual(asked, [self.smart, self.fast] * 3)
+
+            # Fourth call: three strikes in a row, so the dead model is skipped
+            # entirely - no full timeout before the fast answer.
+            asked.clear()
+            self.ai_brain.chat_with_fallback([], model=self.smart)
+            self.assertEqual(asked, [self.fast])
+        finally:
+            self.ai_brain.query_local_llm_chat = real
+
+
+class StoppedShortTests(unittest.TestCase):
+    """An instruction answered with a question has not been carried out."""
+
+    @staticmethod
+    def _short(request, reply, tools_run):
+        from assistant.ai_brain import _stopped_short
+        return _stopped_short(request, reply, tools_run)
+
+    def test_an_instruction_that_did_nothing_is_pushed(self):
+        self.assertTrue(self._short("undo what I just did",
+                                    "I need to know which action to undo.", 0))
+        self.assertTrue(self._short("close notepad", "", 0))
+
+    def test_an_instruction_that_ends_by_asking_is_pushed(self):
+        self.assertTrue(self._short(
+            "make the notepad window go away",
+            "Notepad is now active. What would you like to do next?", 1))
+
+    def test_a_finished_instruction_is_left_alone(self):
+        self.assertFalse(self._short("close notepad",
+                                     "Closed the window 'Untitled - Notepad'.", 1))
+
+    def test_a_question_is_never_pushed(self):
+        # The user asked for words, so words are the right answer and calling no
+        # tool is correct. Pushing here would make VAVE argue with itself.
+        for request in ("what time is it", "who wrote dune",
+                        "how do I undo a git commit", "is it raining?",
+                        "explain what a control plane is",
+                        "tell me about my calendar"):
+            with self.subTest(request=request):
+                self.assertFalse(self._short(request, "Here you go.", 0))
+
+
 if __name__ == "__main__":
     unittest.main()

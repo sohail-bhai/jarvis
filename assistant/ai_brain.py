@@ -1584,11 +1584,14 @@ def query_local_llm_chat(messages, model="qwen2.5:3b", tools=None):
         logger.info(f"[AI Brain Error] {e}")
         return None
 
-# Models that answered a request with nothing this session, usually because
-# they could not be loaded into memory. Remembered so a 9B that will not fit is
-# tried once and then left alone, rather than costing every later task a long
-# timeout before it falls back.
-_unavailable_models = set()
+# Models that answered with nothing this session, usually because they could
+# not be loaded into memory. A model is only given up on after several misses
+# in a row: one blank answer can be a hiccup, and giving up then would silently
+# downgrade the rest of the session - whereas a 9B that genuinely will not fit
+# fails every single time, so the limit only trips for models that really are
+# unserviceable.
+_unavailable_models = {}
+_DISABLE_AFTER_MISSES = 3
 
 # What Ollama actually has, asked for once. A model named in config but never
 # pulled - qwen3.5:9b is the current default and does not exist - otherwise
@@ -1634,7 +1637,8 @@ _ESCALATION_HINTS = (
     "essay", "report", "article", "email", "reply", "presentation", "slides",
     "spreadsheet", "code", "debug", "refactor", "fix the", "why does",
     "why is", "how should", "figure out", "work out", "decide", "recommend",
-    "suggest", "translate", "and then", "after that", "step by step",
+    "suggest", "translate", "rename", "organize", "organise", "convert",
+    "and then", "after that", "step by step",
 )
 
 
@@ -1650,6 +1654,11 @@ def _pinned_model():
     return pinned if pinned and pinned != fast else None
 
 
+def _is_unserviceable(model):
+    """True once a model has missed often enough to stop being worth trying."""
+    return _unavailable_models.get(model, 0) >= _DISABLE_AFTER_MISSES
+
+
 def select_model(instruction=""):
     """The model to use for this request.
 
@@ -1662,9 +1671,9 @@ def select_model(instruction=""):
 
     pinned = _pinned_model()
     if pinned:
-        return pinned if pinned not in _unavailable_models else fast
+        return fast if _is_unserviceable(pinned) else pinned
 
-    if (not smart or smart in _unavailable_models
+    if (not smart or _is_unserviceable(smart)
             or not get_setting("model_escalation_enabled", True)):
         return fast
 
@@ -1695,18 +1704,24 @@ def chat_with_fallback(messages, model=None, tools=None, instruction=""):
 
     # Already known not to load. Asking again costs a full timeout per step, so
     # a multi-step task would crawl for no benefit.
-    if chosen in _unavailable_models:
+    if _is_unserviceable(chosen):
         chosen = fast
 
     reply = query_local_llm_chat(messages, model=chosen, tools=tools)
     if reply:
+        # A model that answers clears its miss count - the failure that put it
+        # there may have been memory pressure that has since passed.
+        _unavailable_models.pop(chosen, None)
         return reply
 
     if chosen == fast:
         return reply
 
-    _unavailable_models.add(chosen)
-    logger.info(f"[VAVE] {chosen} did not respond; continuing on {fast}.")
+    misses = _unavailable_models.get(chosen, 0) + 1
+    _unavailable_models[chosen] = misses
+    if misses >= _DISABLE_AFTER_MISSES:
+        logger.info(f"[VAVE] {chosen} has missed {misses} times in a row; "
+                    f"continuing on {fast} until it answers again.")
     return query_local_llm_chat(messages, model=fast, tools=tools)
 
 
