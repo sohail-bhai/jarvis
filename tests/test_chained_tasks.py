@@ -1,0 +1,192 @@
+"""Tests for finishing a request that is made of several actions.
+
+"Open Netflix and open any profile" opened Netflix and stopped. Two things in
+the loop caused that, and both are pinned down here:
+
+* Any tool call identical to the previous one was treated as an infinite loop,
+  and the model was told to give up. Looking twice in a row is how the work is
+  actually done - click something, then list the page again to see what
+  changed - so a chain died on its second look.
+* A request was over as soon as the model produced words, however much of it
+  was still undone.
+
+Nothing here talks to Ollama or to the desktop: the model is a scripted
+sequence of replies, and the tools are recorded rather than run.
+"""
+
+import unittest
+from unittest import mock
+
+
+def _call(name, **arguments):
+    return {"function": {"name": name, "arguments": arguments}}
+
+
+def _tools(*calls):
+    return {"role": "assistant", "content": "", "tool_calls": list(calls)}
+
+
+def _says(text):
+    return {"role": "assistant", "content": text}
+
+
+class ScriptedModel:
+    """Answers with the next scripted reply, remembering what it was asked."""
+
+    def __init__(self, replies, verdicts=()):
+        self.replies = list(replies)
+        self.verdicts = list(verdicts)
+        self.prompts = []
+
+    def __call__(self, messages, model=None, tools=None):
+        self.prompts.append(list(messages))
+        # The finish check is the one call made without any tools.
+        if tools is False:
+            if self.verdicts:
+                return {"role": "assistant", "content": self.verdicts.pop(0)}
+            return {"role": "assistant", "content": "DONE"}
+        if self.replies:
+            return self.replies.pop(0)
+        return _says("Finished.")
+
+
+class ChainedTaskTests(unittest.TestCase):
+    def setUp(self):
+        from assistant import ai_brain
+
+        self.ai_brain = ai_brain
+        self.executed = []
+
+        def record(name):
+            def run(**kwargs):
+                self.executed.append((name, kwargs))
+                return f"{name} ok"
+            return run
+
+        self.fake_tools = {
+            name: record(name) for name in
+            ("browse", "browser_elements", "browser_click", "open_app",
+             "type_text", "press_key")
+        }
+
+    def _run(self, request, replies, verdicts=()):
+        model = ScriptedModel(replies, verdicts)
+        conversation = [{"role": "system", "content": "system"},
+                        {"role": "user", "content": request}]
+
+        with mock.patch.object(self.ai_brain, "query_local_llm_chat", model), \
+             mock.patch.dict(self.ai_brain.AVAILABLE_FUNCTIONS,
+                             self.fake_tools, clear=False):
+            reply = self.ai_brain._agent_loop(conversation, max_steps=12,
+                                              tools=[])
+        return reply, model
+
+    def test_looking_twice_in_a_row_does_not_end_the_task(self):
+        # browser_elements() takes no arguments, so a second look is byte for
+        # byte the same call as the first. That must not read as a stall.
+        replies = [
+            _tools(_call("browse", url="https://www.netflix.com")),
+            _tools(_call("browser_elements")),
+            _tools(_call("browser_elements")),
+            _tools(_call("browser_click", index=2)),
+            _says("Opened Netflix and picked a profile."),
+        ]
+        reply, _ = self._run("open netflix and open any profile", replies)
+
+        self.assertEqual(reply, "Opened Netflix and picked a profile.")
+        self.assertIn(("browser_click", {"index": 2}), self.executed)
+
+    def test_a_repeated_action_is_redirected_rather_than_abandoned(self):
+        # The same click over and over is a genuine stall, but the answer is to
+        # look and try another way - never "give up and tell the user".
+        replies = [
+            _tools(_call("browser_click", index=2)),
+            _tools(_call("browser_click", index=2)),
+            _tools(_call("browser_click", index=2)),
+            _says("Done."),
+        ]
+        _, model = self._run("open netflix and open any profile", replies)
+
+        nudges = [message["content"]
+                  for prompt in model.prompts for message in prompt
+                  if message.get("role") == "system"]
+        self.assertTrue(any("different action" in text for text in nudges))
+        self.assertFalse(any("Give up" in text for text in nudges))
+
+    def test_the_second_half_of_a_request_is_carried_out(self):
+        # The model announces success after the first action. The loop has to
+        # notice the profile was never picked and hand the rest back.
+        replies = [
+            _tools(_call("browse", url="https://www.netflix.com")),
+            _says("Netflix is open."),
+            _tools(_call("browser_click", index=1)),
+            _says("Profile selected."),
+        ]
+        reply, model = self._run(
+            "open netflix and open any profile", replies,
+            verdicts=["NEXT: click a profile on the Netflix page", "DONE"])
+
+        self.assertEqual(reply, "Profile selected.")
+        self.assertIn(("browser_click", {"index": 1}), self.executed)
+        pushes = [message["content"]
+                  for prompt in model.prompts for message in prompt
+                  if message.get("role") == "system"
+                  and "Still to do" in message.get("content", "")]
+        self.assertTrue(pushes)
+
+    def test_a_single_action_request_is_not_second_guessed(self):
+        # One action, done: no finish check, no extra turn.
+        replies = [
+            _tools(_call("open_app", app_name="notepad")),
+            _says("Notepad is open."),
+        ]
+        reply, model = self._run("open notepad", replies)
+
+        self.assertEqual(reply, "Notepad is open.")
+        self.assertFalse(any(prompt for prompt in model.prompts
+                             if prompt and prompt[-1]["content"].startswith(
+                                 "REQUEST:")))
+
+    def test_the_steps_of_a_request_are_named_for_the_model(self):
+        replies = [_tools(_call("open_app", app_name="notepad")),
+                   _tools(_call("type_text", text="hello")),
+                   _says("Typed it.")]
+        _, model = self._run("open notepad and type hello", replies)
+
+        first_prompt = model.prompts[0]
+        checklist = [message["content"] for message in first_prompt
+                     if message.get("role") == "system"
+                     and "steps" in message.get("content", "")]
+        self.assertTrue(checklist)
+        self.assertIn("1. open notepad", checklist[0])
+        self.assertIn("2. type hello", checklist[0])
+
+
+class StepSplittingTests(unittest.TestCase):
+    def test_requests_split_on_the_words_people_actually_use(self):
+        from assistant.ai_brain import split_steps
+
+        cases = {
+            "open netflix and open any profile":
+                ["open netflix", "open any profile"],
+            "open notepad and type hello then save it":
+                ["open notepad", "type hello", "save it"],
+            "open chrome, then go to youtube, and play lofi":
+                ["open chrome", "go to youtube", "play lofi"],
+        }
+        for request, expected in cases.items():
+            with self.subTest(request=request):
+                self.assertEqual(split_steps(request), expected)
+
+    def test_one_instruction_stays_one_step(self):
+        from assistant.ai_brain import split_steps
+
+        for request in ("open netflix",
+                        "what is the weather today",
+                        "play the song with the guitar and the drums"):
+            with self.subTest(request=request):
+                self.assertEqual(len(split_steps(request)), 1)
+
+
+if __name__ == "__main__":
+    unittest.main()

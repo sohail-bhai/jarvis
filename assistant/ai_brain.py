@@ -1585,6 +1585,125 @@ STEP_SYSTEM_NOTE = (
 )
 
 
+# Tools that only look at the machine. Calling one of these twice with the
+# same arguments is normal - it is how you see what your last click did - so
+# they never count towards the stall guard.
+INSPECTION_TOOLS = frozenset({
+    "browser_elements", "browser_read", "browser_screenshot", "browser_tabs",
+    "get_clickable_elements", "read_screen", "analyze_screen", "list_windows",
+    "take_screenshot", "list_directory", "read_file", "read_clipboard",
+    "list_shared_files", "shared_folders", "browser_wait_for", "wait",
+})
+
+# How many times the identical acting call may repeat before the model is told
+# to find another route.
+_REPEAT_LIMIT = 3
+
+# How often one request may be handed back as unfinished. Two is enough for
+# "do X and then Y" without letting a stubborn model spin.
+_MAX_COMPLETION_PUSHES = 2
+
+# Where one instruction ends and the next begins.
+_STEP_SPLIT = re.compile(
+    r"\s*(?:,\s*(?:and\s+)?then\s+|\s+and\s+then\s+|\s+then\s+"
+    r"|\s+after\s+that,?\s+|\s+and\s+also\s+|\s+and\s+|\s*;\s*)",
+    re.IGNORECASE,
+)
+
+# A clause is only a step of its own if it actually asks for something to be
+# done. "the blue one" is not a step; "play it" is.
+_ACTION_WORDS = (
+    "open", "close", "click", "select", "choose", "pick", "play", "pause",
+    "search", "find", "type", "write", "send", "save", "delete", "remove",
+    "start", "stop", "run", "launch", "go to", "sign in", "log in", "login",
+    "download", "upload", "read", "summarise", "summarize", "create", "make",
+    "set", "turn", "mute", "scroll", "copy", "paste", "rename", "move",
+    "switch", "add", "check", "look", "show", "tell", "take", "lock",
+)
+
+
+def split_steps(instruction):
+    """The separate actions in one request, in the order they were asked for.
+
+    "open netflix and open any profile" is two steps, and a task that stops
+    after the first one has not been done. Clauses that carry no action of
+    their own stay attached to nothing - they are dropped, not counted.
+    """
+    text = str(instruction or "").strip()
+    if not text:
+        return []
+
+    parts = [part.strip(" .,;:") for part in _STEP_SPLIT.split(text)]
+    steps = [part for part in parts
+             if part and any(word in part.lower() for word in _ACTION_WORDS)]
+
+    # One action, or none we recognise: the request is a single step.
+    if len(steps) < 2:
+        return [text] if text else []
+    return steps
+
+
+def _only_inspects(tool_calls):
+    """True when this turn only looked at the machine and changed nothing."""
+    names = [call.get("function", {}).get("name", "") for call in tool_calls]
+    return bool(names) and all(name in INSPECTION_TOOLS for name in names)
+
+
+def _describe_performed(performed, limit=12):
+    """The tools that actually ran, as one short line each."""
+    lines = []
+    for name, args in performed[-limit:]:
+        detail = ", ".join(f"{key}={value!r}" for key, value in
+                           list(dict(args or {}).items())[:3])
+        if len(detail) > 120:
+            detail = detail[:120] + "..."
+        lines.append(f"- {name}({detail})")
+    return "\n".join(lines) or "- nothing"
+
+
+def _remaining_work(request, performed, model_name=None):
+    """What is left of `request` after `performed`, or None when it is done.
+
+    The check is a separate turn with no tools, so it costs one short call and
+    cannot itself set anything running. It is only worth making when the
+    request asked for more than one action.
+    """
+    steps = split_steps(request)
+    if len(steps) < 2:
+        return None
+
+    verdict = query_local_llm_chat(
+        [
+            {"role": "system", "content": (
+                "You check whether a request was fully carried out. "
+                "Reply with exactly DONE if every part of it has been done. "
+                "Otherwise reply NEXT: followed by one short instruction for "
+                "the single next action. No other words."
+            )},
+            {"role": "user", "content": (
+                f"REQUEST: {request}\n"
+                f"STEPS IN IT:\n" + "\n".join(f"{i}. {step}" for i, step
+                                               in enumerate(steps, 1)) +
+                f"\nTOOLS THAT ACTUALLY RAN:\n{_describe_performed(performed)}"
+            )},
+        ],
+        model=model_name or select_model(),
+        tools=False,
+    )
+
+    answer = str((verdict or {}).get("content") or "").strip()
+    if not answer or answer.upper().startswith("DONE"):
+        return None
+
+    _, _, rest = answer.partition(":")
+    remaining = (rest or answer).strip()
+    # A model that answers with the whole request again is not telling us
+    # anything; treat that as finished rather than looping on it.
+    if not remaining or remaining.lower() == str(request).strip().lower():
+        return None
+    return remaining[:200]
+
+
 class StepCancelled(Exception):
     """The control plane stopped this step part-way through."""
 
@@ -1617,10 +1736,39 @@ def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps
                            if m.get("role") == "user"), "")
     model_name = select_model(latest_request)
 
+    # A compound request is easier to finish when its parts are named. Small
+    # models treat "open netflix and open any profile" as one thing and stop
+    # after the first half, so the steps go in as a checklist the model has to
+    # work through.
+    planned_steps = split_steps(latest_request) if tools is not False else []
+    # Injected per turn rather than appended to history: the checklist belongs
+    # to this request only, and short-term memory should not carry it into the
+    # next one.
+    injected = list(extra_messages or [])
+    if len(planned_steps) > 1:
+        injected.append({
+            "role": "system",
+            "content": (
+                "This request has "
+                f"{len(planned_steps)} steps:\n"
+                + "\n".join(f"{i}. {step}" for i, step
+                            in enumerate(planned_steps, 1))
+                + "\nCarry them out in order, one tool call at a time. After "
+                "each one, look at the result and start the next step. The "
+                "task is not finished until the last step is done, so do not "
+                "reply with words until then."
+            ),
+        })
+
     # How many tools actually ran, and whether the turn has already been pushed
     # once for stopping short. Both feed the check at the end of the loop.
     tools_run = 0
     nudged = False
+    repeats = 0
+    # Every tool actually executed, in order, so the finish check can be told
+    # what was really done rather than what the model says it did.
+    performed = []
+    completion_pushes = 0
 
     def _keep_going():
         if should_continue is not None and not should_continue:
@@ -1631,7 +1779,7 @@ def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps
 
         # Inject dynamic context into the payload without mutating history
         current_messages = list(conversation)
-        for extra in (extra_messages or []):
+        for extra in injected:
             current_messages.insert(-1, extra)
         if auto_confirm:
             current_messages.insert(-1, {"role": "system", "content": "CRITICAL EXCEPTION: You are executing a Routine. IGNORE the rule about asking for permission. DO NOT ask 'Shall I proceed?'. Execute the tool immediately."})
@@ -1649,13 +1797,33 @@ def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps
         if "tool_calls" in message and message["tool_calls"]:
             current_tool_calls_repr = str(message["tool_calls"])
             if current_tool_calls_repr == previous_tool_calls_repr:
-                logger.info("[VAVE] Caught LLM in an infinite loop! Breaking out.")
+                repeats += 1
+            else:
+                repeats = 1
+            previous_tool_calls_repr = current_tool_calls_repr
+
+            # Looking twice in a row is how the work is actually done: click,
+            # then list the page again to see what changed. Treating that as a
+            # loop is what ended chained tasks after their first action, so
+            # only a real stall - the same acting call several times over -
+            # counts, and even then the answer is to try another way rather
+            # than to give up.
+            if repeats >= _REPEAT_LIMIT and not _only_inspects(message["tool_calls"]):
+                logger.info("[VAVE] Same action %d times; asking for another route.",
+                            repeats)
                 conversation.append({
                     "role": "system",
-                    "content": "You are repeating the same tool call. It failed or wasn't helpful. Give up and tell the user."
+                    "content": (
+                        "That exact call has run several times and the state is "
+                        "not changing. Do not repeat it. Look at what is "
+                        "actually there now (`browser_elements`, "
+                        "`get_clickable_elements`, `list_windows` or "
+                        "`read_screen`) and take a different action towards the "
+                        "goal."
+                    ),
                 })
+                repeats = 0
                 continue
-            previous_tool_calls_repr = current_tool_calls_repr
 
             for tool_call in message["tool_calls"]:
                 func_name = tool_call["function"]["name"]
@@ -1684,6 +1852,7 @@ def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps
                         args_dict = guard.coerce_args(func_to_call, args_dict)
                         result = guard.call(func_to_call, **args_dict)
                         tools_run += 1
+                        performed.append((func_name, args_dict))
                         result_str = str(result) if result is not None else "Success"
 
                         if len(result_str) > 2000:
@@ -1742,6 +1911,27 @@ def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps
                 ),
             })
             continue
+
+        # "Open Netflix and pick a profile" used to end here: Netflix opened,
+        # the model said so, and the second half was never attempted. A
+        # request made of several actions is only over when every one of them
+        # has been carried out, so the remaining work is named and handed back.
+        if tools is not False and completion_pushes < _MAX_COMPLETION_PUSHES:
+            remaining = _remaining_work(latest_request, performed, model_name)
+            if remaining:
+                completion_pushes += 1
+                logger.info("[VAVE] Request not finished yet: %s", remaining)
+                conversation.append({
+                    "role": "system",
+                    "content": (
+                        f"The request is not finished. Still to do: {remaining}\n"
+                        "Do it now with your tools. Look first if you need to "
+                        "(`browser_elements` for a web page, "
+                        "`get_clickable_elements` or `list_windows` on the "
+                        "desktop), then act on what is actually there."
+                    ),
+                })
+                continue
 
         return said
 
