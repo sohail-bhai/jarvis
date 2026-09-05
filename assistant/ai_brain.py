@@ -1,4 +1,5 @@
 import logging
+import re
 logger = logging.getLogger(__name__)
 
 import json
@@ -329,7 +330,7 @@ TOOL_GROUPS = {
     ),
     "google": (
         ("email", "mail", "gmail", "inbox", "drive", "calendar", "meeting",
-         "schedule", "document", "doc", "sheet", "spreadsheet", "slides",
+         "schedule", "document", "doc", "docs", "sheet", "spreadsheet", "slides",
          "presentation", "deck"),
         ("read_unread_emails", "send_email", "summarize_gmail_inbox",
          "draft_gmail_message", "search_google_drive", "read_google_drive_file",
@@ -371,12 +372,45 @@ DEFAULT_TOOL_NAMES = (
     "read_screen", "send_telegram_update",
 )
 
-# A ceiling, because two matching groups should not undo the point of this.
+# The atomic desktop actions, offered on every single request regardless of what
+# the request looked like. These are what a goal gets built out of when no
+# purpose-built tool exists - look at the screen, focus a window, click, type,
+# press a shortcut - so they are the one thing that must never be narrowed away.
+# Leaving them out is what made "select all the text in notepad and delete it"
+# reach for clear_notes: the keyboard was simply not on the menu.
+CORE_TOOL_NAMES = (
+    "list_windows", "focus_window", "get_clickable_elements", "read_screen",
+    "click_at", "double_click_at", "right_click_at", "type_text", "press_key",
+    "scroll", "wait", "close_window",
+)
+
+# A ceiling on the task-specific tools, because two matching groups should not
+# undo the point of this. The core actions above sit outside the budget.
 MAX_TOOLS_PER_CALL = 22
 
 
+def _trigger_regex(trigger):
+    """Match a trigger on whole words, so "note" stays out of "notepad".
+
+    Triggers that already carry their own edges - "open ", ".com", "www." -
+    are left to match exactly as written.
+    """
+    pattern = re.escape(trigger)
+    if trigger[:1].isalnum():
+        pattern = r"\b" + pattern
+    if trigger[-1:].isalnum():
+        pattern = pattern + r"\b"
+    return re.compile(pattern)
+
+
+_COMPILED_GROUPS = {
+    group: ([_trigger_regex(trigger) for trigger in triggers], names)
+    for group, (triggers, names) in TOOL_GROUPS.items()
+}
+
+
 def select_tools(instruction, tools=None):
-    """The tools worth offering for this request, rather than all of them."""
+    """The tools worth offering for this request, plus the atomic ones always."""
     catalogue = tools if tools is not None else LLM_TOOLS
     text = str(instruction or "").lower()
 
@@ -384,8 +418,8 @@ def select_tools(instruction, tools=None):
     # login issue in gitlab repo x" leads with GitLab rather than with the
     # browser tools that "login" happens to match too.
     scored = []
-    for group, (triggers, names) in TOOL_GROUPS.items():
-        hits = sum(1 for trigger in triggers if trigger in text)
+    for group, (patterns, names) in _COMPILED_GROUPS.items():
+        hits = sum(1 for pattern in patterns if pattern.search(text))
         if hits:
             scored.append((hits, group, names))
 
@@ -397,16 +431,24 @@ def select_tools(instruction, tools=None):
         wanted = list(DEFAULT_TOOL_NAMES)
 
     chosen, seen = [], set()
-    for name in wanted:
+
+    def offer(name):
         if name in seen:
-            continue
+            return
         schema = next((item for item in catalogue
                        if item["function"]["name"] == name), None)
         if schema is not None:
             chosen.append(schema)
             seen.add(name)
+
+    for name in wanted:
+        offer(name)
         if len(chosen) >= MAX_TOOLS_PER_CALL:
             break
+
+    # Added last so a crowded group cannot push the fallback off the list.
+    for name in CORE_TOOL_NAMES:
+        offer(name)
 
     return chosen or catalogue
 
@@ -774,7 +816,13 @@ LLM_TOOLS = WEB_TOOLS + [
         "type": "function",
         "function": {
             "name": "get_clickable_elements",
-            "description": "Scans the current active window and returns a list of clickable elements with their text and (x, y) coordinates."
+            "description": "Scans a window and returns every clickable element with its label, kind and exact (x, y) coordinates for click_at. Defaults to the window in focus; pass window_title to inspect a different one. This is the most reliable way to see what is on screen.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "window_title": {"type": "string", "description": "Optional full or partial window title to scan instead of the focused window."}
+                }
+            }
         }
     },
     {
@@ -940,11 +988,11 @@ LLM_TOOLS = WEB_TOOLS + [
         "type": "function",
         "function": {
             "name": "press_key",
-            "description": "Presses a specific keyboard key (e.g., 'enter', 'tab', 'esc', 'space').",
+            "description": "Presses a keyboard key or shortcut. Accepts a single key ('enter', 'tab', 'esc') or a combination ('ctrl+s', 'ctrl+shift+n', 'alt+f4', 'win+r'). Use this for saving, copying, selecting all, closing, and opening the Run dialog.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "key": {"type": "string", "description": "The key to press"}
+                    "key": {"type": "string", "description": "The key or combination, e.g. 'enter' or 'ctrl+s'"}
                 },
                 "required": ["key"]
             }
@@ -953,8 +1001,115 @@ LLM_TOOLS = WEB_TOOLS + [
     {
         "type": "function",
         "function": {
+            "name": "press_hotkey",
+            "description": "Presses a keyboard shortcut such as 'ctrl+s', 'ctrl+c', 'alt+tab' or 'win+r'. Modifiers are held down for the final key.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "keys": {"type": "string", "description": "The shortcut, e.g. 'ctrl+shift+esc'"}
+                },
+                "required": ["keys"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "wait",
+            "description": "Pauses for a moment so the interface can catch up. Use after opening an app or clicking something before reading the screen again.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "seconds": {"type": "number", "description": "How long to wait, between 0 and 30 (default 1)"}
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_windows",
+            "description": "Lists the open application windows and marks which one is in focus. Use this first when a task involves a specific app so you can focus the right window.",
+            "parameters": {"type": "object", "properties": {}}
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "focus_window",
+            "description": "Brings a window to the front by its title so that clicks and typing land in the right application.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Full or partial window title, e.g. 'Notepad' or 'Chrome'"}
+                },
+                "required": ["title"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "close_window",
+            "description": "Closes a window by title, or the window currently in focus when no title is given. This closes a window, unlike close_app which terminates the whole process.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Full or partial window title. Omit to close the window in focus."}
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "click_at",
             "description": "Clicks at specific screen coordinates (x, y). Use get_clickable_elements first to find exact coordinates of buttons.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "x": {"type": "integer", "description": "The X screen coordinate"},
+                    "y": {"type": "integer", "description": "The Y screen coordinate"}
+                },
+                "required": ["x", "y"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "double_click_at",
+            "description": "Double-clicks at screen coordinates. Use to open a file or folder from a list, or to select a word.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "x": {"type": "integer", "description": "The X screen coordinate"},
+                    "y": {"type": "integer", "description": "The Y screen coordinate"}
+                },
+                "required": ["x", "y"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "right_click_at",
+            "description": "Right-clicks at screen coordinates to open a context menu. Follow with get_clickable_elements to read the menu items.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "x": {"type": "integer", "description": "The X screen coordinate"},
+                    "y": {"type": "integer", "description": "The Y screen coordinate"}
+                },
+                "required": ["x", "y"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "move_mouse",
+            "description": "Moves the mouse pointer without clicking, to reveal a hover menu or tooltip.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -1145,6 +1300,31 @@ def get_system_prompt():
         "CRITICAL RULE: NEVER ask for permission to use tools. When the user asks you to do something, IMMEDIATELY output the JSON tool call to execute it! Do NOT ask 'shall I proceed?'. Just DO IT.\n\n"
         "NATIVE APPS (Notepad, File Explorer, VS Code, etc): Use `open_app`, `read_screen`, `type_text`, `press_key`, `scroll`, `run_terminal_command`. "
         "For clicking buttons inside native Windows apps, use `get_clickable_elements` then `click_at`.\n\n"
+
+        "NO TOOL FOR IT? BUILD THE TASK OUT OF THE BASIC ONES. There is no such "
+        "thing as a desktop task you cannot attempt. When nothing purpose-built "
+        "exists, drive the computer the way a person would, with these:\n"
+        "  LOOK:  `list_windows` (what is open, and what has focus), "
+        "`get_clickable_elements` (every button with its exact x/y - pass "
+        "window_title to inspect a window that is not in focus), `read_screen` "
+        "(the text), `analyze_screen` (the layout).\n"
+        "  ACT:   `focus_window`, `click_at`, `double_click_at` (open a file from "
+        "a list), `right_click_at` (context menu), `move_mouse` (reveal a hover "
+        "menu), `type_text`, `press_key` (single keys AND shortcuts like "
+        "'ctrl+s', 'ctrl+a', 'alt+f4', 'win+r'), `scroll`, `drag_and_drop`, "
+        "`close_window`, `run_terminal_command`.\n"
+        "  SETTLE: `wait` after opening an app or clicking, before you look again.\n"
+        "The loop that works: focus the right window, LOOK, act on what is "
+        "ACTUALLY listed, wait, then LOOK again to confirm it worked. Examples: "
+        "to open any app, `press_key('win+r')` then `type_text(name)` then "
+        "`press_key('enter')`. To save, `press_key('ctrl+s')`. To rename a file, "
+        "`right_click_at` it and read the menu. To reach a menu item, click the "
+        "menu then `get_clickable_elements` again - the menu's items only exist "
+        "once it is open.\n"
+        "Two rules while doing this: never invent coordinates, only ever click "
+        "an x/y that a tool actually returned; and if a scan comes back nearly "
+        "empty the window is probably not in focus, so `focus_window` and scan "
+        "again rather than guessing.\n\n"
         "WEBSITES & BROWSERS: ALWAYS use the Playwright browser tools. NEVER use get_clickable_elements or click_at for web tasks — they do not work in browsers.\n"
         "The correct web flow is ALWAYS:\n"
         "  Step 1: Call `browse(url)` OR `search_youtube(query)` OR `search_google(query)` to open the page.\n"
@@ -1154,6 +1334,10 @@ def get_system_prompt():
         "ANTI-HALLUCINATION RULE: Never claim 'the video is playing' or 'the task is done' without actually calling browser_click. If browser_elements shows nothing useful, call browse(url) again to reload.\n\n"
         "CRITICAL MULTI-STEP SEQUENCING: Execute actions one at a time. After each tool call, read the result and decide the next step. NEVER output just conversational text if there are remaining actions to take.\n\n"
         "CRITICAL READING RULE: When asked to read a specific line, call `read_screen(line_number=N)` immediately.\n\n"
+        "TOOL ERROR RECOVERY RULE: If a tool returns an error or 'Failed', do NOT give up! Immediately try an alternate approach. "
+        "For example: if get_clickable_elements fails → use browse(url) + browser_elements() + browser_click(). "
+        "If open_app fails → use press_key('win') + type_text(name) + press_key('enter'). "
+        "If focus_window fails → use click_at on the taskbar. Always keep trying until the user's goal is achieved.\n\n"
         "CRITICAL RULE: Always use the provided tools to accomplish tasks, chaining them if necessary.\n\n"
 
         "USING THE WEB: You drive a real browser. Never say you cannot open a "
@@ -1294,7 +1478,7 @@ class StepCancelled(Exception):
     """The control plane stopped this step part-way through."""
 
 
-def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps=5,
+def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps=12,
                 should_continue=None, authorize=None, resolve_secrets=None,
                 tools=None):
     """Run the tool-calling loop over `conversation`, which is mutated in place.
