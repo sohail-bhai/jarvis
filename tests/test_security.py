@@ -25,11 +25,26 @@ class TierTests(unittest.TestCase):
         self.assertEqual(self.guard.tier_of("some_tool_nobody_listed"),
                          "sensitive")
 
-    def test_the_keyboard_and_the_shell_are_destructive(self):
-        for tool in ("press_key", "type_text", "run_terminal_command",
-                     "write_file", "shutdown_laptop"):
+    def test_the_shell_and_the_filesystem_are_destructive(self):
+        for tool in ("run_terminal_command", "write_file", "shutdown_laptop",
+                     "restart_laptop", "gitlab_merge"):
             with self.subTest(tool=tool):
                 self.assertEqual(self.guard.tier_of(tool), "destructive")
+
+    def test_the_tier_of_a_keypress_comes_from_the_key(self):
+        # Confirming every keystroke would make the assistant unusable, so
+        # typing is sensitive and only the keys that close, quit or open a
+        # command box are destructive.
+        self.assertEqual(self.guard.tier_of("type_text"), "sensitive")
+        self.assertEqual(
+            self.guard._tier_for_call("press_key", {"key": "ctrl+s"}),
+            "sensitive")
+
+        for chord in ("alt+f4", "win+r", "ctrl+w", "ctrl+alt+delete"):
+            with self.subTest(chord=chord):
+                self.assertEqual(
+                    self.guard._tier_for_call("press_key", {"key": chord}),
+                    "destructive")
 
     def test_clicking_and_the_browser_are_at_least_sensitive(self):
         # A click can submit a form, buy something, or confirm a dialog.

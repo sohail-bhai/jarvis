@@ -36,6 +36,30 @@ _REGISTRY = {
 # message press ctrl+a and type over whatever had focus with no confirmation.
 UNCLASSIFIED_TIER = "sensitive"
 
+# Typing is how most work gets done, so asking before every keystroke would
+# make the assistant unusable. What matters is which keys: alt+f4 closes
+# whatever has focus, win+r opens a command box, ctrl+w shuts a tab. The tier
+# for these comes from the arguments rather than the tool name.
+DESTRUCTIVE_CHORDS = frozenset({
+    "alt+f4", "ctrl+w", "ctrl+q", "ctrl+shift+q", "win+r", "win+l",
+    "ctrl+alt+delete", "alt+f4 ", "cmd+q", "cmd+w", "shift+delete",
+})
+
+
+def _chord_of(args):
+    value = (args or {}).get("key") or (args or {}).get("keys") or ""
+    return str(value).lower().replace(" ", "")
+
+
+def _tier_for_call(tool_name: str, args: dict) -> str:
+    """The tier this particular call earns, arguments included."""
+    tier = tier_of(tool_name)
+    if tool_name in ("press_key", "press_hotkey"):
+        chord = _chord_of(args)
+        if chord in DESTRUCTIVE_CHORDS:
+            return "destructive"
+    return tier
+
 # Tools that send something out of the machine, or hand something to another
 # system. A web page that has just been read must not be able to trigger one
 # of these without the user seeing it first.
@@ -84,7 +108,7 @@ def _evaluate_policy(tool_name: str, args: dict, origin: str) -> bool:
     if origin_policy.get("mode") == "deny_all":
         return False
         
-    tier = tier_of(tool_name)
+    tier = _tier_for_call(tool_name, args)
 
     # Content from a web page or the screen is data, not instruction. Once a
     # task has read some, the tools that could act on what it says get a

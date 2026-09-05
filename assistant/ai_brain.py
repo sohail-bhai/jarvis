@@ -2372,10 +2372,7 @@ def run_task_step(instruction, context="", auto_confirm=True,
 DESTRUCTIVE_TOOLS = [
     "run_terminal_command", "shutdown_laptop", "restart_laptop", "clear_notes",
     "write_file", "disable_voice_input", "disable_speech_output",
-    # The keyboard is the most powerful tool in the set: alt+f4, ctrl+a then
-    # delete, win+r and any command at all.
-    "press_key", "press_hotkey", "type_text", "write_to_screen_line",
-    "gitlab_merge", "gitlab_propose_fix", "lock_laptop",
+    "gitlab_merge", "gitlab_propose_fix",
 ]
 
 SENSITIVE_TOOLS = [
@@ -2389,6 +2386,11 @@ SENSITIVE_TOOLS = [
     # confirm a dialog, and VAVE cannot know which until it has happened.
     "click_at", "double_click_at", "right_click_at", "drag_and_drop",
     "close_window", "scroll", "move_mouse",
+    # Typing is how most work gets done. The dangerous part is which keys, and
+    # the guard reads the chord itself: alt+f4 and win+r are destructive, the
+    # alphabet is not.
+    "press_key", "press_hotkey", "type_text", "write_to_screen_line",
+    "lock_laptop",
     # The browser reaches the outside world, and a form is a form.
     "browse", "browser_click", "browser_type", "browser_press",
     "browser_fill_form", "browser_ask_site", "browser_new_tab",
