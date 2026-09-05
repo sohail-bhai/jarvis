@@ -84,8 +84,12 @@ class HomePage(ctk.CTkScrollableFrame):
         ).pack(anchor="w", pady=(2, 0))
 
         # Right date badge
+        # Format date safely cross-platform. %d is zero-padded.
         now = datetime.datetime.now()
-        date_str = now.strftime("%a, %-d %b %Y") if hasattr(now, "strftime") else "Thu, 4 Sep 2025"
+        date_str = now.strftime("%a, %d %b %Y") if hasattr(now, "strftime") else "Thu, 04 Sep 2025"
+        # Optional: remove zero padding from day (e.g. '04' -> '4') by replacing ' 0' with ' '
+        date_str = date_str.replace(" 0", " ")
+        
         date_badge = ctk.CTkLabel(
             header_frame,
             text=date_str,
