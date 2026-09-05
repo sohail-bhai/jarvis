@@ -54,7 +54,7 @@ class ActivityPage(ctk.CTkScrollableFrame):
                 text_color="#FFFFFF" if f == "All" else theme.TEXT_SECONDARY,
                 border_width=0 if f == "All" else 1,
                 border_color=theme.CARD_BORDER,
-                corner_radius=theme.RADIUS_CARD,
+                corner_radius=12,
                 height=28,
                 command=lambda cat=f: self._set_filter(cat),
             )
@@ -100,14 +100,14 @@ class ActivityPage(ctk.CTkScrollableFrame):
                 fg_color=theme.CARD_BG,
                 border_width=1,
                 border_color=theme.CARD_BORDER,
-                corner_radius=theme.RADIUS_CARD,
+                corner_radius=12,
             )
             card.pack(fill="x", pady=4)
 
             row = ctk.CTkFrame(card, fg_color="transparent")
             row.pack(fill="x", padx=14, pady=12)
 
-            time_box = ctk.CTkFrame(row, fg_color=theme.MAIN_BG, corner_radius=theme.RADIUS_CONTROL, width=74, height=36)
+            time_box = ctk.CTkFrame(row, fg_color=theme.MAIN_BG, corner_radius=8, width=74, height=36)
             time_box.pack(side="left", padx=(0, 12))
             time_box.pack_propagate(False)
             ctk.CTkLabel(time_box, text=item["time"], font=theme.font(10, "bold"), text_color=theme.TEXT_PRIMARY).pack(expand=True)

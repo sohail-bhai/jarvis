@@ -98,6 +98,19 @@ def local_ai_status():
             "detail": "Start Ollama to let VAVE think locally."}
 
 
+def featherless_status():
+    """The optional hosted brain. Off unless the switch is on and a key is set."""
+    if not get_setting("featherless_enabled", False):
+        return {"connected": False, "label": "Off",
+                "detail": "VAVE is thinking locally. Turn this on to use Featherless."}
+    if not _has_setting("featherless_api_key"):
+        return {"connected": False, "label": "Needs a key",
+                "detail": "Add your Featherless key in Settings to use it."}
+    model = get_setting("featherless_model", "")
+    return {"connected": True, "label": "On",
+            "detail": f"Thinking with {model} on Featherless."}
+
+
 def computer_status():
     return {"connected": True, "label": "Online",
             "detail": "This computer is ready for VAVE to use."}
@@ -145,6 +158,7 @@ def all_integrations():
         ("Email", gmail_status()),
         ("Phone", phone_status()),
         ("Local AI", local_ai_status()),
+        ("Featherless", featherless_status()),
         ("Internet", internet_status()),
         ("Screen reading", screen_reading_status()),
         ("Browser tasks", browser_automation_status()),

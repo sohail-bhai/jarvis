@@ -5,7 +5,7 @@ Universal file search across Computer, Phone, Server, and Google Drive.
 from __future__ import annotations
 
 import customtkinter as ctk
-from gui import icons, theme
+from gui import theme
 from gui.store import store
 
 
@@ -45,12 +45,18 @@ class FilesPage(ctk.CTkScrollableFrame):
             fg_color=theme.CARD_BG,
             border_width=1,
             border_color=theme.CARD_BORDER,
-            corner_radius=theme.RADIUS_CARD,
+            corner_radius=14,
         )
         search_card.pack(fill="x", padx=16, pady=(0, 12))
 
         search_row = ctk.CTkFrame(search_card, fg_color="transparent")
         search_row.pack(fill="x", padx=14, pady=8)
+
+        ctk.CTkLabel(
+            search_row,
+            text="🔍",
+            font=theme.font(13),
+        ).pack(side="left", padx=(0, 8))
 
         self.search_entry = ctk.CTkEntry(
             search_row,
@@ -79,7 +85,7 @@ class FilesPage(ctk.CTkScrollableFrame):
                 text_color="#FFFFFF" if cat == "All" else theme.TEXT_SECONDARY,
                 border_width=0 if cat == "All" else 1,
                 border_color=theme.CARD_BORDER,
-                corner_radius=theme.RADIUS_CARD,
+                corner_radius=12,
                 height=28,
                 command=lambda c=cat: self._set_filter(c),
             )
@@ -127,7 +133,7 @@ class FilesPage(ctk.CTkScrollableFrame):
             files = [f for f in files if query in f.get("name", "").lower() or query in f.get("folder", "").lower()]
 
         if not files:
-            empty_box = ctk.CTkFrame(self.results_container, fg_color=theme.CARD_BG, corner_radius=theme.RADIUS_CARD)
+            empty_box = ctk.CTkFrame(self.results_container, fg_color=theme.CARD_BG, corner_radius=12)
             empty_box.pack(fill="x", pady=20, padx=4)
             ctk.CTkLabel(
                 empty_box,
@@ -144,25 +150,18 @@ class FilesPage(ctk.CTkScrollableFrame):
                 fg_color=theme.CARD_BG,
                 border_width=1,
                 border_color=theme.CARD_BORDER,
-                corner_radius=theme.RADIUS_CARD,
+                corner_radius=12,
             )
             card.pack(fill="x", pady=4)
 
             row = ctk.CTkFrame(card, fg_color="transparent")
             row.pack(fill="x", padx=14, pady=12)
 
-            name = file_item.get("name", "")
-            extension = name.rsplit(".", 1)[-1].upper() if "." in name else "FILE"
             ctk.CTkLabel(
                 row,
-                text=extension[:4],
-                font=theme.font(theme.SIZE_LABEL, "bold"),
-                text_color=theme.TEXT_SECONDARY,
-                fg_color=theme.SURFACE_SUBTLE,
-                corner_radius=theme.RADIUS_CHIP,
-                width=40,
-                height=40,
-            ).pack(side="left", padx=(0, 14))
+                text=file_item.get("icon", "📄"),
+                font=theme.font(20),
+            ).pack(side="left", padx=(0, 12))
 
             info_col = ctk.CTkFrame(row, fg_color="transparent")
             info_col.pack(side="left", fill="both", expand=True)
@@ -197,7 +196,7 @@ class FilesPage(ctk.CTkScrollableFrame):
                 text_color=theme.TEXT_PRIMARY,
                 border_width=1,
                 border_color=theme.CARD_BORDER,
-                corner_radius=theme.RADIUS_CONTROL,
+                corner_radius=8,
                 width=96,
                 height=28,
                 command=lambda f=file_item: store.add_system_log(f"Sent {f.get('name')} to your phone", "completed"),
@@ -210,7 +209,7 @@ class FilesPage(ctk.CTkScrollableFrame):
                 fg_color=theme.ACCENT,
                 hover_color=theme.ACCENT_HOVER,
                 text_color="#FFFFFF",
-                corner_radius=theme.RADIUS_CONTROL,
+                corner_radius=8,
                 width=54,
                 height=28,
                 command=lambda f=file_item: store.open_drawer("file", f),

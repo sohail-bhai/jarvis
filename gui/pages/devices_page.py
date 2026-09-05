@@ -67,7 +67,7 @@ class DevicesPage(ctk.CTkScrollableFrame):
             fg_color=theme.CARD_BG,
             border_width=1,
             border_color=theme.CARD_BORDER,
-            corner_radius=theme.RADIUS_CARD,
+            corner_radius=14,
         )
         card.pack(fill="x", padx=16, pady=(0, 16))
 
@@ -79,7 +79,7 @@ class DevicesPage(ctk.CTkScrollableFrame):
 
         ctk.CTkLabel(
             title_row,
-            text="Connect your phone",
+            text="📱  Connect your phone",
             font=theme.font(14, "bold"),
             text_color=theme.TEXT_PRIMARY,
         ).pack(side="left")
@@ -90,7 +90,7 @@ class DevicesPage(ctk.CTkScrollableFrame):
             font=theme.font(11, "bold"),
             text_color=theme.TEXT_MUTED,
             fg_color=theme.MAIN_BG,
-            corner_radius=theme.RADIUS_CONTROL,
+            corner_radius=10,
             padx=10,
             pady=3,
         )
@@ -118,7 +118,7 @@ class DevicesPage(ctk.CTkScrollableFrame):
             fg_color=theme.ACCENT,
             hover_color=theme.ACCENT_HOVER,
             text_color=theme.TEXT_LIGHT,
-            corner_radius=theme.RADIUS_CONTROL,
+            corner_radius=8,
             width=110,
             height=30,
             command=self._toggle_server,
@@ -134,7 +134,7 @@ class DevicesPage(ctk.CTkScrollableFrame):
             text_color=theme.TEXT_PRIMARY,
             border_width=1,
             border_color=theme.CARD_BORDER,
-            corner_radius=theme.RADIUS_CONTROL,
+            corner_radius=8,
             width=150,
             height=30,
             command=self._show_pairing_code,
@@ -214,7 +214,7 @@ class DevicesPage(ctk.CTkScrollableFrame):
             fg_color=theme.CARD_BG,
             border_width=1,
             border_color=theme.CARD_BORDER,
-            corner_radius=theme.RADIUS_CARD,
+            corner_radius=14,
         )
         card.grid(row=r, column=c, padx=6, pady=6, sticky="nsew")
 
@@ -270,7 +270,7 @@ class DevicesPage(ctk.CTkScrollableFrame):
             text_color=theme.TEXT_PRIMARY,
             border_width=1,
             border_color=theme.CARD_BORDER,
-            corner_radius=theme.RADIUS_CONTROL,
+            corner_radius=8,
             width=64,
             height=28,
             command=lambda d=dev: store.open_drawer("device", d),

@@ -91,7 +91,7 @@ class GooglePage(ctk.CTkScrollableFrame):
             font=theme.font(11, "bold"),
             text_color=theme.TEXT_SECONDARY,
             fg_color=theme.MAIN_BG,
-            corner_radius=theme.RADIUS_CONTROL,
+            corner_radius=10,
             padx=10,
             pady=4,
         )
@@ -104,7 +104,7 @@ class GooglePage(ctk.CTkScrollableFrame):
             fg_color=theme.ACCENT,
             hover_color=theme.ACCENT_HOVER,
             text_color="#FFFFFF",
-            corner_radius=theme.RADIUS_CONTROL,
+            corner_radius=8,
             height=28,
             width=130,
             command=self._connect,
@@ -126,7 +126,7 @@ class GooglePage(ctk.CTkScrollableFrame):
             font=theme.font(11),
             text_color=theme.TEXT_PRIMARY,
             fg_color=theme.WARNING_LIGHT,
-            corner_radius=theme.RADIUS_CONTROL,
+            corner_radius=10,
             anchor="w",
             justify="left",
             wraplength=760,
@@ -148,7 +148,7 @@ class GooglePage(ctk.CTkScrollableFrame):
                 text_color="#FFFFFF" if name == "Overview" else theme.TEXT_SECONDARY,
                 border_width=0 if name == "Overview" else 1,
                 border_color=theme.CARD_BORDER,
-                corner_radius=theme.RADIUS_CARD,
+                corner_radius=12,
                 height=28,
                 command=lambda chosen=name: self._switch_tab(chosen),
             )
@@ -341,7 +341,7 @@ class GooglePage(ctk.CTkScrollableFrame):
                 fg_color=bg,
                 border_width=1,
                 border_color=border,
-                corner_radius=theme.RADIUS_CARD,
+                corner_radius=12,
                 height=84,
             )
             card.grid(row=0, column=idx, padx=4, sticky="nsew")
@@ -360,7 +360,7 @@ class GooglePage(ctk.CTkScrollableFrame):
                          text_color=theme.TEXT_MUTED).pack(anchor="w")
 
         actions_card = ctk.CTkFrame(self.tab_container, fg_color=theme.CARD_BG,
-                                    corner_radius=theme.RADIUS_CARD, border_width=1,
+                                    corner_radius=14, border_width=1,
                                     border_color=theme.CARD_BORDER)
         actions_card.pack(fill="x", pady=8)
 
@@ -383,7 +383,7 @@ class GooglePage(ctk.CTkScrollableFrame):
                 hover_color=theme.CARD_BORDER,
                 text_color=theme.TEXT_PRIMARY,
                 anchor="w",
-                corner_radius=theme.RADIUS_CONTROL,
+                corner_radius=8,
                 height=32,
                 command=lambda chosen=target: self._switch_tab(chosen),
             ).pack(fill="x", padx=16, pady=3)
@@ -394,10 +394,10 @@ class GooglePage(ctk.CTkScrollableFrame):
 
     def _render_drive(self):
         search_row = ctk.CTkFrame(self.tab_container, fg_color=theme.CARD_BG,
-                                  corner_radius=theme.RADIUS_CARD, border_width=1,
+                                  corner_radius=12, border_width=1,
                                   border_color=theme.CARD_BORDER)
         search_row.pack(fill="x", pady=(0, 12))
-        ctk.CTkLabel(search_row, text="Search", font=theme.font(11), text_color=theme.TEXT_MUTED).pack(side="left", padx=(12, 4))
+        ctk.CTkLabel(search_row, text=" 🔍", font=theme.font(12)).pack(side="left", padx=8)
 
         entry = ctk.CTkEntry(
             search_row,
@@ -429,7 +429,7 @@ class GooglePage(ctk.CTkScrollableFrame):
             fg_color=theme.ACCENT,
             hover_color=theme.ACCENT_HOVER,
             text_color="#FFFFFF",
-            corner_radius=theme.RADIUS_CONTROL,
+            corner_radius=8,
             width=80,
             height=26,
             command=run_search,
@@ -447,7 +447,7 @@ class GooglePage(ctk.CTkScrollableFrame):
             return
 
         for item in files:
-            card = ctk.CTkFrame(parent, fg_color=theme.CARD_BG, corner_radius=theme.RADIUS_CARD,
+            card = ctk.CTkFrame(parent, fg_color=theme.CARD_BG, corner_radius=12,
                                 border_width=1, border_color=theme.CARD_BORDER)
             card.pack(fill="x", pady=4)
 
@@ -478,7 +478,7 @@ class GooglePage(ctk.CTkScrollableFrame):
                 fg_color=theme.ACCENT if link else theme.MAIN_BG,
                 hover_color=theme.ACCENT_HOVER if link else theme.CARD_BORDER,
                 text_color="#FFFFFF" if link else theme.TEXT_MUTED,
-                corner_radius=theme.RADIUS_CONTROL,
+                corner_radius=8,
                 height=26,
                 state="normal" if link else "disabled",
                 command=lambda url=link, name=item.get("name", ""): self._open_link(url, name),
@@ -510,7 +510,7 @@ class GooglePage(ctk.CTkScrollableFrame):
             card = ctk.CTkFrame(
                 self.tab_container,
                 fg_color=theme.INFO_LIGHT if unread else theme.CARD_BG,
-                corner_radius=theme.RADIUS_CARD,
+                corner_radius=12,
                 border_width=1,
                 border_color=theme.INFO_BORDER if unread else theme.CARD_BORDER,
             )
@@ -546,7 +546,7 @@ class GooglePage(ctk.CTkScrollableFrame):
                 fg_color=theme.ACCENT,
                 hover_color=theme.ACCENT_HOVER,
                 text_color="#FFFFFF",
-                corner_radius=theme.RADIUS_CONTROL,
+                corner_radius=8,
                 height=26,
                 command=lambda message=email: self._draft_reply(message),
             ).pack(side="right", padx=4)
@@ -589,7 +589,7 @@ class GooglePage(ctk.CTkScrollableFrame):
 
         for event in events:
             card = ctk.CTkFrame(self.tab_container, fg_color=theme.CARD_BG,
-                                corner_radius=theme.RADIUS_CARD, border_width=1,
+                                corner_radius=12, border_width=1,
                                 border_color=theme.CARD_BORDER)
             card.pack(fill="x", pady=4)
 
@@ -599,7 +599,7 @@ class GooglePage(ctk.CTkScrollableFrame):
             start = event.get("start", {})
             when = start.get("dateTime") or start.get("date") or ""
 
-            time_box = ctk.CTkFrame(row, fg_color=theme.MAIN_BG, corner_radius=theme.RADIUS_CONTROL,
+            time_box = ctk.CTkFrame(row, fg_color=theme.MAIN_BG, corner_radius=8,
                                     width=110, height=36)
             time_box.pack(side="left", padx=(0, 12))
             time_box.pack_propagate(False)
@@ -621,7 +621,7 @@ class GooglePage(ctk.CTkScrollableFrame):
 
     def _render_docs(self):
         card = ctk.CTkFrame(self.tab_container, fg_color=theme.CARD_BG,
-                            corner_radius=theme.RADIUS_CARD, border_width=1,
+                            corner_radius=14, border_width=1,
                             border_color=theme.CARD_BORDER)
         card.pack(fill="x", pady=4)
 
@@ -654,7 +654,7 @@ class GooglePage(ctk.CTkScrollableFrame):
             fg_color=theme.ACCENT,
             hover_color=theme.ACCENT_HOVER,
             text_color="#FFFFFF",
-            corner_radius=theme.RADIUS_CONTROL,
+            corner_radius=8,
             height=30,
             command=lambda: self._create("google.docs.create", entry.get().strip(),
                                          "document"),
@@ -669,7 +669,7 @@ class GooglePage(ctk.CTkScrollableFrame):
             text_color=theme.TEXT_PRIMARY,
             border_width=1,
             border_color=theme.CARD_BORDER,
-            corner_radius=theme.RADIUS_CONTROL,
+            corner_radius=8,
             height=30,
             command=lambda: self._create("google.slides.create", entry.get().strip(),
                                          "presentation"),

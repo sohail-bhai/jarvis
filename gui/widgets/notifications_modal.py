@@ -31,7 +31,7 @@ class NotificationsModal(ctk.CTkToplevel):
         y = parent_y + 60
         self.geometry(f"+{max(10, x)}+{max(10, y)}")
 
-        container = ctk.CTkFrame(self, fg_color=theme.CARD_BG, corner_radius=theme.RADIUS_CARD)
+        container = ctk.CTkFrame(self, fg_color=theme.CARD_BG, corner_radius=14)
         container.pack(fill="both", expand=True, padx=16, pady=16)
 
         # Header
@@ -65,7 +65,7 @@ class NotificationsModal(ctk.CTkToplevel):
                 fg_color=theme.MAIN_BG if not notif.get("unread") else theme.INFO_LIGHT,
                 border_width=1,
                 border_color=theme.INFO_BORDER if notif.get("unread") else theme.CARD_BORDER,
-                corner_radius=theme.RADIUS_CONTROL,
+                corner_radius=10,
             )
             card.pack(fill="x", pady=4)
 

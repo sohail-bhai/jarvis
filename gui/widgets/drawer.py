@@ -16,7 +16,7 @@ class DetailDrawer(ctk.CTkFrame):
             parent,
             width=300,
             fg_color=theme.CARD_BG,
-            corner_radius=theme.RADIUS_CARD,
+            corner_radius=14,
             border_width=1,
             border_color=theme.CARD_BORDER,
         )
@@ -45,7 +45,7 @@ class DetailDrawer(ctk.CTkFrame):
             fg_color=theme.MAIN_BG,
             hover_color=theme.CARD_BORDER,
             text_color=theme.TEXT_SECONDARY,
-            corner_radius=theme.RADIUS_CARD,
+            corner_radius=14,
             command=self.on_close,
         )
         close_btn.pack(side="right")
@@ -80,7 +80,7 @@ class DetailDrawer(ctk.CTkFrame):
         self.title_lbl.configure(text=data.get("name", "Device Details"))
 
         # Status badge
-        status_box = ctk.CTkFrame(self.content_area, fg_color=theme.SUCCESS_LIGHT, corner_radius=theme.RADIUS_CONTROL)
+        status_box = ctk.CTkFrame(self.content_area, fg_color=theme.SUCCESS_LIGHT, corner_radius=8)
         status_box.pack(fill="x", pady=(4, 14), padx=2)
         ctk.CTkLabel(
             status_box,
@@ -153,7 +153,7 @@ class DetailDrawer(ctk.CTkFrame):
             text_color=theme.DANGER,
             border_width=1,
             border_color=theme.CARD_BORDER,
-            corner_radius=theme.RADIUS_CONTROL,
+            corner_radius=8,
             command=self.on_close,
         ).pack(fill="x", pady=(24, 10))
 
@@ -161,7 +161,7 @@ class DetailDrawer(ctk.CTkFrame):
         self.title_lbl.configure(text=data.get("name", "File Details"))
 
         # Details card
-        info_card = ctk.CTkFrame(self.content_area, fg_color=theme.MAIN_BG, corner_radius=theme.RADIUS_CONTROL)
+        info_card = ctk.CTkFrame(self.content_area, fg_color=theme.MAIN_BG, corner_radius=10)
         info_card.pack(fill="x", pady=(4, 16), padx=2)
 
         fields = [
@@ -201,7 +201,7 @@ class DetailDrawer(ctk.CTkFrame):
                 hover_color=theme.ACCENT_HOVER if bg == theme.ACCENT else theme.CARD_HOVER,
                 border_width=0 if bg == theme.ACCENT else 1,
                 border_color=theme.CARD_BORDER,
-                corner_radius=theme.RADIUS_CONTROL,
+                corner_radius=8,
                 height=32,
                 command=lambda t=act_text: store.add_system_log(f"Action '{t}' triggered for {data.get('name')}", "working"),
             ).pack(fill="x", pady=3)
@@ -228,7 +228,7 @@ class DetailDrawer(ctk.CTkFrame):
         ).pack(fill="x", pady=(0, 14))
 
         # Steps
-        steps_frame = ctk.CTkFrame(self.content_area, fg_color=theme.MAIN_BG, corner_radius=theme.RADIUS_CONTROL)
+        steps_frame = ctk.CTkFrame(self.content_area, fg_color=theme.MAIN_BG, corner_radius=10)
         steps_frame.pack(fill="x", pady=4, padx=2)
 
         for step in data.get("steps", []):
@@ -279,7 +279,7 @@ class DetailDrawer(ctk.CTkFrame):
         )
         desc.pack(fill="x", pady=(4, 16))
 
-        info_card = ctk.CTkFrame(self.content_area, fg_color=theme.MAIN_BG, corner_radius=theme.RADIUS_CONTROL)
+        info_card = ctk.CTkFrame(self.content_area, fg_color=theme.MAIN_BG, corner_radius=10)
         info_card.pack(fill="x", pady=4, padx=2)
 
         items = [
@@ -302,7 +302,7 @@ class DetailDrawer(ctk.CTkFrame):
             fg_color=theme.WARNING_LIGHT,
             border_width=1,
             border_color=theme.WARNING_BORDER,
-            corner_radius=theme.RADIUS_CARD,
+            corner_radius=12,
         )
         card.pack(fill="x", pady=8, padx=2)
 
@@ -338,7 +338,7 @@ class DetailDrawer(ctk.CTkFrame):
             text_color=theme.TEXT_SECONDARY,
             border_width=1,
             border_color=theme.CARD_BORDER,
-            corner_radius=theme.RADIUS_CONTROL,
+            corner_radius=8,
             height=34,
             command=lambda: store.resolve_approval(False),
         ).pack(side="left", expand=True, fill="x", padx=(0, 6))
@@ -350,7 +350,7 @@ class DetailDrawer(ctk.CTkFrame):
             fg_color=theme.ACCENT,
             hover_color=theme.ACCENT_HOVER,
             text_color="#FFFFFF",
-            corner_radius=theme.RADIUS_CONTROL,
+            corner_radius=8,
             height=34,
             command=lambda: store.resolve_approval(True),
         ).pack(side="left", expand=True, fill="x", padx=(6, 0))

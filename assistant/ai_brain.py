@@ -1217,9 +1217,10 @@ def query_local_llm_chat(messages, model="qwen2.5:3b", tools=None):
     """
     Queries the local Ollama instance using the /api/chat endpoint, or Featherless AI if configured.
     """
-    featherless_key = get_setting("featherless_api_key", "")
-    
-    if featherless_key:
+    featherless_key = str(get_setting("featherless_api_key", "") or "").strip()
+    featherless_on = bool(get_setting("featherless_enabled", False))
+
+    if featherless_on and featherless_key:
         url = "https://api.featherless.ai/v1/chat/completions"
         headers = {
             'Content-Type': 'application/json',

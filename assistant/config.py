@@ -14,6 +14,12 @@ DEFAULT_CONFIG = {
     "voice_rate": 170,
     "voice_volume": 1.0,
     "llm_model": "qwen2.5:3b",
+    # Featherless is an optional hosted brain. It is only used when the
+    # switch in Settings is on and a key is present, so the local Ollama
+    # path stays the default.
+    "featherless_enabled": False,
+    "featherless_api_key": "",
+    "featherless_model": "meta-llama/Meta-Llama-3.1-8B-Instruct",
     # Where Ollama is listening. Point this elsewhere for a second instance
     # (a CPU-only one, say) or for Ollama on another machine.
     "ollama_url": "http://localhost:11434",

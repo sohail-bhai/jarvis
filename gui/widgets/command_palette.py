@@ -34,7 +34,7 @@ class CommandPalette(ctk.CTkToplevel):
         self.geometry(f"+{max(10, x)}+{max(10, y)}")
 
         # Container
-        main_frame = ctk.CTkFrame(self, fg_color=theme.CARD_BG, corner_radius=theme.RADIUS_CARD)
+        main_frame = ctk.CTkFrame(self, fg_color=theme.CARD_BG, corner_radius=16)
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
 
         # Header
@@ -43,7 +43,7 @@ class CommandPalette(ctk.CTkToplevel):
 
         sparkle = ctk.CTkLabel(
             header,
-            text="›",
+            text="✦",
             font=theme.font(16, "bold"),
             text_color=theme.ACCENT,
         )
@@ -69,7 +69,7 @@ class CommandPalette(ctk.CTkToplevel):
         input_container = ctk.CTkFrame(
             main_frame,
             fg_color=theme.MAIN_BG,
-            corner_radius=theme.RADIUS_CARD,
+            corner_radius=12,
             border_width=1,
             border_color=theme.CARD_BORDER,
         )
@@ -96,7 +96,7 @@ class CommandPalette(ctk.CTkToplevel):
             font=theme.font(14, "bold"),
             width=32,
             height=32,
-            corner_radius=theme.RADIUS_CARD,
+            corner_radius=16,
             fg_color=theme.TEXT_PRIMARY,
             hover_color=theme.SIDEBAR_BG,
             text_color="#FFFFFF",
@@ -132,7 +132,7 @@ class CommandPalette(ctk.CTkToplevel):
                 text_color=theme.TEXT_PRIMARY,
                 anchor="w",
                 height=32,
-                corner_radius=theme.RADIUS_CONTROL,
+                corner_radius=8,
                 command=lambda t=text: self._execute_suggestion(t),
             )
             btn.pack(fill="x", pady=2)
