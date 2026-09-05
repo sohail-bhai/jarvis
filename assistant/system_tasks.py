@@ -2,6 +2,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 import os
+import re
 import platform
 import subprocess
 import datetime
@@ -326,6 +327,9 @@ def open_app(app_name):
                 subprocess.Popen(["open", app_path])
             else:
                 subprocess.Popen([app_path], shell=True)
+                
+            import time
+            time.sleep(4) # Wait for app to render before AI scans screen
             return True
 
         # Tier 3: Fallback to opening in browser
@@ -670,23 +674,165 @@ def restart_laptop():
 def click_at(x, y):
     """Clicks at the specified X, Y coordinates."""
     pyautogui = _get_pyautogui()
-    pyautogui.click(x=x, y=y)
-    
+    pyautogui.click(x=int(x), y=int(y))
+    return f"Clicked at ({int(x)}, {int(y)})."
+
+def double_click_at(x, y):
+    """Double-clicks at the specified X, Y coordinates (opens files, selects a word)."""
+    pyautogui = _get_pyautogui()
+    pyautogui.doubleClick(x=int(x), y=int(y))
+    return f"Double-clicked at ({int(x)}, {int(y)})."
+
+def right_click_at(x, y):
+    """Right-clicks at the specified X, Y coordinates to open a context menu."""
+    pyautogui = _get_pyautogui()
+    pyautogui.rightClick(x=int(x), y=int(y))
+    return f"Right-clicked at ({int(x)}, {int(y)})."
+
+def move_mouse(x, y):
+    """Moves the mouse pointer without clicking (triggers hover menus and tooltips)."""
+    pyautogui = _get_pyautogui()
+    pyautogui.moveTo(int(x), int(y), duration=0.15)
+    return f"Moved mouse to ({int(x)}, {int(y)})."
+
 def type_text(text):
     """Types the given text automatically."""
     pyautogui = _get_pyautogui()
-    pyautogui.write(text, interval=0.01)
-    
+    body = str(text)
+
+    # A small model reaches for the tool it knows. Asked to select all and
+    # delete, it has been observed calling this with "Ctrl+A\nCtrl+Delete" as
+    # the text, which would type those characters into the user's document
+    # instead of pressing the shortcuts. When the argument is nothing but key
+    # combinations, do the thing that was obviously meant.
+    chords = _shortcut_sequence(body)
+    if chords:
+        return " ".join(press_key(chord) for chord in chords)
+
+    pyautogui.write(body, interval=0.01)
+    return f"Typed {len(body)} characters."
+
+
+# Modifiers that make a keystroke a shortcut rather than something typeable.
+_MODIFIER_KEYS = frozenset({"ctrl", "alt", "shift", "win", "command"})
+
+# The keys a shortcut can end on, spelled out rather than guessed at by length,
+# so "ctrl+delete" is a chord while "sales+marketing" stays two words.
+_NAMED_KEYS = frozenset({
+    "enter", "esc", "tab", "space", "backspace", "delete", "insert",
+    "home", "end", "pageup", "pagedown", "up", "down", "left", "right",
+    "capslock", "printscreen", "pause",
+})
+
+
+def _shortcut_sequence(text):
+    """The chords in `text` if it is only key combinations, otherwise empty.
+
+    One per line, so "Ctrl+A\\nCtrl+Delete" presses both in order. Any line
+    that is ordinary text disqualifies the whole argument, which then gets
+    typed exactly as given.
+    """
+    lines = [line for line in str(text).splitlines() if line.strip()]
+    if not lines or len(lines) > 4:
+        return []
+    if all(_looks_like_shortcut(line) for line in lines):
+        return [line.strip() for line in lines]
+    return []
+
+
+def _looks_like_shortcut(text):
+    """True when the text is only a key combination, e.g. "ctrl+s", "Alt + F4".
+
+    Deliberately narrow. Real prose to type never consists solely of a
+    modifier joined to one short key, so this cannot swallow a genuine
+    sentence: "Ctrl+A then type this" keeps its words and gets typed.
+    """
+    candidate = str(text).strip()
+    if not candidate or len(candidate) > 24 or "+" not in candidate:
+        return False
+    # Spaces are allowed only as padding around the joiner. Anything left over
+    # means there are separate words here, which makes this text, not a chord.
+    if re.search(r"\s", re.sub(r"\s*\+\s*", "+", candidate)):
+        return False
+    keys = _normalise_keys(candidate)
+    if not 2 <= len(keys) <= 4:
+        return False
+    # At least one modifier, so "2+2" is still typed as written.
+    if not any(key in _MODIFIER_KEYS for key in keys):
+        return False
+    return all(key in _MODIFIER_KEYS
+               or key in _NAMED_KEYS
+               or len(key) == 1
+               or re.fullmatch(r"f\d{1,2}", key)
+               for key in keys)
+
+# pyautogui expects the modifier spelling used by the OS, but a language model
+# will happily say "control", "win" or "cmd". Normalise before pressing.
+_KEY_ALIASES = {
+    "control": "ctrl", "ctl": "ctrl",
+    "windows": "win", "super": "win", "meta": "win",
+    "cmd": "command" if platform.system() == "Darwin" else "win",
+    "option": "alt", "return": "enter", "escape": "esc",
+    "del": "delete", "pgup": "pageup", "pgdn": "pagedown",
+    "spacebar": "space", "capslock": "capslock",
+}
+
+
+def _normalise_keys(raw):
+    """Turn 'Ctrl + S', 'control-s' or ['ctrl','s'] into ['ctrl', 's']."""
+    if isinstance(raw, (list, tuple)):
+        parts = [str(p) for p in raw]
+    else:
+        parts = re.split(r"[+\-\s]+", str(raw))
+    keys = []
+    for part in parts:
+        clean = part.strip().lower()
+        if clean:
+            keys.append(_KEY_ALIASES.get(clean, clean))
+    return keys
+
+
 def press_key(key):
-    """Presses a specific keyboard key (e.g., 'enter', 'tab', 'esc')."""
+    """Presses a key, or a combination like 'ctrl+s' / 'alt+f4' / 'win+r'."""
     pyautogui = _get_pyautogui()
-    pyautogui.press(key)
+    keys = _normalise_keys(key)
+
+    if not keys:
+        return "No key was given."
+
+    if len(keys) == 1:
+        pyautogui.press(keys[0])
+    else:
+        # hotkey holds the modifiers down for the final key, which is what
+        # shortcuts such as ctrl+shift+esc actually require.
+        pyautogui.hotkey(*keys)
+
+    return f"Pressed {'+'.join(keys)}."
+
+
+def press_hotkey(keys):
+    """Presses a keyboard shortcut such as 'ctrl+s', 'alt+tab' or 'win+r'."""
+    return press_key(keys)
+
+
+def wait(seconds=1.0):
+    """Pauses briefly so the interface can catch up before the next step."""
+    import time
+    try:
+        duration = float(seconds)
+    except (TypeError, ValueError):
+        duration = 1.0
+    # A tool call should never be able to stall the assistant for minutes.
+    duration = max(0.0, min(30.0, duration))
+    time.sleep(duration)
+    return f"Waited {duration:g} seconds."
 
 def find_and_click_text(target_text):
     """
     Uses UIAutomation to find a button/text on the screen and clicks it.
     Returns True if found and clicked, False otherwise.
     """
+    _ensure_com()
     try:
         import uiautomation as auto
     except ImportError:
@@ -1009,55 +1155,231 @@ def write_file(path, content):
     except Exception as e:
         return f"Failed to write file: {e}"
 
-def get_clickable_elements():
+def _ensure_com():
+    """Join the COM apartment for this thread before touching UI Automation.
+
+    Every UIA call needs it, and the assistant's tools run on worker threads
+    that have not called it yet - without this the first scan fails with
+    "CoInitialize has not been called" and UIAutomationCore.dll never loads.
+    Calling it more than once on a thread is harmless.
     """
-    Scans the current active window and returns a list of clickable elements with their text and (x, y) coordinates.
+    try:
+        import pythoncom
+        pythoncom.CoInitialize()
+    except Exception:
+        # Not fatal on its own: uiautomation may already hold the apartment.
+        pass
+
+
+def get_clickable_elements(window_title=None):
+    """
+    Scans a window and returns a list of clickable elements with their text and (x, y) coordinates.
     This solves the 'Coordinate Problem' for AI agents, allowing you to know exactly where to click without vision guessing.
+    Pass window_title to inspect a specific window instead of the one in focus.
     """
+    _ensure_com()
     try:
         import uiautomation as auto
     except ImportError:
         return "ERROR: The 'uiautomation' module is missing. Please tell the user to run 'pip install uiautomation' to enable screen reading capabilities."
-        
+
     try:
         current_pid = os.getpid()
-        active_window = auto.GetForegroundControl()
-        if not active_window or active_window.ProcessId == current_pid or "vave" in active_window.Name.lower():
-            active_window = None
-            for w in auto.GetRootControl().GetChildren():
-                if w.ControlType == auto.ControlType.WindowControl and w.BoundingRectangle.width() > 100:
-                    if w.ProcessId != current_pid and "vave" not in w.Name.lower():
-                        active_window = w
-                        break
-        if not active_window:
-            active_window = auto.GetRootControl()
-            
+
+        if window_title:
+            active_window = _find_window(window_title)
+            if not active_window:
+                return (f"No open window matches '{window_title}'. "
+                        f"Use list_windows to see what is available.")
+        else:
+            active_window = auto.GetForegroundControl()
+            if not active_window or active_window.ProcessId == current_pid or "vave" in (active_window.Name or "").lower():
+                active_window = None
+                for w in auto.GetRootControl().GetChildren():
+                    if w.ControlType == auto.ControlType.WindowControl and w.BoundingRectangle.width() > 100:
+                        if w.ProcessId != current_pid and "vave" not in (w.Name or "").lower():
+                            active_window = w
+                            break
+            if not active_window:
+                active_window = auto.GetRootControl()
+
         elements = []
-        # Walk through the control tree up to a certain depth to avoid hanging
-        for control, depth in auto.WalkControl(active_window, maxDepth=4):
+        # Walk deep enough to reach real controls. Modern apps (Chrome, Electron,
+        # WinUI) bury their buttons well below depth 4, which is why shallow
+        # scans only ever came back with window chrome.
+        for control, depth in auto.WalkControl(active_window, maxDepth=10):
             # We look for things that might be clickable: Buttons, MenuItems, ListItems, Tabs, etc.
             if control.ControlType in (
-                auto.ControlType.ButtonControl, 
+                auto.ControlType.ButtonControl,
                 auto.ControlType.MenuItemControl,
                 auto.ControlType.TabItemControl,
                 auto.ControlType.ListItemControl,
                 auto.ControlType.HyperlinkControl,
-                auto.ControlType.EditControl
+                auto.ControlType.EditControl,
+                auto.ControlType.CheckBoxControl,
+                auto.ControlType.RadioButtonControl,
+                auto.ControlType.ComboBoxControl,
+                auto.ControlType.TreeItemControl,
+                auto.ControlType.SliderControl,
             ):
                 name = control.Name
                 rect = control.BoundingRectangle
                 if name and rect.width() > 0 and rect.height() > 0:
+                    try:
+                        if control.IsOffscreen:
+                            continue
+                    except Exception:
+                        pass
                     # Calculate center point for clicking
                     center_x = rect.left + (rect.width() // 2)
                     center_y = rect.top + (rect.height() // 2)
-                    elements.append(f"- '{name}': click_at(x={center_x}, y={center_y})")
-        
+                    kind = control.ControlTypeName.replace("Control", "")
+                    # Tell the model when a control cannot be actioned, so it
+                    # stops retrying a greyed-out button forever.
+                    try:
+                        state = "" if control.IsEnabled else " [disabled]"
+                    except Exception:
+                        state = ""
+                    label = f"- '{name}' ({kind}{state}): click_at(x={center_x}, y={center_y})"
+                    if label not in elements:
+                        elements.append(label)
+                if len(elements) >= 120:
+                    break
+
         if not elements:
-            return "Could not find any clearly named clickable buttons in the active window."
-            
-        return "Found these clickable elements:\n" + "\n".join(elements)
+            return (f"Found no named controls in the window '{active_window.Name}'. "
+                    f"Browsers and some apps only publish their controls while the window is "
+                    f"in focus, so try focus_window first, or read_screen / analyze_screen "
+                    f"instead.\n" + list_windows())
+
+        header = f"Active window: '{active_window.Name}'\nFound these clickable elements:"
+        body = "\n".join(elements)
+
+        # Chromium suspends its accessibility tree for background windows, so a
+        # near-empty result usually means we are looking at the wrong window
+        # rather than an empty one. Say so instead of letting the model guess.
+        if len(elements) <= 4:
+            body += ("\n\nOnly a few controls were visible, which usually means this window is "
+                     "not in focus. Consider focus_window then scanning again.\n" + list_windows())
+
+        return header + "\n" + body
     except Exception as e:
         return f"Failed to get clickable elements: {e}"
+
+
+def list_windows():
+    """Lists the open application windows so a task can be pointed at the right one."""
+    _ensure_com()
+    try:
+        import uiautomation as auto
+    except ImportError:
+        return "ERROR: The 'uiautomation' module is missing. Please tell the user to run 'pip install uiautomation'."
+
+    try:
+        current_pid = os.getpid()
+        rows = []
+        try:
+            foreground = auto.GetForegroundControl()
+            foreground_name = foreground.Name if foreground else ""
+        except Exception:
+            foreground_name = ""
+
+        for w in auto.GetRootControl().GetChildren():
+            if w.ControlType != auto.ControlType.WindowControl:
+                continue
+            name = (w.Name or "").strip()
+            if not name or w.ProcessId == current_pid:
+                continue
+            rect = w.BoundingRectangle
+            if rect.width() <= 0 or rect.height() <= 0:
+                continue
+            marker = "  <- currently in focus" if name == foreground_name else ""
+            rows.append(f"- '{name}'{marker}")
+
+        if not rows:
+            return "No open application windows were found."
+        return "Open windows:\n" + "\n".join(rows)
+    except Exception as e:
+        return f"Failed to list windows: {e}"
+
+
+def _find_window(title):
+    """Best-effort lookup of a top-level window by (partial) title."""
+    _ensure_com()
+    import uiautomation as auto
+
+    wanted = str(title).strip().lower()
+    current_pid = os.getpid()
+    windows = []
+    for w in auto.GetRootControl().GetChildren():
+        if w.ControlType == auto.ControlType.WindowControl and w.Name and w.ProcessId != current_pid:
+            windows.append(w)
+
+    for w in windows:
+        if w.Name.strip().lower() == wanted:
+            return w
+    for w in windows:
+        if wanted in w.Name.strip().lower():
+            return w
+    return None
+
+
+def focus_window(title):
+    """Brings a window to the front by title, so clicks and typing land in the right app."""
+    _ensure_com()
+    try:
+        import uiautomation as auto  # noqa: F401
+    except ImportError:
+        return "ERROR: The 'uiautomation' module is missing. Please tell the user to run 'pip install uiautomation'."
+
+    import time
+    try:
+        win = _find_window(title)
+        if not win:
+            return f"No open window matches '{title}'. Use list_windows to see what is available."
+        win.SetActive()
+        try:
+            win.SetTopmost(False)
+        except Exception:
+            pass
+        time.sleep(0.4)
+        return f"Focused the window '{win.Name}'."
+    except Exception as e:
+        return f"Failed to focus window: {e}"
+
+
+
+def close_window(title=None):
+    """Closes a window by title, or the window in focus when no title is given."""
+    _ensure_com()
+    try:
+        import uiautomation as auto
+    except ImportError:
+        return "ERROR: The 'uiautomation' module is missing. Please tell the user to run 'pip install uiautomation'."
+
+    try:
+        current_pid = os.getpid()
+        if title:
+            win = _find_window(title)
+            if not win:
+                return f"No open window matches '{title}'. Use list_windows to see what is available."
+        else:
+            win = auto.GetForegroundControl()
+            # Never let a "close the window" instruction close the assistant.
+            if not win or win.ProcessId == current_pid:
+                return "The window in focus belongs to VAVE, so it was left alone. Name the window to close instead."
+
+        name = win.Name
+        try:
+            win.GetWindowPattern().Close()
+        except Exception:
+            win.SetActive()
+            press_key("alt+f4")
+        return f"Closed the window '{name}'."
+    except Exception as e:
+        return f"Failed to close window: {e}"
+
+
 
 
 def disable_voice_input():

@@ -196,14 +196,22 @@ def handle_app_command(command):
                 return True
 
     # Generic "open <target>" routing through smart launcher
+    # Only fires for short, simple app names (1-3 words). Longer phrases go to AI.
     if command_lower.startswith("open "):
         target = command_lower[5:].strip()
-        reserved = ["notes", "my notes", "file", "the door", "link"]
-        action_words = ["read", "write", "type", "check", "find", "search", "click", "tell", "summarize", "copy"]
+        reserved = ["notes", "my notes", "file", "the door", "link", "a", "an", "the"]
+        action_words = ["read", "write", "type", "check", "find", "search", "click",
+                        "tell", "summarize", "copy", "my", "a ", "an ", "the "]
         target_words = target.split()
-        if target and target not in reserved and not any(w in target_words for w in action_words):
+        # Only handle if it looks like an app name: short, no sentence structure
+        if (target
+                and target not in reserved
+                and len(target_words) <= 3
+                and not any(target.startswith(w) for w in action_words)
+                and not any(c in target for c in ["?", "!", ","])):
             open_app(target)
             return True
+
 
     # Generic "close <target>" or "kill <target>"
     if command_lower.startswith("close ") or command_lower.startswith("kill "):
@@ -396,23 +404,36 @@ def handle_line_write_command(command: str) -> bool:
 
     return False
 
+# Shutting down is a whole-utterance decision. Matching the bare words
+# "stop", "exit" or "quit" anywhere in a sentence used to end the session on
+# "stop overwatch", "stop the music" and "exit fullscreen".
+_QUIT_PATTERN = re.compile(
+    r"^\s*(?:please\s+)?"
+    r"(?:goodbye|bye|good\s*night|see\s+you|"
+    r"(?:shut\s*down|close|kill|stop|exit|quit|terminate)"
+    r"(?:\s+(?:yourself|jarvis|vave|the\s+assistant|the\s+program|the\s+app))?|"
+    r"(?:power|turn)\s+(?:off|down))"
+    r"\s*[.!]?\s*$",
+    re.IGNORECASE,
+)
+
+
+def is_quit_command(command):
+    """True only when the whole utterance asks VAVE itself to shut down."""
+    return bool(_QUIT_PATTERN.match(str(command or "")))
+
+
 def execute_command(command, auto_confirm=False):
     """
     Main command router for VAVE Version 1.2.
-    Routes simple commands to fast-paths, and compound/multi-step commands directly to the AI brain.
+    Tries every fast-path handler first. Unknown commands fall through to the AI brain.
     """
-    if any(word in command for word in ["stop", "exit", "quit", "goodbye"]):
+    if is_quit_command(command):
         speak(f"Goodbye {get_setting('user_name', 'Sir')}.")
         return False
 
-    c = command.lower()
-    # Route multi-step instructions straight to the AI brain for intelligent orchestration
-    if " and " in c or " then " in c or " after " in c:
-        logger.info(f"[VAVE] Routing compound command to AI brain: '{command}'")
-        ask_ai(command, auto_confirm=auto_confirm)
-        return True
-
     return execute_single_command(command, auto_confirm=auto_confirm)
+
 
 def execute_single_command(command, auto_confirm=False):
     """
