@@ -51,6 +51,13 @@ def _telegram_worker():
         return
         
     logger.info("[VAVE] Connecting to Telegram Bot...")
+    
+    # Pre-emptively delete any existing webhooks that might cause a 409 Conflict with getUpdates
+    try:
+        urllib.request.urlopen(f"https://api.telegram.org/bot{token}/deleteWebhook", timeout=5)
+    except Exception:
+        pass
+        
     offset = 0
     
     while _telegram_active:
@@ -137,6 +144,13 @@ def _telegram_worker():
 
                                 logger.info(f"[VAVE] Unauthorized access attempt from Chat ID: {sender_chat_id}")
                                 
+        except urllib.error.HTTPError as e:
+            if e.code == 409:
+                logger.info(f"[Telegram Error 409 Conflict]: Another VAVE process is already running and listening to this bot. Please close all other terminal windows running VAVE!")
+                time.sleep(15) # Wait longer so it doesn't spam
+            else:
+                logger.info(f"[Telegram Network Error]: {e}")
+                time.sleep(5)
         except urllib.error.URLError as e:
             # Network issue, wait and retry
             logger.info(f"[Telegram Network Error]: {e}")
