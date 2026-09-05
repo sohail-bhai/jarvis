@@ -11,6 +11,16 @@ def read_unread_emails(limit=5):
     if not email_address or not app_password:
         return "Email credentials not configured. Please ask the user to add email_address and email_app_password to config.json."
 
+    if app_password.startswith("secret://"):
+        try:
+            from assistant.control.store import ControlStore
+            from assistant.control.secrets import SecretStore, load_key
+            store = ControlStore()
+            secrets = SecretStore(store, key=load_key())
+            app_password = secrets.resolve(app_password)
+        except Exception as e:
+            return f"Could not resolve secret for email password: {e}"
+
     try:
         mail = imaplib.IMAP4_SSL("imap.gmail.com")
         mail.login(email_address, app_password)
@@ -64,6 +74,16 @@ def send_email(to_address, subject, body):
 
     if not email_address or not app_password:
         return "Email credentials not configured in config.json."
+
+    if app_password.startswith("secret://"):
+        try:
+            from assistant.control.store import ControlStore
+            from assistant.control.secrets import SecretStore, load_key
+            store = ControlStore()
+            secrets = SecretStore(store, key=load_key())
+            app_password = secrets.resolve(app_password)
+        except Exception as e:
+            return f"Could not resolve secret for email password: {e}"
 
     try:
         msg = EmailMessage()
