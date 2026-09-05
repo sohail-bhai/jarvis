@@ -2,6 +2,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 import json
+import os
 import threading
 import time
 import urllib.request
@@ -14,6 +15,58 @@ from assistant.speech import speak
 
 _telegram_thread = None
 _telegram_active = False
+
+# --- Cross-process singleton lock ---
+# Prevents MKL/numpy-spawned child processes from starting a second Telegram
+# poller and causing a 409 Conflict.
+_LOCK_PATH = os.path.join(os.path.dirname(__file__), "..", "data", ".telegram.pid")
+
+def _acquire_lock():
+    """Return True only if THIS process owns the singleton lock."""
+    lock_path = os.path.abspath(_LOCK_PATH)
+    os.makedirs(os.path.dirname(lock_path), exist_ok=True)
+    my_pid = os.getpid()
+
+    # Read existing lock
+    try:
+        with open(lock_path, "r") as f:
+            existing_pid = int(f.read().strip())
+        # Check if that PID is still alive
+        try:
+            import psutil
+            if psutil.pid_exists(existing_pid) and existing_pid != my_pid:
+                logger.debug(f"[Telegram] Singleton lock held by PID {existing_pid}. This child ({my_pid}) will not start a second poller.")
+                return False
+        except ImportError:
+            # psutil not available: fall back to os.kill signal 0 trick
+            try:
+                os.kill(existing_pid, 0)
+                if existing_pid != my_pid:
+                    logger.debug(f"[Telegram] Singleton lock held by PID {existing_pid}. Skipping.")
+                    return False
+            except (ProcessLookupError, PermissionError):
+                pass  # Dead process — stale lock, we can claim it
+    except (FileNotFoundError, ValueError):
+        pass  # No lock file or corrupt — we can claim it
+
+    # Write our PID
+    try:
+        with open(lock_path, "w") as f:
+            f.write(str(my_pid))
+        return True
+    except OSError:
+        return False
+
+def _release_lock():
+    """Release the lock if we own it."""
+    lock_path = os.path.abspath(_LOCK_PATH)
+    try:
+        with open(lock_path, "r") as f:
+            existing_pid = int(f.read().strip())
+        if existing_pid == os.getpid():
+            os.remove(lock_path)
+    except Exception:
+        pass
 
 def send_telegram_message(token, chat_id, text):
     if not text:
@@ -50,7 +103,7 @@ def _telegram_worker():
         logger.info("[VAVE] Telegram Bot Token not found in config. Remote execution disabled.")
         return
         
-    logger.info("[VAVE] Connecting to Telegram Bot...")
+    logger.info(f"[VAVE] Connecting to Telegram Bot from PID {os.getpid()}...")
     
     # Pre-emptively delete any existing webhooks that might cause a 409 Conflict with getUpdates
     try:
@@ -160,11 +213,18 @@ def _telegram_worker():
             time.sleep(5)
             
         time.sleep(1)
+    
+    # Release the lock when the poller stops
+    _release_lock()
 
 def start_telegram_sync():
     global _telegram_thread, _telegram_active
     
     if not get_setting("telegram_bot_token", ""):
+        return
+    
+    # Only one process may poll. Child processes spawned by numpy/MKL are blocked here.
+    if not _acquire_lock():
         return
         
     _telegram_active = True
@@ -176,3 +236,4 @@ def start_telegram_sync():
 def stop_telegram_sync():
     global _telegram_active
     _telegram_active = False
+    _release_lock()
