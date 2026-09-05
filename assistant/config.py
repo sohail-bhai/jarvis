@@ -98,8 +98,20 @@ DEFAULT_CONFIG = {
     }
 }
 
+# Credentials do not belong in a file that is committed. Anything in
+# config.local.json wins over config.json, and that file is git-ignored, so a
+# token lives on the machine that uses it instead of in the repository.
+LOCAL_CONFIG_FILE = CONFIG_FILE.parent / "config.local.json"
+
+# Keys that must never be written back to the shared config.json.
+SECRET_KEYS = frozenset({
+    "telegram_bot_token", "email_app_password", "featherless_api_key",
+    "gitlab_token", "openai_api_key", "anthropic_api_key",
+})
+
 _config_cache = None
 _config_mtime = 0
+_local_mtime = 0
 
 def create_default_config():
     CONFIG_FILE.write_text(
@@ -116,21 +128,38 @@ def deep_merge(base, override):
             merged[k] = v
     return merged
 
+def _read_local_config():
+    """The machine's own settings and credentials, if it has any."""
+    if not LOCAL_CONFIG_FILE.exists():
+        return {}, 0
+    try:
+        with open(LOCAL_CONFIG_FILE, "r", encoding="utf-8") as file:
+            return json.load(file), os.path.getmtime(LOCAL_CONFIG_FILE)
+    except Exception as error:
+        logger.info("Could not read config.local.json: %s", error)
+        return {}, 0
+
+
 def load_config():
-    global _config_cache, _config_mtime
+    global _config_cache, _config_mtime, _local_mtime
     if not CONFIG_FILE.exists():
         create_default_config()
 
     try:
         current_mtime = os.path.getmtime(CONFIG_FILE)
-        if _config_cache is not None and current_mtime == _config_mtime:
+        local_config, local_mtime = _read_local_config()
+
+        if (_config_cache is not None and current_mtime == _config_mtime
+                and local_mtime == _local_mtime):
             return _config_cache
 
         with open(CONFIG_FILE, "r", encoding="utf-8") as file:
             user_config = json.load(file)
 
-        _config_cache = deep_merge(DEFAULT_CONFIG, user_config)
+        merged = deep_merge(DEFAULT_CONFIG, user_config)
+        _config_cache = deep_merge(merged, local_config)
         _config_mtime = current_mtime
+        _local_mtime = local_mtime
 
         return _config_cache
 
@@ -152,6 +181,23 @@ def get_setting(key, default=None):
     return config.get(key, default)
 
 def update_setting(key, value):
+    """Change one setting. Credentials go to the untracked local file."""
+    if key in SECRET_KEYS:
+        return _update_local_setting(key, value)
+
     config = load_config()
     config[key] = value
+    # The cache holds values merged from config.local.json; writing it back
+    # wholesale would copy a credential into the shared file.
+    for secret in SECRET_KEYS:
+        config.pop(secret, None)
     save_config(config)
+
+
+def _update_local_setting(key, value):
+    global _local_mtime
+    local_config, _ = _read_local_config()
+    local_config[key] = value
+    LOCAL_CONFIG_FILE.write_text(json.dumps(local_config, indent=4),
+                                 encoding="utf-8")
+    _local_mtime = 0
