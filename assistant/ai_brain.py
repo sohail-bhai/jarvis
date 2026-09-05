@@ -1908,6 +1908,12 @@ def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps
     # what was really done rather than what the model says it did.
     performed = []
     completion_pushes = 0
+    # How often each acting call has run, and which ones have already been
+    # answered with a redirect. A model can loop without ever repeating a
+    # whole turn - click, wait, look, click the same thing again - so the
+    # count is per call rather than per turn.
+    action_counts = {}
+    redirected = set()
 
     def _keep_going():
         if should_continue is not None and not should_continue:
@@ -1964,6 +1970,7 @@ def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps
                 repeats = 0
                 continue
 
+            stalled = None
             for tool_call in message["tool_calls"]:
                 func_name = tool_call["function"]["name"]
                 args_dict = tool_call["function"].get("arguments", {})
@@ -1992,6 +1999,16 @@ def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps
                         result = guard.call(func_to_call, **args_dict)
                         tools_run += 1
                         performed.append((func_name, args_dict))
+
+                        if func_name not in INSPECTION_TOOLS:
+                            signature = (func_name, str(sorted(
+                                (args_dict or {}).items(), key=str)))
+                            action_counts[signature] = action_counts.get(
+                                signature, 0) + 1
+                            if (action_counts[signature] >= _REPEAT_LIMIT
+                                    and signature not in redirected):
+                                redirected.add(signature)
+                                stalled = func_name
                         result_str = str(result) if result is not None else "Success"
 
                         if len(result_str) > 2000:
@@ -2024,6 +2041,22 @@ def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps
                         "content": f"Tool {func_name} does not exist.",
                         "name": func_name
                     })
+            if stalled:
+                logger.info("[VAVE] %s has run %d times without changing "
+                            "anything; asking for another route.",
+                            stalled, _REPEAT_LIMIT)
+                conversation.append({
+                    "role": "system",
+                    "content": (
+                        f"`{stalled}` has now run {_REPEAT_LIMIT} times with "
+                        "the same arguments and the goal is no closer. Stop "
+                        "calling it. Look at what is actually on screen now "
+                        "and either act on a different element or tell the "
+                        "user plainly what is blocking you."
+                    ),
+                })
+                stalled = None
+
             # After executing all tools in this step, loop continues to ask LLM what's next
             continue
 

@@ -113,6 +113,26 @@ class ChainedTaskTests(unittest.TestCase):
         self.assertTrue(any("different action" in text for text in nudges))
         self.assertFalse(any("Give up" in text for text in nudges))
 
+    def test_the_same_click_between_looks_is_stopped(self):
+        # A model can loop without ever repeating a whole turn: click, wait,
+        # look, click the same thing again. Counting whole turns missed that,
+        # so the task spent every step it had on one element.
+        replies = []
+        for _ in range(4):
+            replies.append(_tools(_call("browser_click", index=1)))
+            replies.append(_tools(_call("browser_elements")))
+        replies.append(_says("Stuck."))
+
+        _, model = self._run("open netflix and open any profile", replies)
+
+        clicks = [step for step in self.executed if step[0] == "browser_click"]
+        self.assertLessEqual(len(clicks), 4)
+        redirects = [message["content"]
+                     for prompt in model.prompts for message in prompt
+                     if message.get("role") == "system"
+                     and "Stop calling it" in message.get("content", "")]
+        self.assertTrue(redirects)
+
     def test_the_second_half_of_a_request_is_carried_out(self):
         # The model announces success after the first action. The loop has to
         # notice the profile was never picked and hand the rest back.
