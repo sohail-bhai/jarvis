@@ -1,8 +1,8 @@
-# Jarvis Backend — Feature Roadmap
+# Vave Backend — Feature Roadmap
 
 ## Overview
 
-Jarvis is a secure AI-controlled personal infrastructure layer. The phone acts as the control plane and approval device, while the Jarvis backend orchestrates agents, browsers, Google services, cloud infrastructure, files, and connected devices.
+Vave is a secure AI-controlled personal infrastructure layer. The phone acts as the control plane and approval device, while the Vave backend orchestrates agents, browsers, Google services, cloud infrastructure, files, and connected devices.
 
 The roadmap is split into two phases:
 
@@ -11,11 +11,11 @@ The roadmap is split into two phases:
 
 ---
 
-# Phase 1 — Core Jarvis Platform
+# Phase 1 — Core Vave Platform
 
 ## 1. API Gateway
 
-- Central REST API for the Jarvis platform.
+- Central REST API for the Vave platform.
 - WebSocket support for real-time task updates.
 - Authentication and session management.
 - API rate limiting.
@@ -115,7 +115,7 @@ The broker:
 
 ## 6. Policy Engine
 
-Define rules for what Jarvis and individual agents are allowed to do.
+Define rules for what Vave and individual agents are allowed to do.
 
 Examples:
 
@@ -220,7 +220,7 @@ Resume from Step 3
 
 ## 10. Unified Audit Timeline
 
-Record important Jarvis activity.
+Record important Vave activity.
 
 Each event should include:
 
@@ -313,11 +313,11 @@ Secrets should never be directly exposed to an AI agent when unnecessary.
 
 ---
 
-# Phase 2 — Connected Infrastructure & Advanced Jarvis
+# Phase 2 — Connected Infrastructure & Advanced Vave
 
 ## 16. Google Workspace Gateway
 
-Connect Jarvis to Google services through OAuth.
+Connect Vave to Google services through OAuth.
 
 ### Gmail
 
@@ -375,7 +375,7 @@ All Google actions should pass through the Capability Broker and Policy Engine.
 
 ## 17. Browser / Internet Agent
 
-A browser-capable Jarvis worker can perform real internet tasks.
+A browser-capable Vave worker can perform real internet tasks.
 
 Capabilities:
 
@@ -397,7 +397,7 @@ and save it to my Drive."
 
 Phone
   ↓
-Jarvis
+Vave
   ↓
 Browser Agent
   ↓
@@ -414,7 +414,7 @@ Phone notification
 
 ## 18. Remote Computer / Browser Worker
 
-Run a Jarvis worker on a laptop or server.
+Run a Vave worker on a laptop or server.
 
 The worker communicates with the backend through a secure connection.
 
@@ -423,7 +423,7 @@ Architecture:
 ```text
 Phone
   ↓
-Jarvis Backend
+Vave Backend
   ↓
 Remote Worker
   ↓
@@ -441,7 +441,7 @@ Use cases:
 
 ## 19. Google Cloud Infrastructure Gateway
 
-Connect Jarvis to Google Cloud.
+Connect Vave to Google Cloud.
 
 Potential services:
 
@@ -459,7 +459,7 @@ Potential services:
 
 ## 20. AI-Assisted Deployment
 
-Jarvis can execute controlled development/deployment workflows.
+Vave can execute controlled development/deployment workflows.
 
 Example:
 
@@ -489,7 +489,7 @@ Production deployments should support mandatory phone approval.
 
 ## 21. Cloud Debugging Agent
 
-Jarvis can investigate infrastructure problems.
+Vave can investigate infrastructure problems.
 
 Example:
 
@@ -562,7 +562,7 @@ Memory should have privacy and deletion controls.
 
 ## 24. Knowledge Graph
 
-Connect Jarvis entities:
+Connect Vave entities:
 
 ```text
 User
@@ -581,17 +581,17 @@ User
  └── Services
 ```
 
-This allows Jarvis to reason across systems.
+This allows Vave to reason across systems.
 
 ## 25. Semantic Cross-Device File Search
 
-Instead of requiring exact file paths, Jarvis can search files by meaning.
+Instead of requiring exact file paths, Vave can search files by meaning.
 
 Example:
 
 > "Find the presentation where we discussed the March deployment."
 
-Jarvis searches across connected devices and Drive using:
+Vave searches across connected devices and Drive using:
 
 - Filename.
 - Metadata.
@@ -647,7 +647,7 @@ Continue safely
 
 ## 28. Developer Infrastructure Control
 
-Jarvis should be able to operate common developer infrastructure through controlled capabilities.
+Vave should be able to operate common developer infrastructure through controlled capabilities.
 
 Potential integrations:
 
@@ -664,11 +664,11 @@ Example:
 
 > "Check the latest PR, run the tests, deploy it if everything passes, and tell me if production is healthy."
 
-Jarvis coordinates the entire workflow.
+Vave coordinates the entire workflow.
 
 ## 29. Multi-Step Autonomous Workflows
 
-Allow Jarvis to perform long-running workflows instead of one-shot commands.
+Allow Vave to perform long-running workflows instead of one-shot commands.
 
 Example:
 
@@ -702,12 +702,12 @@ Example:
 
 > "Find the invoice in Gmail, save it to Drive, extract the payment date, add it to Calendar, and notify me."
 
-Jarvis:
+Vave:
 
 ```text
                     PHONE
                       ↓
-                 JARVIS CORE
+                 VAVE CORE
                       ↓
                TASK ORCHESTRATOR
                       ↓
@@ -820,9 +820,9 @@ Jarvis:
 
 # End Goal
 
-Jarvis should evolve from a chatbot into a **secure AI execution layer**:
+Vave should evolve from a chatbot into a **secure AI execution layer**:
 
-> **The user gives Jarvis a goal from their phone. Jarvis plans the task, selects the right agents and services, obtains only the capabilities it needs, executes across the user's devices, Google account, browser, and cloud infrastructure, asks for approval when necessary, verifies the result, and reports back to the phone.**
+> **The user gives Vave a goal from their phone. Vave plans the task, selects the right agents and services, obtains only the capabilities it needs, executes across the user's devices, Google account, browser, and cloud infrastructure, asks for approval when necessary, verifies the result, and reports back to the phone.**
 
 The key differentiator is not simply "AI can use APIs."
 

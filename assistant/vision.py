@@ -93,16 +93,16 @@ def read_screen_text():
             if np.Exists(0.2) and np.ProcessId != current_pid and np not in candidates:
                 candidates.append(np)
 
-        # Priority 2: Check current foreground window if not JARVIS
+        # Priority 2: Check current foreground window if not VAVE
         fg = auto.GetForegroundControl()
         if fg and fg.ControlType == auto.ControlType.WindowControl:
-            if fg.ProcessId != current_pid and "jarvis" not in fg.Name.lower() and fg not in candidates:
+            if fg.ProcessId != current_pid and "vave" not in fg.Name.lower() and fg not in candidates:
                 candidates.append(fg)
 
-        # Priority 3: Desktop windows excluding JARVIS
+        # Priority 3: Desktop windows excluding VAVE
         for w in auto.GetRootControl().GetChildren():
             if w.ControlType == auto.ControlType.WindowControl:
-                if w.ProcessId != current_pid and "jarvis" not in w.Name.lower() and w not in candidates:
+                if w.ProcessId != current_pid and "vave" not in w.Name.lower() and w not in candidates:
                     candidates.append(w)
 
         # 1. First search all candidate windows specifically for real document/editor controls (Notepad, Word, editors)

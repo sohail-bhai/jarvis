@@ -10,7 +10,7 @@ CONFIG_FILE = PROJECT_ROOT / "config.json"
 
 DEFAULT_CONFIG = {
     "user_name": "Sohail",
-    "assistant_name": "Jarvis",
+    "assistant_name": "Vave",
     "voice_rate": 170,
     "voice_volume": 1.0,
     "llm_model": "qwen2.5:3b",

@@ -43,7 +43,7 @@ from gui.pages.settings_page import SettingsPage
 logger = logging.getLogger(__name__)
 
 
-class JarvisDashboardApp(ctk.CTk):
+class VaveDashboardApp(ctk.CTk):
     def __init__(self):
         theme.configure_theme(ctk)
         super().__init__()

@@ -1,6 +1,6 @@
 def main():
     try:
-        from gui.app import JarvisDashboardApp
+        from gui.app import VaveDashboardApp
     except ModuleNotFoundError as error:
         if error.name == "customtkinter":
             print("CustomTkinter is not installed.")
@@ -8,7 +8,7 @@ def main():
             return 1
         raise
 
-    app = JarvisDashboardApp()
+    app = VaveDashboardApp()
     app.mainloop()
     return 0
 

@@ -73,7 +73,7 @@ class PlannerTests(unittest.TestCase):
 
 class OrchestratorTestCase(unittest.TestCase):
     def setUp(self):
-        self.tempdir = tempfile.mkdtemp(prefix="jarvis-orchestrator-test-")
+        self.tempdir = tempfile.mkdtemp(prefix="vave-orchestrator-test-")
         self.store = ControlStore(Path(self.tempdir) / "control.db")
         self.plane = ControlPlane(store=self.store)
         self.calls = []

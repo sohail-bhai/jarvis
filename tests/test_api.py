@@ -20,7 +20,7 @@ from assistant.control.store import ControlStore
 
 class ApiTestCase(unittest.TestCase):
     def setUp(self):
-        self.tempdir = tempfile.mkdtemp(prefix="jarvis-api-test-")
+        self.tempdir = tempfile.mkdtemp(prefix="vave-api-test-")
         self.store = ControlStore(Path(self.tempdir) / "control.db")
         self.plane = ControlPlane(store=self.store)
         # A runner that needs no local model, so the API is tested on its own.

@@ -31,7 +31,7 @@ REFERENCE = re.compile(r"secret://([A-Za-z0-9_.-]+)")
 DEFAULT_KEY_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "secret.key"
 
 # Environment wins, so a deployment can hand the key in without a file.
-KEY_ENVIRONMENT_VARIABLE = "JARVIS_SECRET_KEY"
+KEY_ENVIRONMENT_VARIABLE = "VAVE_SECRET_KEY"
 
 # Credentials that currently sit in config.json, and the names they take here.
 CONFIG_SECRETS = {

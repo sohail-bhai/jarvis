@@ -1,4 +1,4 @@
-"""Tests for what JARVIS remembers about a website.
+"""Tests for what VAVE remembers about a website.
 
 The second visit should not start from nothing. These check notes are kept per
 domain, handed back as a hint, and capped so they stay small enough to sit in
@@ -26,7 +26,7 @@ class DomainTests(unittest.TestCase):
 
 class MemoryTests(unittest.TestCase):
     def setUp(self):
-        self.tempdir = tempfile.mkdtemp(prefix="jarvis-sites-")
+        self.tempdir = tempfile.mkdtemp(prefix="vave-sites-")
         self.memory = SiteMemory(Path(self.tempdir) / "site_notes.json")
 
     def tearDown(self):

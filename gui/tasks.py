@@ -5,7 +5,7 @@ the control plane: what you type becomes a real task, the steps are real
 steps, and the progress card follows what actually happened rather than a
 script. No tkinter here, so it can be tested without a display.
 
-The plane may be on this machine or on another one. When `jarvis_server` is set
+The plane may be on this machine or on another one. When `vave_server` is set
 in `config.json` the work is created and run over there, which is what lets a
 laptop drive the computer that has the files, the tools and the model. Either
 way the progress card is fed by the same events, so nothing below this line

@@ -21,8 +21,8 @@ class AppStore:
         self.active_drawer: Optional[Dict[str, Any]] = None  # {"type": "device"|"file"|"task"|"activity"|"approval", "data": ...}
         
         # VAVE Status
-        self.jarvis_online = True
-        self.jarvis_status_text = "All systems running"
+        self.vave_online = True
+        self.vave_status_text = "All systems running"
         self.voice_listening = False
         
         # System Log Entries

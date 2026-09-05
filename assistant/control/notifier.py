@@ -63,7 +63,7 @@ class Notification:
     def as_text(self):
         """One line for a channel that can only carry words."""
         prefix = {"action": "Needs you", "problem": "Problem",
-                  "security": "Security", "done": "Done"}.get(self.urgency, "JARVIS")
+                  "security": "Security", "done": "Done"}.get(self.urgency, "VAVE")
         return f"{prefix}: {self.event.message}"
 
 

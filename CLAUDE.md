@@ -1,30 +1,30 @@
-# JARVIS --- Claude Code Project Context
+# VAVE --- Claude Code Project Context
 
 ## Mission
 
-JARVIS is evolving from the existing Python desktop assistant into a
+VAVE is evolving from the existing Python desktop assistant into a
 **personal AI control plane**: one simple interface through which a
-normal user can ask for goals and JARVIS coordinates AI helpers,
+normal user can ask for goals and VAVE coordinates AI helpers,
 computers, phone, Google Workspace, files, and the web behind the
 scenes.
 
 Core promise:
 
-> The user thinks in goals. JARVIS handles agents, devices, tools,
+> The user thinks in goals. VAVE handles agents, devices, tools,
 > permissions, services, azznd execution.
 
-JARVIS is not merely a chatbot, voice assistant, coding agent, or
-OpenClaw frontend. OpenClaw is an optional integration/worker. JARVIS
+VAVE is not merely a chatbot, voice assistant, coding agent, or
+OpenClaw frontend. OpenClaw is an optional integration/worker. VAVE
 must remain useful without OpenClaw.
 
 ------------------------------------------------------------------------
 
 ## 1. Current Repository --- Inspect Before Changing
 
-Repository: `https://github.com/sohail-bhai/jarvis`
+Repository: `https://github.com/sohail-bhai/vave`
 
 The current main branch was inspected on 2026-09-04. It is a small
-Python desktop project currently described as **JARVIS Desktop
+Python desktop project currently described as **VAVE Desktop
 Assistant - Version 1.2**. The GitHub tree currently includes:
 
 ``` text
@@ -36,7 +36,7 @@ AGENTS.md
 README.md
 config.json
 context.md
-jarvis_gui.py
+vave_gui.py
 main.py
 plan.md
 requirements.txt
@@ -64,7 +64,7 @@ Important existing modules include:
 
 ``` text
 main.py
-jarvis_gui.py
+vave_gui.py
 assistant/controller.py
 assistant/state.py
 assistant/events.py
@@ -160,7 +160,7 @@ versions.
 
 # 3. Target Product
 
-JARVIS should become a **framework-agnostic personal AI control plane**.
+VAVE should become a **framework-agnostic personal AI control plane**.
 
 Conceptually:
 
@@ -171,7 +171,7 @@ Conceptually:
                            |
                            v
                     +-------------+
-                    |   JARVIS    |
+                    |   VAVE    |
                     | Control Core |
                     +------+------+
                            |
@@ -194,7 +194,7 @@ The fundamental workflow is:
 
 ``` text
 User goal
-  -> JARVIS understands intent
+  -> VAVE understands intent
   -> determine required capabilities
   -> choose/coordinate helper(s) and device(s)
   -> obtain required access
@@ -213,7 +213,7 @@ User goal
 
 ### 4.1 Helper Registry
 
-JARVIS maintains a registry of connected AI helpers with: - name -
+VAVE maintains a registry of connected AI helpers with: - name -
 implementation/framework - device - status - capabilities - current
 task - permissions - last activity
 
@@ -230,11 +230,11 @@ ML helper: Python, GPU, model training
 ```
 
 A user says "train this model" rather than selecting a server/agent.
-JARVIS finds the appropriate capability.
+VAVE finds the appropriate capability.
 
 ### 4.3 Framework-Agnostic Network
 
-Support a common JARVIS abstraction over: - native JARVIS helpers -
+Support a common VAVE abstraction over: - native VAVE helpers -
 OpenClaw - LangGraph - CrewAI - MCP-based tools/agents - custom Python
 agents - custom TypeScript agents
 
@@ -256,12 +256,12 @@ Prepare my project
 
 ### 4.5 Helper Handoff
 
-A helper can request another capability through JARVIS.
+A helper can request another capability through VAVE.
 
 ``` text
 Coding helper
   -> needs GPU
-  -> JARVIS finds ML helper
+  -> VAVE finds ML helper
   -> ML helper works
   -> result returns
   -> coding helper continues
@@ -280,7 +280,7 @@ or helper/device failure when possible.
 
 Connect: - desktop - laptop - phone - server - NAS - cloud machines
 
-The user should say "run this on my GPU server" and JARVIS resolves the
+The user should say "run this on my GPU server" and VAVE resolves the
 actual machine/worker.
 
 ### 4.8 Cross-Device Files
@@ -292,9 +292,9 @@ Example:
 
 ``` text
 Find my Hackwave presentation
-  -> JARVIS searches computer/phone/server/connected storage
+  -> VAVE searches computer/phone/server/connected storage
   -> returns likely result
-  -> user can open/send/share/use with JARVIS
+  -> user can open/send/share/use with VAVE
 ```
 
 SSH may be an implementation mechanism, but SSH is not the product
@@ -390,7 +390,7 @@ Do not create an event when key details are ambiguous.
 
 ### 4.19 Docs/Sheets/Slides
 
-Support creation/manipulation workflows through JARVIS. Do not recreate
+Support creation/manipulation workflows through VAVE. Do not recreate
 Google editors.
 
 Examples:
@@ -413,7 +413,7 @@ Research helper
  -> create Slides
 ```
 
-JARVIS remains the coordinator and access-control layer.
+VAVE remains the coordinator and access-control layer.
 
 ------------------------------------------------------------------------
 
@@ -447,7 +447,7 @@ Sensitive final actions must not silently execute.
 
 ## F. Intelligence
 
-### 4.23 Shared JARVIS Memory
+### 4.23 Shared VAVE Memory
 
 Shared memory can contain: - projects - preferences - decisions -
 workflows - recent tasks - approved facts - relevant context
@@ -468,7 +468,7 @@ Before data reaches a helper, minimize it to what is actually needed.
 
 ``` text
 User data
- -> JARVIS
+ -> VAVE
  -> relevant subset
  -> helper
 ```
@@ -476,7 +476,7 @@ User data
 ### 4.26 Secret Broker
 
 Do not expose raw credentials unnecessarily. Prefer operation-level
-access through JARVIS/secret storage.
+access through VAVE/secret storage.
 
 ------------------------------------------------------------------------
 
@@ -491,7 +491,7 @@ Example:
 
 ``` text
 CI fails
- -> JARVIS
+ -> VAVE
  -> coding helper investigates
 ```
 
@@ -517,7 +517,7 @@ The desktop UI is for normal users, not infrastructure engineers.
 Primary sidebar:
 
 ``` text
-JARVIS
+VAVE
 
 Home
 My Devices
@@ -528,7 +528,7 @@ Activity
 Settings
 
 ----------------
-● JARVIS Online
+● VAVE Online
 ```
 
 Do not expose these as primary navigation: - agent registry -
@@ -573,7 +573,7 @@ Preparing your project
 
 Quick access cards: - My Files - Google - Web
 
-Include a subtle explanation that users can simply ask JARVIS in normal
+Include a subtle explanation that users can simply ask VAVE in normal
 language.
 
 ------------------------------------------------------------------------
@@ -615,7 +615,7 @@ The System Log is an action/status log, not a model-reasoning window.
 Show simple cards for connected machines. Technical metrics may exist
 under an expandable Details section, but should not dominate the UI.
 
-Device drawer should show: - online state - what JARVIS can do on the
+Device drawer should show: - online state - what VAVE can do on the
 device - connected helpers - recent activity - disconnect action
 
 ------------------------------------------------------------------------
@@ -718,13 +718,13 @@ showing raw orchestration.
 
 ## 5.9 Approvals
 
-Approval cards should answer: - What is JARVIS about to do? - Why? -
+Approval cards should answer: - What is VAVE about to do? - Why? -
 What changes? - What happens if I approve?
 
 Example:
 
 ``` text
-JARVIS needs your approval
+VAVE needs your approval
 
 I'm ready to merge your project changes.
 14 files were changed.
@@ -756,7 +756,7 @@ Include permission management, approvals, and emergency stop.
 ## 5.11 Memory
 
 Keep lightweight. Prefer an optional Settings/advanced area or a simple
-"What JARVIS remembers" view.
+"What VAVE remembers" view.
 
 ------------------------------------------------------------------------
 
@@ -820,8 +820,8 @@ AI helper
 What it can do
 Temporary access
 Working
-JARVIS is handling this
-JARVIS asked another AI to help
+VAVE is handling this
+VAVE asked another AI to help
 Couldn't finish this step
 ```
 
@@ -866,10 +866,10 @@ developer console.
 A practical future boundary is:
 
 ``` text
-Existing Python JARVIS Core
+Existing Python VAVE Core
         |
         v
-JARVIS service/API boundary
+VAVE service/API boundary
         |
         v
 Modern desktop frontend
@@ -987,7 +987,7 @@ SHUTDOWN
 REST/WebSockets are sufficient for the prototype. gRPC/protobuf can be
 considered later.
 
-JARVIS owns task state and coordination; external frameworks do not own
+VAVE owns task state and coordination; external frameworks do not own
 the whole system.
 
 ------------------------------------------------------------------------
@@ -1000,11 +1000,11 @@ Current OpenClaw itself already supports gateway/node concepts and
 file-transfer functionality. Therefore do not position simple SSH/file
 transfer as the unique innovation.
 
-The JARVIS differentiator is the higher-level control plane:
+The VAVE differentiator is the higher-level control plane:
 
 ``` text
 User goal
- -> JARVIS
+ -> VAVE
  -> choose worker/device
  -> control access
  -> coordinate work
@@ -1144,7 +1144,7 @@ User enters:
 Continue my Hackwave project.
 ```
 
-JARVIS shows:
+VAVE shows:
 
 ``` text
 I'm working on it.
@@ -1168,7 +1168,7 @@ Preparing the next step
 Then:
 
 ``` text
-JARVIS needs your approval
+VAVE needs your approval
 
 I'm ready to make the final changes.
 
@@ -1188,7 +1188,7 @@ The demo should communicate:
 
 ``` text
 Natural language
-  -> JARVIS
+  -> VAVE
   -> multiple environments
   -> coordination
   -> security
@@ -1241,7 +1241,7 @@ independently.
 Safe verification commands include:
 
 ``` bash
-python -m compileall -q main.py assistant gui jarvis_gui.py
+python -m compileall -q main.py assistant gui vave_gui.py
 python main.py --smoke-test
 ```
 
@@ -1289,9 +1289,9 @@ decision.
 
 The simplest accurate explanation is:
 
-> **JARVIS is a personal AI control plane that connects your AI helpers,
+> **VAVE is a personal AI control plane that connects your AI helpers,
 > computers, phone, Google Workspace, files, and the internet. You give
-> it goals in plain English; JARVIS coordinates the work behind the
+> it goals in plain English; VAVE coordinates the work behind the
 > scenes and keeps you in control of important actions.**
 
 The technical complexity belongs behind the interface.
@@ -1301,7 +1301,7 @@ The user should experience:
 ``` text
 What do you want?
         ↓
-JARVIS is working.
+VAVE is working.
         ↓
 Here's what I'm doing.
         ↓

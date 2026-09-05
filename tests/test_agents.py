@@ -36,7 +36,7 @@ from assistant.control.store import ControlStore
 
 class AgentTestCase(unittest.TestCase):
     def setUp(self):
-        self.tempdir = tempfile.mkdtemp(prefix="jarvis-agent-test-")
+        self.tempdir = tempfile.mkdtemp(prefix="vave-agent-test-")
         self.store = ControlStore(Path(self.tempdir) / "control.db")
         self.plane = ControlPlane(store=self.store)
 

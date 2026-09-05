@@ -695,7 +695,7 @@ def find_and_click_text(target_text):
         
     import time
     
-    logger.info(f"[JARVIS Vision] Searching entire desktop for '{target_text}'...")
+    logger.info(f"[VAVE Vision] Searching entire desktop for '{target_text}'...")
     
     try:
         # Search the entire desktop tree up to depth 7 for the exact name
@@ -705,7 +705,7 @@ def find_and_click_text(target_text):
             time.sleep(1)
             return True
     except Exception as e:
-        logger.info(f"[JARVIS Vision Error] {e}")
+        logger.info(f"[VAVE Vision Error] {e}")
         
     speak(f"I could not find the text {target_text} on the screen.")
     return False
@@ -750,7 +750,7 @@ def write_to_screen_line(line_number: int, text: str):
     idx = int(line_number)
     current_pid = os.getpid()
     
-    # 1. Search candidate windows specifically for document/editor controls (EXCLUDING JARVIS GUI)
+    # 1. Search candidate windows specifically for document/editor controls (EXCLUDING VAVE GUI)
     candidates = []
 
     # Priority 1: Check known document/editor windows directly (Notepad, etc.)
@@ -759,16 +759,16 @@ def write_to_screen_line(line_number: int, text: str):
         if np.Exists(0.2) and np.ProcessId != current_pid and np not in candidates:
             candidates.append(np)
 
-    # Priority 2: Check current foreground window if not JARVIS
+    # Priority 2: Check current foreground window if not VAVE
     fg = auto.GetForegroundControl()
     if fg and fg.ControlType == auto.ControlType.WindowControl:
-        if fg.ProcessId != current_pid and "jarvis" not in fg.Name.lower() and fg not in candidates:
+        if fg.ProcessId != current_pid and "vave" not in fg.Name.lower() and fg not in candidates:
             candidates.append(fg)
 
-    # Priority 3: Desktop windows excluding JARVIS
+    # Priority 3: Desktop windows excluding VAVE
     for w in auto.GetRootControl().GetChildren():
         if w.ControlType == auto.ControlType.WindowControl:
-            if w.ProcessId != current_pid and "jarvis" not in w.Name.lower() and w not in candidates:
+            if w.ProcessId != current_pid and "vave" not in w.Name.lower() and w not in candidates:
                 candidates.append(w)
 
     target_win = None
@@ -899,7 +899,7 @@ def provide_morning_briefing():
     time_str = datetime.datetime.now().strftime("%I:%M %p")
     
     prompt = f"""
-You are JARVIS. It is currently {time_str}.
+You are VAVE. It is currently {time_str}.
 Your personality is a friendly buddy who has {user_name}'s back. You make funny jokes and use casual, conversational language instead of being a robotic servant.
 Provide a concise, conversational morning briefing for {user_name} based on the following raw data.
 Keep it strictly under 4 sentences. Speak naturally, throw in a quick joke, and do not list markdown bullets.
@@ -1022,11 +1022,11 @@ def get_clickable_elements():
     try:
         current_pid = os.getpid()
         active_window = auto.GetForegroundControl()
-        if not active_window or active_window.ProcessId == current_pid or "jarvis" in active_window.Name.lower():
+        if not active_window or active_window.ProcessId == current_pid or "vave" in active_window.Name.lower():
             active_window = None
             for w in auto.GetRootControl().GetChildren():
                 if w.ControlType == auto.ControlType.WindowControl and w.BoundingRectangle.width() > 100:
-                    if w.ProcessId != current_pid and "jarvis" not in w.Name.lower():
+                    if w.ProcessId != current_pid and "vave" not in w.Name.lower():
                         active_window = w
                         break
         if not active_window:
@@ -1084,7 +1084,7 @@ def enable_voice_input():
 
 
 def disable_speech_output():
-    """Mutes JARVIS so he stops speaking out loud (Text-to-Speech). He will only reply via text."""
+    """Mutes VAVE so he stops speaking out loud (Text-to-Speech). He will only reply via text."""
     from assistant.speech import set_speech_enabled
     from assistant.config import update_setting
     update_setting("speech_enabled", False)
@@ -1092,7 +1092,7 @@ def disable_speech_output():
     return "My voice output has been disabled. I will only communicate via text."
 
 def enable_speech_output():
-    """Unmutes JARVIS so he speaks out loud again using Text-to-Speech."""
+    """Unmutes VAVE so he speaks out loud again using Text-to-Speech."""
     from assistant.speech import set_speech_enabled
     from assistant.config import update_setting
     update_setting("speech_enabled", True)

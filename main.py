@@ -7,7 +7,7 @@ from assistant import logging_setup
 
 def build_parser():
     parser = argparse.ArgumentParser(
-        description="JARVIS Desktop Assistant"
+        description="VAVE Desktop Assistant"
     )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
@@ -63,7 +63,7 @@ def main(argv=None):
         return 0 if passed else 1
 
     if args.gui:
-        from jarvis_gui import main as gui_main
+        from vave_gui import main as gui_main
         return gui_main()
 
     if args.server:
@@ -72,7 +72,7 @@ def main(argv=None):
         except ModuleNotFoundError as error:
             if error.name in {"fastapi", "uvicorn", "python_multipart"}:
                 print(
-                    "JARVIS API dependencies are missing in this Python environment.\n"
+                    "VAVE API dependencies are missing in this Python environment.\n"
                     "Use the project venv or install requirements:\n\n"
                     "    source venv/bin/activate\n"
                     "    python main.py --server --host 0.0.0.0 --port 8765\n\n"

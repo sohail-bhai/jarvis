@@ -16,7 +16,7 @@ class ExecutorTestCase(unittest.TestCase):
     """Each test gets its own database and a runner that never needs a model."""
 
     def setUp(self):
-        self.tempdir = tempfile.mkdtemp(prefix="jarvis-test-")
+        self.tempdir = tempfile.mkdtemp(prefix="vave-test-")
         self.store = ControlStore(Path(self.tempdir) / "control.db")
         self.plane = ControlPlane(store=self.store)
         self.calls = []

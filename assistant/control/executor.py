@@ -1,7 +1,7 @@
 """Executes control plane tasks by running their steps through the AI brain.
 
 The control plane records what should happen; this is the piece that makes it
-happen. It walks a task's steps in order, hands each one to the JARVIS agent
+happen. It walks a task's steps in order, hands each one to the VAVE agent
 loop, and writes the outcome back so every client - desktop, mobile or the
 activity stream - sees real progress rather than a plan nobody is working on.
 
@@ -177,7 +177,7 @@ class TaskExecutor:
             return task
 
         if self.plane.is_stopped:
-            return self.plane.cancel_task(task_id, "JARVIS is stopped.")
+            return self.plane.cancel_task(task_id, "VAVE is stopped.")
 
         token = CancelToken()
         with self._lock:
@@ -397,7 +397,7 @@ class TaskExecutor:
     def _halt_reason(self, task_id):
         """Why this task should stop now, or an empty string to keep going."""
         if self.plane.is_stopped:
-            return "JARVIS is stopped."
+            return "VAVE is stopped."
 
         task = self.plane.get_task(task_id)
         if task is None:
@@ -421,7 +421,7 @@ class TaskExecutor:
             if task is None or task.status.is_terminal:
                 return False
             if self.plane.is_stopped:
-                self.plane.cancel_task(task_id, "JARVIS is stopped.")
+                self.plane.cancel_task(task_id, "VAVE is stopped.")
                 return False
             if task.status != TaskStatus.WAITING_APPROVAL:
                 return True

@@ -1,11 +1,11 @@
-"""One long-lived browser JARVIS drives like a person would.
+"""One long-lived browser VAVE drives like a person would.
 
 The browser is deliberately persistent: it keeps a profile directory, so a
 site you logged into once stays logged in for later tasks. That is what makes
 "look at my GitLab issues" possible without handling your password at all.
 
 Playwright is imported lazily and every call goes through a small surface, so
-the rest of JARVIS - and every test - can work against a stand-in instead of a
+the rest of VAVE - and every test - can work against a stand-in instead of a
 real browser.
 """
 
@@ -41,7 +41,7 @@ class BrowserUnavailable(Exception):
 
 
 class BrowserSession:
-    """A running browser, its current page, and the elements JARVIS can see."""
+    """A running browser, its current page, and the elements VAVE can see."""
 
     def __init__(self, headless=None, profile_dir=None, timeout_ms=DEFAULT_TIMEOUT_MS):
         self.headless = (get_setting("browser_headless", False)
@@ -350,7 +350,7 @@ class BrowserSession:
     def wait_until_signed_in(self, timeout_ms=180_000, poll_ms=2000):
         """Wait for a person to finish signing in, in the window they can see.
 
-        JARVIS never types a password. It waits, and carries on once the page
+        VAVE never types a password. It waits, and carries on once the page
         stops asking for one.
         """
         import time
@@ -415,7 +415,7 @@ def get_session():
 
 
 def set_session(session):
-    """Used by tests, and by anything embedding JARVIS with its own browser."""
+    """Used by tests, and by anything embedding VAVE with its own browser."""
     global _session
     with _session_lock:
         _session = session

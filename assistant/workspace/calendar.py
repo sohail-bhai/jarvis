@@ -18,7 +18,7 @@ _mock_events: List[Dict[str, Any]] = [
         "summary": "Hackwave Demo Presentation",
         "start": {"dateTime": (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=2)).isoformat()},
         "end": {"dateTime": (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=3)).isoformat()},
-        "description": "Presenting JARVIS Personal AI Control Plane to Judges."
+        "description": "Presenting VAVE Personal AI Control Plane to Judges."
     },
     {
         "id": "event_mock_002",
@@ -86,7 +86,7 @@ def create_calendar_event(
 
     event_body = {
         "summary": summary,
-        "description": description or f"Created autonomously via JARVIS Control Plane.",
+        "description": description or f"Created autonomously via VAVE Control Plane.",
         "start": {"dateTime": start_dt.isoformat()},
         "end": {"dateTime": end_dt.isoformat()}
     }

@@ -4,7 +4,7 @@ The desktop app and the phone should be looking at the same tasks, the same
 approvals and the same files. They are when they share one control plane, so
 the API runs in this process rather than beside it - starting it from the GUI
 is what makes the phone a client of *this* computer instead of a second,
-unrelated JARVIS.
+unrelated VAVE.
 
 Nothing here is reachable without pairing, and the pairing code is issued
 directly by the same security object the API checks tokens against, so no code
@@ -94,7 +94,7 @@ class LocalServer:
         self._server.install_signal_handlers = lambda: None
 
         self._thread = threading.Thread(target=self._run, daemon=True,
-                                        name="jarvis-api")
+                                        name="vave-api")
         self._thread.start()
 
         deadline = time.monotonic() + timeout

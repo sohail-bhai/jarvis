@@ -16,7 +16,7 @@ from assistant.control.models import Device, Task
 
 class MigrationTests(unittest.TestCase):
     def setUp(self):
-        self.tempdir = tempfile.mkdtemp(prefix="jarvis-migration-test-")
+        self.tempdir = tempfile.mkdtemp(prefix="vave-migration-test-")
         self.path = Path(self.tempdir) / "control.db"
 
     def tearDown(self):

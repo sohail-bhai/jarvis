@@ -1,6 +1,6 @@
-# JARVIS on your phone
+# VAVE on your phone
 
-The phone is not a second JARVIS. It is a way into the one running on your
+The phone is not a second VAVE. It is a way into the one running on your
 computer: you ask for something on the phone, the work happens on the
 computer, and the phone shows what actually happened and asks you to approve
 anything consequential.
@@ -38,7 +38,7 @@ the venv activated (`source venv/bin/activate`), `python -m assistant.api
 It prints the address to type on the phone:
 
 ```
-  JARVIS is listening.
+  VAVE is listening.
 
   Enter on your phone:     192.168.1.20:8765
   To connect a phone:      python -m assistant.api --pair --port 8765
@@ -59,7 +59,7 @@ npm install
 npm run build:apk       # Windows: npm run build:apk:windows
 ```
 
-The APK lands at `mobile/JARVIS.apk`. Copy it to the phone and install it.
+The APK lands at `mobile/VAVE.apk`. Copy it to the phone and install it.
 
 It is the **release** variant, which is the whole point: the debug variant has
 no JavaScript bundled into it and looks for a dev server at startup, so it only
@@ -97,7 +97,7 @@ phone**, or revoke it on the computer:
 curl -X DELETE localhost:8765/api/devices/<id>/token
 ```
 
-To point a build at a computer by default, set `EXPO_PUBLIC_JARVIS_URL`.
+To point a build at a computer by default, set `EXPO_PUBLIC_VAVE_URL`.
 Anything typed on the phone wins over it.
 
 ## Reaching the computer from anywhere
@@ -106,7 +106,7 @@ The address is all that changes between these:
 
 | Where you are | What to enter |
 | --- | --- |
-| Same Wi-Fi | The LAN address JARVIS printed, e.g. `192.168.1.20:8765` |
+| Same Wi-Fi | The LAN address VAVE printed, e.g. `192.168.1.20:8765` |
 | Anywhere, over Tailscale | The Tailscale name or address of the computer |
 | Same machine, web preview | `127.0.0.1:8765` |
 
@@ -169,7 +169,7 @@ for a headless machine.
 Said plainly, because a screen that pretends is worse than a screen that
 admits:
 
-- **What JARVIS remembers** is example data.
+- **What VAVE remembers** is example data.
 - **Google** is real, but shows examples until you connect an account, and
   labels them - see [google.md](google.md).
 - **Notifications** need the app open. There is no push service, so a phone in

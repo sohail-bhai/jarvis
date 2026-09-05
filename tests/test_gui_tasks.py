@@ -28,7 +28,7 @@ class FixedPlanner:
 
 class WebTaskTests(unittest.TestCase):
     def setUp(self):
-        self.tempdir = tempfile.mkdtemp(prefix="jarvis-gui-task-")
+        self.tempdir = tempfile.mkdtemp(prefix="vave-gui-task-")
         self.store = ControlStore(Path(self.tempdir) / "control.db")
         self.plane = ControlPlane(store=self.store)
         self.ran = []
@@ -93,7 +93,7 @@ class WebTaskTests(unittest.TestCase):
 
         self.assertTrue(any(item["failed"] for item in seen))
 
-    def test_nothing_starts_while_jarvis_is_stopped(self):
+    def test_nothing_starts_while_vave_is_stopped(self):
         self.plane.emergency_stop()
 
         task, seen = self.start()

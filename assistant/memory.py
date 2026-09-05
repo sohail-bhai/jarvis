@@ -19,20 +19,20 @@ try:
     from chromadb.config import Settings
     chroma_client = chromadb.PersistentClient(path=str(DATA_DIR / "chroma_db"))
     memory_collection = chroma_client.get_or_create_collection(
-        name="jarvis_memory",
+        name="vave_memory",
         metadata={"hnsw:space": "cosine"}
     )
     document_collection = chroma_client.get_or_create_collection(
-        name="jarvis_documents",
+        name="vave_documents",
         metadata={"hnsw:space": "cosine"}
     )
     _memory_enabled = True
 except Exception as e:
-    logger.info(f"[JARVIS] WARNING: Could not initialize ChromaDB (Semantic Memory is disabled). Error: {e}")
+    logger.info(f"[VAVE] WARNING: Could not initialize ChromaDB (Semantic Memory is disabled). Error: {e}")
 
 def remember_fact(fact):
     """
-    Saves a fact into JARVIS's permanent ChromaDB memory.
+    Saves a fact into VAVE's permanent ChromaDB memory.
     """
     if not _memory_enabled:
         return False

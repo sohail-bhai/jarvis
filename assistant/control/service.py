@@ -3,7 +3,7 @@
 This is the layer that owns coordination: it accepts a goal, records the steps,
 picks a helper by capability, grants narrow time-limited access, holds
 consequential actions for approval, and writes a readable trail of what
-happened. JARVIS owns this state - external frameworks plug into it rather than
+happened. VAVE owns this state - external frameworks plug into it rather than
 replacing it.
 
 Everything here is synchronous and thread-safe so it can be driven equally from
@@ -94,7 +94,7 @@ class ControlPlane:
     # -- devices ------------------------------------------------------------
 
     def _register_local_device(self):
-        """Make sure the machine JARVIS runs on is always a known device."""
+        """Make sure the machine VAVE runs on is always a known device."""
         name = socket.gethostname() or "This computer"
         for device in self.store.list_devices():
             if device.name == name and device.kind == "computer":
@@ -316,7 +316,7 @@ class ControlPlane:
     def create_task(self, goal, steps=None, capability=None):
         """Accept a goal and lay out the steps the user will see."""
         if self._stopped:
-            raise RuntimeError("JARVIS is stopped. Reset before starting new work.")
+            raise RuntimeError("VAVE is stopped. Reset before starting new work.")
 
         task = Task(goal=goal, status=TaskStatus.PENDING,
                     device_id=self.local_device.id)
@@ -611,7 +611,7 @@ class ControlPlane:
         permission or it holds nothing.
         """
         if self._stopped:
-            raise RuntimeError("JARVIS is stopped. Reset before starting new work.")
+            raise RuntimeError("VAVE is stopped. Reset before starting new work.")
 
         judgement = self.policy.evaluate(capability, agent_id=agent_id,
                                          task_id=task_id, resource=resource)
@@ -739,7 +739,7 @@ class ControlPlane:
     # -- activity -----------------------------------------------------------
 
     def record(self, message, event_type=EventType.NOTE, task_id="",
-               actor="JARVIS", metadata=None, agent_id="", capability="",
+               actor="VAVE", metadata=None, agent_id="", capability="",
                risk="", approval_id="", result=""):
         """Write one plain-English line to the timeline and notify listeners.
 
@@ -806,7 +806,7 @@ class ControlPlane:
     def resume(self):
         """Allow new work again after an emergency stop."""
         self._stopped = False
-        self.record("JARVIS is accepting new work again.", EventType.NOTE)
+        self.record("VAVE is accepting new work again.", EventType.NOTE)
         return {"stopped": False}
 
     @property

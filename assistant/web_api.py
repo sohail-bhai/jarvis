@@ -1,6 +1,6 @@
 """Calling any service that has an API, without writing a module for each one.
 
-The browser is how JARVIS uses a site a person would click through. This is
+The browser is how VAVE uses a site a person would click through. This is
 the other half: most services worth automating - GitHub, Jira, Linear, Notion,
 Slack, a home server, your own backend - have a REST API, and an API call
 either worked or it did not, which a click never quite tells you.
@@ -56,7 +56,7 @@ def _resolve_secret(name):
 
 
 def _headers(auth_secret, auth_style, extra):
-    headers = {"Accept": "application/json", "User-Agent": "JARVIS"}
+    headers = {"Accept": "application/json", "User-Agent": "VAVE"}
     headers.update(extra or {})
 
     if auth_secret:

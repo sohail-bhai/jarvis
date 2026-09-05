@@ -1,6 +1,6 @@
 """Working on GitLab: reading issues, proposing a fix, opening a merge request.
 
-The browser is how JARVIS reads a page a person would read. GitLab is
+The browser is how VAVE reads a page a person would read. GitLab is
 different: it has a proper API, and using it means a fix lands as a real
 commit on a real branch rather than as clicks that might have gone wrong. So
 this talks to the API, and the browser is only for showing you the result.
@@ -152,7 +152,7 @@ def _client(transport=None):
 
 
 def gitlab_list_issues(project, state="opened", limit=10, _client_override=None):
-    """List open issues on a GitLab project, so JARVIS can pick one."""
+    """List open issues on a GitLab project, so VAVE can pick one."""
     try:
         issues = (_client_override or _client()).list_issues(project, state, limit)
     except GitLabError as error:
@@ -222,7 +222,7 @@ def gitlab_propose_fix(project, issue_iid, path, new_content, summary="",
     change - which is why proposing and merging are two different steps.
     """
     client = _client_override or _client()
-    branch = f"jarvis/issue-{issue_iid}"
+    branch = f"vave/issue-{issue_iid}"
 
     try:
         target = client.default_branch(project)
@@ -239,7 +239,7 @@ def gitlab_propose_fix(project, issue_iid, path, new_content, summary="",
             project, branch, target,
             title=f"Fix #{issue_iid}: {summary or 'address the reported issue'}",
             description=(f"Closes #{issue_iid}\n\n{summary}\n\n"
-                         "Prepared by JARVIS. Please read the change before merging."))
+                         "Prepared by VAVE. Please read the change before merging."))
     except GitLabError as error:
         return str(error)
 

@@ -47,10 +47,10 @@ def _telegram_worker():
             logger.warning(f"Could not resolve secret for Telegram token: {e}")
     
     if not token:
-        logger.info("[JARVIS] Telegram Bot Token not found in config. Remote execution disabled.")
+        logger.info("[VAVE] Telegram Bot Token not found in config. Remote execution disabled.")
         return
         
-    logger.info("[JARVIS] Connecting to Telegram Bot...")
+    logger.info("[VAVE] Connecting to Telegram Bot...")
     offset = 0
     
     while _telegram_active:
@@ -76,10 +76,10 @@ def _telegram_worker():
                             # Security Check: Only allow commands from the authorized chat ID
                             # If chat_id is empty in config, we authorize the first person who messages it!
                             if not chat_id:
-                                logger.info(f"[JARVIS] Saving new Telegram Chat ID: {sender_chat_id}")
+                                logger.info(f"[VAVE] Saving new Telegram Chat ID: {sender_chat_id}")
                                 update_setting("telegram_chat_id", sender_chat_id)
                                 chat_id = sender_chat_id
-                                send_telegram_message(token, chat_id, "JARVIS Remote Link Established. I am ready for commands.")
+                                send_telegram_message(token, chat_id, "VAVE Remote Link Established. I am ready for commands.")
                                 continue
                                 
                             if sender_chat_id == chat_id:
@@ -90,7 +90,7 @@ def _telegram_worker():
                                     send_telegram_message(
                                         token,
                                         chat_id,
-                                        "Greetings! JARVIS Remote Link is active and connected to your desktop. How can I assist you, Sir?"
+                                        "Greetings! VAVE Remote Link is active and connected to your desktop. How can I assist you, Sir?"
                                     )
                                     continue
 
@@ -98,7 +98,7 @@ def _telegram_worker():
                                     send_telegram_message(
                                         token,
                                         chat_id,
-                                        "JARVIS Telegram Bridge Commands:\n"
+                                        "VAVE Telegram Bridge Commands:\n"
                                         "- Ask any question (uses local Ollama AI brain)\n"
                                         "- 'time' or 'date' (check system clock)\n"
                                         "- 'battery' (hardware battery status)\n"
@@ -135,7 +135,7 @@ def _telegram_worker():
                                 call_context.spawn_thread(target=_run_remote_cmd, args=(text_clean, token, chat_id), daemon=True)
                             else:
 
-                                logger.info(f"[JARVIS] Unauthorized access attempt from Chat ID: {sender_chat_id}")
+                                logger.info(f"[VAVE] Unauthorized access attempt from Chat ID: {sender_chat_id}")
                                 
         except urllib.error.URLError as e:
             # Network issue, wait and retry

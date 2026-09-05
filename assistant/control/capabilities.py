@@ -40,7 +40,7 @@ CATALOG = {
     "system.input.control": (RiskLevel.HIGH, "Control the mouse and keyboard"),
     "system.shell.run": (RiskLevel.CRITICAL, "Run terminal commands"),
     "system.power": (RiskLevel.HIGH, "Lock, restart or shut down"),
-    "system.settings.write": (RiskLevel.MEDIUM, "Change JARVIS settings"),
+    "system.settings.write": (RiskLevel.MEDIUM, "Change VAVE settings"),
     "system.notify": (RiskLevel.LOW, "Send you a message"),
 
     # -- Cloud (Phase 2 builds on these names) ----------------------------
@@ -56,7 +56,7 @@ CATALOG = {
     "gitlab.merge": (RiskLevel.CRITICAL, "Merge changes into your repository"),
 
     # -- Knowledge --------------------------------------------------------
-    "memory.read": (RiskLevel.LOW, "Read what JARVIS remembers"),
+    "memory.read": (RiskLevel.LOW, "Read what VAVE remembers"),
     "memory.write": (RiskLevel.MEDIUM, "Remember something new"),
     "web.search": (RiskLevel.LOW, "Search the web"),
 }
@@ -173,11 +173,11 @@ def risk_for(capability):
 def describe(capability):
     """Plain language for the approval screen, never the raw name alone."""
     entry = CATALOG.get(capability)
-    return entry[1] if entry else f"Do something JARVIS does not recognise ({capability})"
+    return entry[1] if entry else f"Do something VAVE does not recognise ({capability})"
 
 
 def capability_for_tool(tool_name):
-    """The capability a JARVIS tool needs, or '' when it needs none."""
+    """The capability a VAVE tool needs, or '' when it needs none."""
     return TOOL_CAPABILITIES.get(tool_name, "")
 
 

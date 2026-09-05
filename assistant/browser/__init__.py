@@ -1,4 +1,4 @@
-"""Driving a real browser: the way JARVIS uses the web like a person."""
+"""Driving a real browser: the way VAVE uses the web like a person."""
 
 from assistant.browser.actions import (
     browse,

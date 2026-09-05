@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Starts the JARVIS control plane with the project's own Python.
+# Starts the VAVE control plane with the project's own Python.
 #
 # The dependencies live in ./venv, not in the system Python, so running
 # `python -m assistant.api` from a shell that has not activated the venv fails

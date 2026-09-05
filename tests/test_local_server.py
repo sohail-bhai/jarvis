@@ -1,6 +1,6 @@
 """Tests for the control plane running inside the desktop app.
 
-The phone is meant to be a client of *this* computer, not a second JARVIS, so
+The phone is meant to be a client of *this* computer, not a second VAVE, so
 what matters is that the server the desktop app starts shares one control plane
 with it: a task created from the phone is the same task the desktop shows.
 """

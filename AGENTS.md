@@ -4,10 +4,10 @@ Guidance for future agents working in this repository.
 
 ## Project Scope
 
-This is `JARVIS Desktop Assistant - Version 1.2`, a Python desktop assistant. It listens through the microphone, routes recognized voice commands, speaks responses with text-to-speech, and performs local desktop actions such as opening apps/websites, changing volume, taking screenshots, reading battery state, and managing notes.
+This is `VAVE Desktop Assistant - Version 1.2`, a Python desktop assistant. It listens through the microphone, routes recognized voice commands, speaks responses with text-to-speech, and performs local desktop actions such as opening apps/websites, changing volume, taking screenshots, reading battery state, and managing notes.
 
-JARVIS is evolving into a personal AI control plane: the user states a goal in
-plain language, and JARVIS coordinates AI helpers, devices, Google Workspace,
+VAVE is evolving into a personal AI control plane: the user states a goal in
+plain language, and VAVE coordinates AI helpers, devices, Google Workspace,
 files and the web behind the scenes.
 
 The local AI brain is implemented, not a placeholder. `assistant/ai_brain.py`
@@ -22,7 +22,7 @@ share one source of truth. Do not put coordination logic in the UI.
 Primary user-facing capabilities:
 
 - Voice input and spoken output.
-- CustomTkinter dashboard launched with `python jarvis_gui.py` or `python main.py --gui`.
+- CustomTkinter dashboard launched with `python vave_gui.py` or `python main.py --gui`.
 - Config-based personalization through `config.json`.
 - App launching for common local apps.
 - Website opening and Google/YouTube search.
@@ -33,7 +33,7 @@ Primary user-facing capabilities:
 ## Repository Map
 
 - `main.py`: application entry point. Creates `AssistantController` and starts it.
-- `jarvis_gui.py`: CustomTkinter dashboard launcher. Shows a clear install message if `customtkinter` is missing.
+- `vave_gui.py`: CustomTkinter dashboard launcher. Shows a clear install message if `customtkinter` is missing.
 - `gui/`: first desktop dashboard package. GUI widgets poll `EventBus` on the main thread and must not call CustomTkinter from worker threads.
 - `gui/app.py`: dashboard window, worker-thread orchestration, event polling, text command handling, smoke-test button, and voice start/stop controls.
 - `gui/theme.py`: shared dashboard colors and fonts.
@@ -195,7 +195,7 @@ There are small standard-library tests under `tests/`, plus a safe smoke-test CL
 Low-risk syntax check:
 
 ```bash
-python -m compileall -q main.py assistant gui jarvis_gui.py
+python -m compileall -q main.py assistant gui vave_gui.py
 ```
 
 Safe command-router smoke check:
@@ -207,7 +207,7 @@ python main.py --smoke-test
 GUI launch for manual testing only:
 
 ```bash
-python jarvis_gui.py
+python vave_gui.py
 ```
 
 Do not run `python main.py` automatically during agent verification. It starts the continuous voice listening loop and can keep running or wait on microphone/TTS resources. For automated testing, use `compileall`, `--smoke-test`, or one-shot `--text "..." --no-speech` commands unless the user explicitly asks for a different runtime check.
@@ -247,7 +247,7 @@ Known limits in Version 1.2:
 - Adding a service usually needs no code: store a credential and use
   `web_api_get`/`web_api_call`. Write a module only when the flow needs exact
   operations, as the GitLab fix flow does.
-- JARVIS never types a password. A login wall is handed to the user through
+- VAVE never types a password. A login wall is handed to the user through
   `browser_wait_for_login`.
 - File access is opt-in per folder and resolved-then-checked. Never add a path
   that skips `files.resolve()`; that function is the boundary.
@@ -273,7 +273,7 @@ Likely future work:
 
 ## GUI Development Rules
 
-- Use `python jarvis_gui.py` for manual GUI work.
+- Use `python vave_gui.py` for manual GUI work.
 - Do not start microphone listening automatically from the GUI; the user must click Start Listening.
 - GUI updates must happen on the CustomTkinter main thread. Worker threads should emit events through `EventBus`, then the app should poll with `after()`.
 - Prevent duplicate listener threads. Start should be disabled while voice listening is active.
@@ -291,9 +291,9 @@ Likely future work:
 - Do not clear `data/notes.txt` or rewrite `config.json` unless the task requires it.
 - Preserve confirmation prompts for destructive or disruptive actions.
 - Do not run `python main.py` automatically; provide manual runtime instructions instead.
-- Use `python -m compileall -q main.py assistant gui jarvis_gui.py` and `python main.py --smoke-test` for safe automated checks.
+- Use `python -m compileall -q main.py assistant gui vave_gui.py` and `python main.py --smoke-test` for safe automated checks.
 - Use `python main.py --text "time" --no-speech` for one-shot command checks.
-- For GUI work, use `python jarvis_gui.py` manually and keep all widget updates on the main thread through EventBus polling.
+- For GUI work, use `python vave_gui.py` manually and keep all widget updates on the main thread through EventBus polling.
 - Use available Codex planning, implementation, review, and critique features when they help quality without expanding scope.
 - Use `assistant.controller.AssistantController` as the integration point for assistant loops.
 - Use `assistant.commands.execute_command()` as the main integration point for new voice command behavior.

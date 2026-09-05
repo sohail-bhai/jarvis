@@ -1,4 +1,4 @@
-"""Talking to a JARVIS control plane running on another computer.
+"""Talking to a VAVE control plane running on another computer.
 
 The desktop app calls the control plane directly, which works only while the
 app and the work are on the same machine. Two people cannot share that: a
@@ -70,10 +70,10 @@ def normalise_host(value):
 def configured_server():
     """The computer this machine should work through, if it has been told one.
 
-    `jarvis_server` in `config.json` is what turns the desktop app from the
+    `vave_server` in `config.json` is what turns the desktop app from the
     thing that does the work into a client of something that does.
     """
-    return normalise_host(get_setting("jarvis_server", ""))
+    return normalise_host(get_setting("vave_server", ""))
 
 
 def is_remote():
@@ -84,11 +84,11 @@ class RemoteControlPlane:
     """A control plane on another computer, reached over HTTP and WebSocket."""
 
     def __init__(self, host=None, token=None):
-        self.host = normalise_host(host or get_setting("jarvis_server", ""))
-        self.token = token if token is not None else get_setting("jarvis_server_token", "")
+        self.host = normalise_host(host or get_setting("vave_server", ""))
+        self.token = token if token is not None else get_setting("vave_server_token", "")
 
         if not self.host:
-            raise ValueError("No JARVIS server configured.")
+            raise ValueError("No VAVE server configured.")
 
         self._subscribers = []
         self._lock = threading.Lock()
@@ -115,13 +115,13 @@ class RemoteControlPlane:
         except urllib.error.HTTPError as error:
             raise self._from_http_error(error) from None
         except urllib.error.URLError as error:
-            raise RemoteError(f"Could not reach JARVIS at {self.host}. ({error.reason})") from None
+            raise RemoteError(f"Could not reach VAVE at {self.host}. ({error.reason})") from None
 
     @staticmethod
     def _from_http_error(error):
         """Turn the API's one error envelope into one exception."""
         status = error.code
-        message = f"JARVIS answered {status}."
+        message = f"VAVE answered {status}."
         kind = "internal_error"
 
         try:
@@ -153,8 +153,8 @@ class RemoteControlPlane:
         })
 
         self.token = answer["token"]
-        update_setting("jarvis_server", self.host)
-        update_setting("jarvis_server_token", self.token)
+        update_setting("vave_server", self.host)
+        update_setting("vave_server_token", self.token)
         return answer
 
     # -- the surface the desktop app uses ----------------------------------
@@ -254,7 +254,7 @@ class RemoteControlPlane:
 
         self._stop_stream.clear()
         self._stream = threading.Thread(target=self._follow_events,
-                                        name="jarvis-remote-events", daemon=True)
+                                        name="vave-remote-events", daemon=True)
         self._stream.start()
 
     def close(self):
@@ -354,7 +354,7 @@ def _to_event(payload):
         task_id=payload.get("task_id", ""),
         type=event_type,
         message=payload.get("message", ""),
-        actor=payload.get("actor", "JARVIS"),
+        actor=payload.get("actor", "VAVE"),
         device_id=payload.get("device_id", ""),
         timestamp=payload.get("timestamp", time.time()),
         metadata=payload.get("metadata", {}) or {},

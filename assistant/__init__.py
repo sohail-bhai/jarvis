@@ -1,1 +1,1 @@
-# JARVIS Assistant package
+# VAVE Assistant package

@@ -1,4 +1,4 @@
-"""Google Workspace Gateway Package for JARVIS."""
+"""Google Workspace Gateway Package for VAVE."""
 
 from assistant.workspace.gateway import WorkspaceGateway, gateway
 from assistant.workspace.drive import search_drive, read_drive_file, upload_drive_file, list_drive_files

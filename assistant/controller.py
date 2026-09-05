@@ -69,7 +69,7 @@ class AssistantController:
             pass
 
     def _on_wakeword_detected(self):
-        """Called by the background thread when 'Hey Jarvis' is heard."""
+        """Called by the background thread when 'Hey Vave' is heard."""
         from assistant.speech import interrupt_speech
         from assistant.wakeword import pause_wakeword
         
@@ -118,7 +118,7 @@ class AssistantController:
 
     def greet(self):
         user_name = get_setting("user_name", "Sir")
-        assistant_name = get_setting("assistant_name", "Jarvis")
+        assistant_name = get_setting("assistant_name", "Vave")
 
         speak(f"Hello {user_name}, I am {assistant_name}. Version 1.2 is ready.")
         speak("How can I help you?")
