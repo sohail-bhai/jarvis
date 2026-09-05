@@ -327,6 +327,9 @@ def open_app(app_name):
                 subprocess.Popen(["open", app_path])
             else:
                 subprocess.Popen([app_path], shell=True)
+                
+            import time
+            time.sleep(4) # Wait for app to render before AI scans screen
             return True
 
         # Tier 3: Fallback to opening in browser
@@ -695,8 +698,73 @@ def move_mouse(x, y):
 def type_text(text):
     """Types the given text automatically."""
     pyautogui = _get_pyautogui()
-    pyautogui.write(str(text), interval=0.01)
-    return f"Typed {len(str(text))} characters."
+    body = str(text)
+
+    # A small model reaches for the tool it knows. Asked to select all and
+    # delete, it has been observed calling this with "Ctrl+A\nCtrl+Delete" as
+    # the text, which would type those characters into the user's document
+    # instead of pressing the shortcuts. When the argument is nothing but key
+    # combinations, do the thing that was obviously meant.
+    chords = _shortcut_sequence(body)
+    if chords:
+        return " ".join(press_key(chord) for chord in chords)
+
+    pyautogui.write(body, interval=0.01)
+    return f"Typed {len(body)} characters."
+
+
+# Modifiers that make a keystroke a shortcut rather than something typeable.
+_MODIFIER_KEYS = frozenset({"ctrl", "alt", "shift", "win", "command"})
+
+# The keys a shortcut can end on, spelled out rather than guessed at by length,
+# so "ctrl+delete" is a chord while "sales+marketing" stays two words.
+_NAMED_KEYS = frozenset({
+    "enter", "esc", "tab", "space", "backspace", "delete", "insert",
+    "home", "end", "pageup", "pagedown", "up", "down", "left", "right",
+    "capslock", "printscreen", "pause",
+})
+
+
+def _shortcut_sequence(text):
+    """The chords in `text` if it is only key combinations, otherwise empty.
+
+    One per line, so "Ctrl+A\\nCtrl+Delete" presses both in order. Any line
+    that is ordinary text disqualifies the whole argument, which then gets
+    typed exactly as given.
+    """
+    lines = [line for line in str(text).splitlines() if line.strip()]
+    if not lines or len(lines) > 4:
+        return []
+    if all(_looks_like_shortcut(line) for line in lines):
+        return [line.strip() for line in lines]
+    return []
+
+
+def _looks_like_shortcut(text):
+    """True when the text is only a key combination, e.g. "ctrl+s", "Alt + F4".
+
+    Deliberately narrow. Real prose to type never consists solely of a
+    modifier joined to one short key, so this cannot swallow a genuine
+    sentence: "Ctrl+A then type this" keeps its words and gets typed.
+    """
+    candidate = str(text).strip()
+    if not candidate or len(candidate) > 24 or "+" not in candidate:
+        return False
+    # Spaces are allowed only as padding around the joiner. Anything left over
+    # means there are separate words here, which makes this text, not a chord.
+    if re.search(r"\s", re.sub(r"\s*\+\s*", "+", candidate)):
+        return False
+    keys = _normalise_keys(candidate)
+    if not 2 <= len(keys) <= 4:
+        return False
+    # At least one modifier, so "2+2" is still typed as written.
+    if not any(key in _MODIFIER_KEYS for key in keys):
+        return False
+    return all(key in _MODIFIER_KEYS
+               or key in _NAMED_KEYS
+               or len(key) == 1
+               or re.fullmatch(r"f\d{1,2}", key)
+               for key in keys)
 
 # pyautogui expects the modifier spelling used by the OS, but a language model
 # will happily say "control", "win" or "cmd". Normalise before pressing.
@@ -764,6 +832,7 @@ def find_and_click_text(target_text):
     Uses UIAutomation to find a button/text on the screen and clicks it.
     Returns True if found and clicked, False otherwise.
     """
+    _ensure_com()
     try:
         import uiautomation as auto
     except ImportError:
@@ -1086,17 +1155,29 @@ def write_file(path, content):
     except Exception as e:
         return f"Failed to write file: {e}"
 
+def _ensure_com():
+    """Join the COM apartment for this thread before touching UI Automation.
+
+    Every UIA call needs it, and the assistant's tools run on worker threads
+    that have not called it yet - without this the first scan fails with
+    "CoInitialize has not been called" and UIAutomationCore.dll never loads.
+    Calling it more than once on a thread is harmless.
+    """
+    try:
+        import pythoncom
+        pythoncom.CoInitialize()
+    except Exception:
+        # Not fatal on its own: uiautomation may already hold the apartment.
+        pass
+
+
 def get_clickable_elements(window_title=None):
     """
     Scans a window and returns a list of clickable elements with their text and (x, y) coordinates.
     This solves the 'Coordinate Problem' for AI agents, allowing you to know exactly where to click without vision guessing.
     Pass window_title to inspect a specific window instead of the one in focus.
     """
-    try:
-        import pythoncom
-        pythoncom.CoInitialize()
-    except Exception:
-        pass
+    _ensure_com()
     try:
         import uiautomation as auto
     except ImportError:
@@ -1188,11 +1269,7 @@ def get_clickable_elements(window_title=None):
 
 def list_windows():
     """Lists the open application windows so a task can be pointed at the right one."""
-    try:
-        import pythoncom
-        pythoncom.CoInitialize()
-    except Exception:
-        pass
+    _ensure_com()
     try:
         import uiautomation as auto
     except ImportError:
@@ -1228,11 +1305,7 @@ def list_windows():
 
 def _find_window(title):
     """Best-effort lookup of a top-level window by (partial) title."""
-    try:
-        import pythoncom
-        pythoncom.CoInitialize()
-    except Exception:
-        pass
+    _ensure_com()
     import uiautomation as auto
 
     wanted = str(title).strip().lower()
@@ -1253,11 +1326,7 @@ def _find_window(title):
 
 def focus_window(title):
     """Brings a window to the front by title, so clicks and typing land in the right app."""
-    try:
-        import pythoncom
-        pythoncom.CoInitialize()
-    except Exception:
-        pass
+    _ensure_com()
     try:
         import uiautomation as auto  # noqa: F401
     except ImportError:
@@ -1282,6 +1351,7 @@ def focus_window(title):
 
 def close_window(title=None):
     """Closes a window by title, or the window in focus when no title is given."""
+    _ensure_com()
     try:
         import uiautomation as auto
     except ImportError:
