@@ -228,7 +228,10 @@ class WebsiteRoutingTests(unittest.TestCase):
         hint = _site_hint("open netflix")["content"]
         self.assertIn("browse('https://www.netflix.com')", hint)
         self.assertIn("browser_click", hint)
-        self.assertIn("Do not use win+r", hint)
+        self.assertIn("FIRST tool call", hint)
+        for desktop_tool in ("list_windows", "get_clickable_elements",
+                             "click_at"):
+            self.assertIn(desktop_tool, hint)
 
 
 class PromptContractTests(unittest.TestCase):

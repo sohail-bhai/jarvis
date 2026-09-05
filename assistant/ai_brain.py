@@ -467,11 +467,13 @@ def _site_hint(text):
     return {
         "role": "system",
         "content": (
-            f"{name} is a website, not an installed app. Work it in the real "
-            f"browser: `browse('{url}')`, then `browser_elements()` to see what "
-            "is on the page, then `browser_click(target)` using the number or "
-            "the words shown. Do not use win+r, open_app, focus_window or "
-            "click_at for this."
+            f"{name} is a website, not an installed app. Your FIRST tool call "
+            f"for this request must be `browse('{url}')`. After that, "
+            "`browser_elements()` to see what is on the page and "
+            "`browser_click(target)` with the number or the words shown. "
+            "`list_windows`, `focus_window`, `get_clickable_elements`, "
+            "`click_at` and the Run dialog cannot see inside a web page, so "
+            "do not call them for this request."
         ),
     }
 
@@ -2151,6 +2153,42 @@ def _memory_message(query):
     }
 
 
+# What short-term memory may cost. Ten messages sounds small until three of
+# them are 2000-character tool results and the model is left with no room for
+# the tool schemas, so the budget is in characters as well as in turns.
+MAX_HISTORY_MESSAGES = 10
+MAX_HISTORY_CHARS = 12000
+
+
+def _message_size(message):
+    content = message.get("content") or ""
+    calls = message.get("tool_calls") or ""
+    return len(str(content)) + len(str(calls))
+
+
+def trim_history(history, max_messages=MAX_HISTORY_MESSAGES,
+                 max_chars=MAX_HISTORY_CHARS):
+    """The system prompt plus as much recent history as fits.
+
+    Kept newest-first so a long tool result drops the oldest turns rather than
+    the request the user just made.
+    """
+    if not history:
+        return history
+
+    system_prompt, rest = history[0], list(history[1:])
+    kept, used = [], 0
+    for message in reversed(rest):
+        size = _message_size(message)
+        if kept and (len(kept) >= max_messages or used + size > max_chars):
+            break
+        kept.append(message)
+        used += size
+
+    kept.reverse()
+    return [system_prompt] + kept
+
+
 def ask_ai(command, auto_confirm=False):
     """
     Handles conversational requests by routing them to the local LLM.
@@ -2167,9 +2205,8 @@ def ask_ai(command, auto_confirm=False):
     # 1. Append user command to history
     conversation_history.append({"role": "user", "content": clean_command})
 
-    # 2. Keep history from growing indefinitely (keep last 10 messages + system prompt)
-    if len(conversation_history) > 11:
-        conversation_history = [conversation_history[0]] + conversation_history[-10:]
+    # 2. Keep history from growing indefinitely.
+    conversation_history = trim_history(conversation_history)
 
     # 3. Retrieve relevant permanent memories based on current query (RAG)
     reply = _agent_loop(conversation_history,

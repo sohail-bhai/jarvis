@@ -3,6 +3,7 @@ logger = logging.getLogger(__name__)
 
 import json
 import os
+import queue
 import threading
 import time
 import urllib.request
@@ -15,6 +16,13 @@ from assistant.speech import speak
 
 _telegram_thread = None
 _telegram_active = False
+
+# Commands from the phone run one at a time. A thread per message meant two
+# agent loops driving the same mouse and keyboard the moment two texts arrived
+# together, and the polling loop itself used to block for the whole LLM answer,
+# which backed the inbox up behind every long task.
+_command_queue: "queue.Queue" = queue.Queue()
+_worker_thread = None
 
 # --- Cross-process singleton lock ---
 # Prevents MKL/numpy-spawned child processes from starting a second Telegram
@@ -185,14 +193,12 @@ def _telegram_worker():
                                     continue
                                     
                                 speak(f"Incoming remote command: {text_clean}")
-                                def _run_remote_cmd(cmd_text, token, chat_id):
-                                    call_context.set_origin("telegram")
-                                    try:
-                                        execute_command(cmd_text, auto_confirm=True)
-                                    except Exception as ex:
-                                        logger.error(f"Telegram command error: {ex}")
-                                        speak(f"Error executing command: {ex}")
-                                call_context.spawn_thread(target=_run_remote_cmd, args=(text_clean, token, chat_id), daemon=True)
+                                queued = _enqueue_command(text_clean)
+                                if queued > 1:
+                                    send_telegram_message(
+                                        token, chat_id,
+                                        f"Queued. {queued - 1} command(s) "
+                                        "ahead of it.")
                             else:
 
                                 logger.info(f"[VAVE] Unauthorized access attempt from Chat ID: {sender_chat_id}")
@@ -217,6 +223,30 @@ def _telegram_worker():
     # Release the lock when the poller stops
     _release_lock()
 
+def _enqueue_command(text):
+    """Hand a command to the single worker. Returns how many are waiting."""
+    _command_queue.put(text)
+    return _command_queue.qsize()
+
+
+def _command_worker():
+    """Run queued phone commands one after another, forever."""
+    call_context.set_origin("telegram")
+    while _telegram_active:
+        try:
+            command = _command_queue.get(timeout=1)
+        except queue.Empty:
+            continue
+
+        try:
+            execute_command(command, auto_confirm=True)
+        except Exception as error:
+            logger.error(f"Telegram command error: {error}")
+            speak(f"Error executing command: {error}")
+        finally:
+            _command_queue.task_done()
+
+
 def start_telegram_sync():
     global _telegram_thread, _telegram_active
     
@@ -229,6 +259,11 @@ def start_telegram_sync():
         
     _telegram_active = True
     
+    global _worker_thread
+    if _worker_thread is None or not _worker_thread.is_alive():
+        _worker_thread = call_context.spawn_thread(
+            target=_command_worker, daemon=True, name="telegram-commands")
+
     if _telegram_thread is None or not _telegram_thread.is_alive():
         _telegram_thread = threading.Thread(target=_telegram_worker, daemon=True)
         _telegram_thread.start()

@@ -43,7 +43,13 @@ def _guarded(action, *args, **kwargs):
     try:
         return action(*args, **kwargs)
     except BrowserUnavailable as error:
-        return f"The browser is not available: {error}"
+        # Without this the model treats a missing browser as a reason to hunt
+        # for the website on the desktop - win+r, the Run dialog, clicking at
+        # nothing - instead of saying what is wrong.
+        return (f"The browser is not available: {error}\n"
+                "Do not try to reach this website by clicking the desktop or "
+                "using the Run dialog. Tell the user to run that command "
+                "first.")
     except LookupError as error:
         return f"{error}\n\n{_element_list()}"
     except Exception as error:
