@@ -385,6 +385,15 @@ CORE_TOOL_NAMES = (
     "scroll", "wait", "close_window",
 )
 
+# Tools that work on windows and pixels. They are the whole toolkit for a
+# desktop task and useless for a web one: a browser page is not a window they
+# can read, and clicking at coordinates over it is guesswork.
+DESKTOP_ONLY_TOOLS = frozenset({
+    "open_app", "close_app", "focus_window", "list_windows", "close_window",
+    "get_clickable_elements", "click_at", "double_click_at", "right_click_at",
+    "move_mouse", "drag_and_drop", "find_and_click_text", "press_hotkey",
+})
+
 # A ceiling on the task-specific tools, because two matching groups should not
 # undo the point of this. The core actions above sit outside the budget.
 MAX_TOOLS_PER_CALL = 22
@@ -549,7 +558,17 @@ def select_tools(instruction, tools=None):
     for name in CORE_TOOL_NAMES:
         offer(name)
 
-    return chosen or catalogue
+    chosen = chosen or catalogue
+
+    # A request that names a website is worked in the browser. Leaving the
+    # desktop clicking tools on the menu is what produced `open_app('chrome')`
+    # and `focus_window('YouTube')` in the middle of a task that was already on
+    # the page - none of which can see inside a web page anyway.
+    if _site_for(text):
+        chosen = [tool for tool in chosen
+                  if tool["function"]["name"] not in DESKTOP_ONLY_TOOLS]
+
+    return chosen
 
 
 # The JSON schema describing our tools to the LLM
@@ -1738,6 +1757,10 @@ INSPECTION_TOOLS = frozenset({
     "list_shared_files", "shared_folders", "browser_wait_for", "wait",
 })
 
+# `browse` is deliberately not in that set. Loading a page is an action, and
+# fetching the same URL three times over is a model going in circles - which
+# is exactly what "open youtube and play lofi" did before this.
+
 # How many times the identical acting call may repeat before the model is told
 # to find another route.
 _REPEAT_LIMIT = 3
@@ -1960,6 +1983,10 @@ def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps
     # count is per call rather than per turn.
     action_counts = {}
     redirected = set()
+    # The last thing a look returned, and whether anything has been done since
+    # - together they say whether the last action actually did something.
+    last_look = None
+    acted_since_look = False
 
     def _keep_going():
         if should_continue is not None and not should_continue:
@@ -2060,6 +2087,25 @@ def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps
 
                         if len(result_str) > 2000:
                             result_str = result_str[:2000] + "... [TRUNCATED DUE TO LENGTH]"
+
+                        # A click that changed nothing is the commonest way a
+                        # task goes quietly wrong: the page comes back
+                        # identical and the model reads it as progress. Say so
+                        # plainly instead, while the model can still try
+                        # something else.
+                        if func_name in INSPECTION_TOOLS:
+                            if (last_look is not None
+                                    and last_look == (func_name, result_str)
+                                    and acted_since_look):
+                                result_str += (
+                                    "\n\n[Nothing changed since your last "
+                                    "action. It did not work. Do not repeat "
+                                    "it - try a different element, or say "
+                                    "what is blocking you.]")
+                            last_look = (func_name, result_str)
+                            acted_since_look = False
+                        else:
+                            acted_since_look = True
 
                         result_str = _wrap_untrusted(func_name, result_str)
 

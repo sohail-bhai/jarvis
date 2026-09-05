@@ -182,6 +182,97 @@ class ChainedTaskTests(unittest.TestCase):
         self.assertIn("2. type hello", checklist[0])
 
 
+class ProgressCheckTests(unittest.TestCase):
+    """An action that changed nothing must be reported as such."""
+
+    def setUp(self):
+        from assistant import ai_brain
+
+        self.ai_brain = ai_brain
+        self.executed = []
+
+        def record(name):
+            def run(**kwargs):
+                self.executed.append((name, kwargs))
+                # The page never changes, however much is clicked.
+                return "Page: Netflix\n[1] button 'Rav'"
+            return run
+
+        self.fake_tools = {name: record(name) for name in
+                           ("browser_click", "browser_elements")}
+
+    def test_an_unchanged_page_is_called_out(self):
+        model = ScriptedModel([
+            _tools(_call("browser_elements")),
+            _tools(_call("browser_click", target="Rav")),
+            _tools(_call("browser_elements")),
+            _says("Done."),
+        ])
+        conversation = [{"role": "system", "content": "system"},
+                        {"role": "user", "content": "open netflix and play something"}]
+
+        with mock.patch.object(self.ai_brain, "query_local_llm_chat", model), \
+             mock.patch.dict(self.ai_brain.AVAILABLE_FUNCTIONS,
+                             self.fake_tools, clear=False):
+            self.ai_brain._agent_loop(conversation, max_steps=6, tools=[])
+
+        results = [message.get("content", "") for message in conversation
+                   if message.get("role") == "tool"]
+        self.assertTrue(any("Nothing changed since your last action" in text
+                            for text in results))
+
+    def test_the_first_look_is_never_called_a_failure(self):
+        model = ScriptedModel([
+            _tools(_call("browser_elements")),
+            _says("Here is the page."),
+        ])
+        conversation = [{"role": "system", "content": "system"},
+                        {"role": "user", "content": "what is on the netflix page"}]
+
+        with mock.patch.object(self.ai_brain, "query_local_llm_chat", model), \
+             mock.patch.dict(self.ai_brain.AVAILABLE_FUNCTIONS,
+                             self.fake_tools, clear=False):
+            self.ai_brain._agent_loop(conversation, max_steps=4, tools=[])
+
+        results = [message.get("content", "") for message in conversation
+                   if message.get("role") == "tool"]
+        self.assertFalse(any("Nothing changed" in text for text in results))
+
+
+class WebTaskToolsTests(unittest.TestCase):
+    """A website request is worked in the browser, not on the desktop."""
+
+    def test_desktop_tools_are_left_off_a_website_request(self):
+        from assistant.ai_brain import select_tools
+
+        names = [tool["function"]["name"]
+                 for tool in select_tools("open youtube and play lofi")]
+
+        for desktop_tool in ("open_app", "focus_window", "click_at",
+                             "get_clickable_elements"):
+            self.assertNotIn(desktop_tool, names)
+        self.assertIn("browse", names)
+        self.assertIn("browser_click", names)
+
+    def test_a_desktop_request_keeps_the_desktop_tools(self):
+        from assistant.ai_brain import select_tools
+
+        names = [tool["function"]["name"]
+                 for tool in select_tools("open notepad and type hello")]
+
+        for desktop_tool in ("open_app", "click_at", "press_key",
+                             "get_clickable_elements"):
+            self.assertIn(desktop_tool, names)
+
+    def test_reloading_the_same_page_counts_as_a_stall(self):
+        from assistant.ai_brain import INSPECTION_TOOLS
+
+        # Listing what is on a page is a look; fetching the page again is an
+        # action, and doing it three times is going in circles.
+        self.assertNotIn("browse", INSPECTION_TOOLS)
+        self.assertIn("browser_elements", INSPECTION_TOOLS)
+
+
 class ToolBudgetTests(unittest.TestCase):
     """A capability the user names must survive the per-request tool budget."""
 
