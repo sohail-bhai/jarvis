@@ -28,7 +28,9 @@ def run_sub_agent(role_prompt, task, max_steps=15):
                     logger.info(f"[Sub-Agent Executing] {func_name}({args_dict})")
                     try:
                         args_dict = guard.coerce_args(func_to_call, args_dict)
-                        result = str(guard.call(func_to_call, **args_dict))[:2000]
+                        result = str(guard.call(func_to_call,
+                                                _tool_name=func_name,
+                                                **args_dict))[:2000]
                         history.append({"role": "tool", "content": result, "name": func_name})
                     except guard.ToolDenied as e:
                         history.append({"role": "tool", "content": f"Denied by safety guard: {e}", "name": func_name})

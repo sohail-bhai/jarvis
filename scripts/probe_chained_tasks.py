@@ -41,6 +41,14 @@ PAGE_AFTER_CLICK = (
     "[2] input 'Search'"
 )
 
+YOUTUBE_PAGE = (
+    "Page: YouTube\n"
+    "[0] link 'Home'\n"
+    "[1] input 'Search'\n"
+    "[2] video 'lofi hip hop radio - beats to relax/study to'\n"
+    "[3] video 'Chill Lofi Mix'"
+)
+
 STUBS = {
     "browse": "Opened {url}.\n" + PAGE_AFTER_OPEN,
     "browser_elements": PAGE_AFTER_OPEN,
@@ -98,7 +106,25 @@ TASKS = [
 MAX_STEPS = 8
 
 
+# Which page the fake browser is showing. A stub that answers every address
+# with the same page cannot tell a working chain from a broken one.
+_current_page = {"body": PAGE_AFTER_OPEN}
+
+
 def stub_result(name, kwargs):
+    if name == "browse":
+        url = str(kwargs.get("url", "")).lower()
+        _current_page["body"] = (YOUTUBE_PAGE if "youtube" in url
+                                 else PAGE_AFTER_OPEN)
+        return f"Opened {kwargs.get('url')}.\n{_current_page['body']}"
+
+    if name == "browser_elements":
+        return _current_page["body"]
+
+    if name in ("browser_click", "browser_type"):
+        # Acting on the page moves it on, the way a real site would.
+        _current_page["body"] = PAGE_AFTER_CLICK
+
     template = STUBS.get(name)
     if template is None:
         return f"{name} finished."

@@ -10,8 +10,10 @@ token up in the control plane's secret store at the moment of the call, so the
 model asks for a service by name and never sees the key.
 """
 
+import ipaddress
 import json
 import logging
+import socket
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -34,9 +36,64 @@ AUTH_STYLES = {
 
 SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
 
-
 class WebApiError(Exception):
     """The service refused, or could not be reached."""
+
+
+# The model chooses these addresses, and a web page it just read can suggest
+# one. Without this, "call this API" reaches VAVE's own server on localhost,
+# the router, a NAS on the LAN, or a cloud metadata endpoint - none of which
+# the user meant by "an API on the internet". Names are resolved first, because
+# a hostname can point anywhere.
+BLOCKED_HOSTS = {"metadata.google.internal", "metadata.goog"}
+
+
+class BlockedAddress(WebApiError):
+    """The address points somewhere on this machine or this network."""
+
+
+def _is_private(address):
+    try:
+        ip = ipaddress.ip_address(address)
+    except ValueError:
+        return False
+    return (ip.is_private or ip.is_loopback or ip.is_link_local
+            or ip.is_reserved or ip.is_multicast or ip.is_unspecified)
+
+
+def check_address(url, resolver=None):
+    """Refuse an address that is not out on the internet.
+
+    `resolver` exists for the tests; it stands in for DNS.
+    """
+    parsed = urllib.parse.urlparse(str(url))
+    host = (parsed.hostname or "").lower()
+    if not host:
+        raise WebApiError("That address has no host in it.")
+
+    if host in BLOCKED_HOSTS or host.endswith(".local") or host == "localhost":
+        raise BlockedAddress(
+            f"{host} is on this machine or this network, not the internet. "
+            "VAVE will not call it from a tool.")
+
+    if _is_private(host):
+        raise BlockedAddress(
+            f"{host} is a private address, not a public API.")
+
+    resolve = resolver or (lambda name: [item[4][0] for item in
+                                         socket.getaddrinfo(name, None)])
+    try:
+        addresses = resolve(host)
+    except Exception:
+        # A name that will not resolve fails later anyway, with a clearer
+        # message than anything invented here.
+        return
+
+    for address in addresses:
+        if _is_private(address):
+            raise BlockedAddress(
+                f"{host} resolves to {address}, which is on this machine or "
+                "this network. VAVE will not call it from a tool.")
 
 
 def _resolve_secret(name):
@@ -77,6 +134,8 @@ def call(method, url, body=None, params=None, auth_secret="", auth_style="bearer
     method = str(method).upper()
     if not str(url).startswith(("http://", "https://")):
         raise WebApiError("The address must start with http:// or https://.")
+
+    check_address(url)
 
     if params:
         url = f"{url}{'&' if '?' in url else '?'}{urllib.parse.urlencode(params)}"
