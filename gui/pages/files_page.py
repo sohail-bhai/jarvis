@@ -20,6 +20,7 @@ class FilesPage(ctk.CTkScrollableFrame):
         self.filter_buttons = {}
         # Tk drops an image nothing references, so glyphs are kept here.
         self._glyphs = []
+        self._search_job = None
 
         # 1. Header
         header = ctk.CTkFrame(self, fg_color="transparent")
@@ -47,7 +48,7 @@ class FilesPage(ctk.CTkScrollableFrame):
             fg_color=theme.CARD_BG,
             border_width=1,
             border_color=theme.CARD_BORDER,
-            corner_radius=14,
+            corner_radius=theme.RADIUS,
         )
         search_card.pack(fill="x", padx=16, pady=(0, 12))
 
@@ -74,7 +75,7 @@ class FilesPage(ctk.CTkScrollableFrame):
             text_color=theme.TEXT_PRIMARY,
         )
         self.search_entry.pack(side="left", fill="x", expand=True)
-        self.search_entry.bind("<KeyRelease>", lambda e: self._render_files())
+        self.search_entry.bind("<KeyRelease>", lambda e: self._queue_search())
 
         # 3. Source Filter Tabs
         filters_row = ctk.CTkFrame(self, fg_color="transparent")
@@ -91,8 +92,8 @@ class FilesPage(ctk.CTkScrollableFrame):
                 text_color=theme.ON_ACCENT if cat == "All" else theme.TEXT_SECONDARY,
                 border_width=0 if cat == "All" else 1,
                 border_color=theme.CARD_BORDER,
-                corner_radius=12,
-                height=28,
+                corner_radius=theme.RADIUS_SM,
+                height=30,
                 command=lambda c=cat: self._set_filter(c),
             )
             btn.pack(side="left", padx=3)
@@ -123,6 +124,16 @@ class FilesPage(ctk.CTkScrollableFrame):
                 )
         self._render_files()
 
+    def _queue_search(self):
+        """Redraw once the typing pauses, not on every key."""
+        if self._search_job is not None:
+            self.after_cancel(self._search_job)
+        self._search_job = self.after(180, self._run_search)
+
+    def _run_search(self):
+        self._search_job = None
+        self._render_files()
+
     def _render_files(self):
         for child in self.results_container.winfo_children():
             child.destroy()
@@ -139,7 +150,7 @@ class FilesPage(ctk.CTkScrollableFrame):
             files = [f for f in files if query in f.get("name", "").lower() or query in f.get("folder", "").lower()]
 
         if not files:
-            empty_box = ctk.CTkFrame(self.results_container, fg_color=theme.CARD_BG, corner_radius=12)
+            empty_box = ctk.CTkFrame(self.results_container, fg_color=theme.CARD_BG, corner_radius=theme.RADIUS)
             empty_box.pack(fill="x", pady=20, padx=4)
             ctk.CTkLabel(
                 empty_box,
@@ -156,7 +167,7 @@ class FilesPage(ctk.CTkScrollableFrame):
                 fg_color=theme.CARD_BG,
                 border_width=1,
                 border_color=theme.CARD_BORDER,
-                corner_radius=12,
+                corner_radius=theme.RADIUS,
             )
             card.pack(fill="x", pady=4)
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import io
 import logging
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,10 @@ _PATHS = {
     "trash": "M4.5 6.5h15M9.5 6.5V4.5h5v2M6.5 6.5 7.5 20.5h9l1-14M10 10.5v6M14 10.5v6",
 }
 
+# The two sizes nearly every widget asks for.
+ICON_PREWARM_SMALL = 15
+ICON_PREWARM_BASE = 17
+
 # One rendered bitmap per (name, size, colour, width). Icons are re-requested
 # on every page rebuild, and rasterising is far slower than a dict lookup.
 _cache: dict[tuple, object] = {}
@@ -122,3 +127,25 @@ def image(name: str, size: int = 18, color: str = "#1A1B1E", stroke_width: float
 
     _cache[key] = rendered
     return rendered
+
+
+def prewarm(sizes=(ICON_PREWARM_SMALL, ICON_PREWARM_BASE), colors=()):
+    """Rasterise the common icons ahead of time, off the UI thread.
+
+    Rendering happens on first use otherwise, which shows up as a small pause
+    the first time a page is opened. Nothing here touches Tk beyond building
+    CTkImage objects, which is safe before the main loop runs.
+    """
+    if not available():
+        return
+
+    def _work():
+        for name in _PATHS:
+            for size in sizes:
+                for color in colors:
+                    try:
+                        image(name, size, color)
+                    except Exception:
+                        return
+
+    threading.Thread(target=_work, daemon=True).start()

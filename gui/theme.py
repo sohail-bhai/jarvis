@@ -73,6 +73,18 @@ RADIUS_SM = 8
 RADIUS = 12
 RADIUS_LG = 16
 
+# Spacing scale. Every gap in the app is one of these, so pages keep the same
+# rhythm instead of each screen inventing its own padding.
+SPACE_XS = 4
+SPACE_SM = 8
+SPACE = 12
+SPACE_MD = 16
+SPACE_LG = 24
+
+# A page is easier to read when its text does not stretch the full width of a
+# wide monitor, so the content column stops growing past this.
+CONTENT_MAX_WIDTH = 1120
+
 # Icon sizes
 ICON_SM = 15
 ICON = 17

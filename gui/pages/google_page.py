@@ -94,7 +94,7 @@ class GooglePage(ctk.CTkScrollableFrame):
             font=theme.font(11, "bold"),
             text_color=theme.TEXT_SECONDARY,
             fg_color=theme.MAIN_BG,
-            corner_radius=10,
+            corner_radius=theme.RADIUS_SM,
             padx=10,
             pady=4,
         )
@@ -129,7 +129,7 @@ class GooglePage(ctk.CTkScrollableFrame):
             font=theme.font(11),
             text_color=theme.TEXT_PRIMARY,
             fg_color=theme.WARNING_LIGHT,
-            corner_radius=10,
+            corner_radius=theme.RADIUS_SM,
             anchor="w",
             justify="left",
             wraplength=760,
@@ -151,8 +151,8 @@ class GooglePage(ctk.CTkScrollableFrame):
                 text_color=theme.ON_ACCENT if name == "Overview" else theme.TEXT_SECONDARY,
                 border_width=0 if name == "Overview" else 1,
                 border_color=theme.CARD_BORDER,
-                corner_radius=12,
-                height=28,
+                corner_radius=theme.RADIUS_SM,
+                height=30,
                 command=lambda chosen=name: self._switch_tab(chosen),
             )
             btn.pack(side="left", padx=3)
@@ -371,7 +371,7 @@ class GooglePage(ctk.CTkScrollableFrame):
                          text_color=theme.TEXT_MUTED).pack(anchor="w")
 
         actions_card = ctk.CTkFrame(self.tab_container, fg_color=theme.CARD_BG,
-                                    corner_radius=14, border_width=1,
+                                    corner_radius=theme.RADIUS, border_width=1,
                                     border_color=theme.CARD_BORDER)
         actions_card.pack(fill="x", pady=8)
 
@@ -409,7 +409,7 @@ class GooglePage(ctk.CTkScrollableFrame):
 
     def _render_drive(self):
         search_row = ctk.CTkFrame(self.tab_container, fg_color=theme.CARD_BG,
-                                  corner_radius=12, border_width=1,
+                                  corner_radius=theme.RADIUS, border_width=1,
                                   border_color=theme.CARD_BORDER)
         search_row.pack(fill="x", pady=(0, 12))
         ctk.CTkLabel(search_row, text=" 🔍", font=theme.font(12)).pack(side="left", padx=8)
@@ -462,7 +462,7 @@ class GooglePage(ctk.CTkScrollableFrame):
             return
 
         for item in files:
-            card = ctk.CTkFrame(parent, fg_color=theme.CARD_BG, corner_radius=12,
+            card = ctk.CTkFrame(parent, fg_color=theme.CARD_BG, corner_radius=theme.RADIUS,
                                 border_width=1, border_color=theme.CARD_BORDER)
             card.pack(fill="x", pady=4)
 
@@ -529,7 +529,7 @@ class GooglePage(ctk.CTkScrollableFrame):
             card = ctk.CTkFrame(
                 self.tab_container,
                 fg_color=theme.INFO_LIGHT if unread else theme.CARD_BG,
-                corner_radius=12,
+                corner_radius=theme.RADIUS,
                 border_width=1,
                 border_color=theme.INFO_BORDER if unread else theme.CARD_BORDER,
             )
@@ -608,7 +608,7 @@ class GooglePage(ctk.CTkScrollableFrame):
 
         for event in events:
             card = ctk.CTkFrame(self.tab_container, fg_color=theme.CARD_BG,
-                                corner_radius=12, border_width=1,
+                                corner_radius=theme.RADIUS, border_width=1,
                                 border_color=theme.CARD_BORDER)
             card.pack(fill="x", pady=4)
 
@@ -640,7 +640,7 @@ class GooglePage(ctk.CTkScrollableFrame):
 
     def _render_docs(self):
         card = ctk.CTkFrame(self.tab_container, fg_color=theme.CARD_BG,
-                            corner_radius=14, border_width=1,
+                            corner_radius=theme.RADIUS, border_width=1,
                             border_color=theme.CARD_BORDER)
         card.pack(fill="x", pady=4)
 

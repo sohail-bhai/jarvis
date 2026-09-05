@@ -69,7 +69,7 @@ class DevicesPage(ctk.CTkScrollableFrame):
             fg_color=theme.CARD_BG,
             border_width=1,
             border_color=theme.CARD_BORDER,
-            corner_radius=14,
+            corner_radius=theme.RADIUS,
         )
         card.pack(fill="x", padx=16, pady=(0, 16))
 
@@ -96,7 +96,7 @@ class DevicesPage(ctk.CTkScrollableFrame):
             font=theme.font(11, "bold"),
             text_color=theme.TEXT_MUTED,
             fg_color=theme.MAIN_BG,
-            corner_radius=10,
+            corner_radius=theme.RADIUS_SM,
             padx=10,
             pady=3,
         )
@@ -220,7 +220,7 @@ class DevicesPage(ctk.CTkScrollableFrame):
             fg_color=theme.CARD_BG,
             border_width=1,
             border_color=theme.CARD_BORDER,
-            corner_radius=14,
+            corner_radius=theme.RADIUS,
         )
         card.grid(row=r, column=c, padx=6, pady=6, sticky="nsew")
 

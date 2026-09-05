@@ -34,7 +34,7 @@ class CommandPalette(ctk.CTkToplevel):
         self.geometry(f"+{max(10, x)}+{max(10, y)}")
 
         # Container
-        main_frame = ctk.CTkFrame(self, fg_color=theme.CARD_BG, corner_radius=16)
+        main_frame = ctk.CTkFrame(self, fg_color=theme.CARD_BG, corner_radius=theme.RADIUS)
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
 
         # Header
@@ -73,7 +73,7 @@ class CommandPalette(ctk.CTkToplevel):
         input_container = ctk.CTkFrame(
             main_frame,
             fg_color=theme.MAIN_BG,
-            corner_radius=12,
+            corner_radius=theme.RADIUS,
             border_width=1,
             border_color=theme.CARD_BORDER,
         )

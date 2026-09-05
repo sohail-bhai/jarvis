@@ -7,7 +7,7 @@ from __future__ import annotations
 import customtkinter as ctk
 
 from gui.redaction import redact
-from gui import icons, theme
+from gui import icons, scrolling, theme
 from gui.store import store
 
 
@@ -17,7 +17,7 @@ class SystemLogPanel(ctk.CTkFrame):
             parent,
             width=290,
             fg_color=theme.CARD_BG,
-            corner_radius=14,
+            corner_radius=theme.RADIUS,
             border_width=1,
             border_color=theme.CARD_BORDER,
         )
@@ -42,7 +42,7 @@ class SystemLogPanel(ctk.CTkFrame):
             font=theme.font(10, "bold"),
             text_color=theme.SUCCESS,
             fg_color=theme.SUCCESS_LIGHT,
-            corner_radius=10,
+            corner_radius=theme.RADIUS_SM,
             width=52,
             height=20,
         )
@@ -56,12 +56,13 @@ class SystemLogPanel(ctk.CTkFrame):
             scrollbar_button_hover_color=theme.TEXT_MUTED,
         )
         self.scroll_area.pack(fill="both", expand=True, padx=12, pady=4)
+        scrolling.tune(self.scroll_area)
 
         # 3. Bottom note card
         note_card = ctk.CTkFrame(
             self,
             fg_color=theme.MAIN_BG,
-            corner_radius=10,
+            corner_radius=theme.RADIUS_SM,
             border_width=1,
             border_color=theme.CARD_BORDER,
         )

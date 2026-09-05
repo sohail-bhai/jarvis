@@ -30,7 +30,7 @@ class ApprovalModal(ctk.CTkToplevel):
         y = parent_y + (parent_h // 2) - 150
         self.geometry(f"+{max(10, x)}+{max(10, y)}")
 
-        container = ctk.CTkFrame(self, fg_color=theme.CARD_BG, corner_radius=16)
+        container = ctk.CTkFrame(self, fg_color=theme.CARD_BG, corner_radius=theme.RADIUS)
         container.pack(fill="both", expand=True, padx=20, pady=20)
 
         # Header with warning/attention icon
@@ -59,7 +59,7 @@ class ApprovalModal(ctk.CTkToplevel):
             fg_color=theme.WARNING_LIGHT,
             border_width=1,
             border_color=theme.WARNING_BORDER,
-            corner_radius=12,
+            corner_radius=theme.RADIUS,
         )
         desc_card.pack(fill="both", expand=True, pady=(0, 16))
 
@@ -86,7 +86,7 @@ class ApprovalModal(ctk.CTkToplevel):
             text_color=theme.TEXT_SECONDARY,
             border_width=1,
             border_color=theme.CARD_BORDER,
-            corner_radius=10,
+            corner_radius=theme.RADIUS_SM,
             height=36,
             command=self._reject,
         ).pack(side="left", expand=True, fill="x", padx=(0, 6))
@@ -98,7 +98,7 @@ class ApprovalModal(ctk.CTkToplevel):
             fg_color=theme.ACCENT,
             hover_color=theme.ACCENT_HOVER,
             text_color=theme.ON_ACCENT,
-            corner_radius=10,
+            corner_radius=theme.RADIUS_SM,
             height=36,
             command=self._approve,
         ).pack(side="left", expand=True, fill="x", padx=(6, 0))

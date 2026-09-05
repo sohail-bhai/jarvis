@@ -54,8 +54,8 @@ class ActivityPage(ctk.CTkScrollableFrame):
                 text_color=theme.ON_ACCENT if f == "All" else theme.TEXT_SECONDARY,
                 border_width=0 if f == "All" else 1,
                 border_color=theme.CARD_BORDER,
-                corner_radius=12,
-                height=28,
+                corner_radius=theme.RADIUS_SM,
+                height=30,
                 command=lambda cat=f: self._set_filter(cat),
             )
             btn.pack(side="left", padx=3)
@@ -100,7 +100,7 @@ class ActivityPage(ctk.CTkScrollableFrame):
                 fg_color=theme.CARD_BG,
                 border_width=1,
                 border_color=theme.CARD_BORDER,
-                corner_radius=12,
+                corner_radius=theme.RADIUS,
             )
             card.pack(fill="x", pady=4)
 

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import customtkinter as ctk
 from typing import Dict, Any, Callable
-from gui import icons, theme
+from gui import icons, scrolling, theme
 from gui.store import store
 
 
@@ -16,7 +16,7 @@ class DetailDrawer(ctk.CTkFrame):
             parent,
             width=300,
             fg_color=theme.CARD_BG,
-            corner_radius=14,
+            corner_radius=theme.RADIUS,
             border_width=1,
             border_color=theme.CARD_BORDER,
         )
@@ -49,7 +49,7 @@ class DetailDrawer(ctk.CTkFrame):
             fg_color=theme.MAIN_BG,
             hover_color=theme.CARD_BORDER,
             text_color=theme.TEXT_SECONDARY,
-            corner_radius=14,
+            corner_radius=theme.RADIUS,
             command=self.on_close,
         )
         close_btn.pack(side="right")
@@ -61,6 +61,7 @@ class DetailDrawer(ctk.CTkFrame):
             scrollbar_button_color=theme.CARD_BORDER,
         )
         self.content_area.pack(fill="both", expand=True, padx=14, pady=4)
+        scrolling.tune(self.content_area)
 
     def set_content(self, drawer_type: str, data: Dict[str, Any]):
         # Clear existing content
@@ -169,7 +170,7 @@ class DetailDrawer(ctk.CTkFrame):
         self.title_lbl.configure(text=data.get("name", "File Details"))
 
         # Details card
-        info_card = ctk.CTkFrame(self.content_area, fg_color=theme.MAIN_BG, corner_radius=10)
+        info_card = ctk.CTkFrame(self.content_area, fg_color=theme.MAIN_BG, corner_radius=theme.RADIUS_SM)
         info_card.pack(fill="x", pady=(4, 16), padx=2)
 
         fields = [
@@ -236,7 +237,7 @@ class DetailDrawer(ctk.CTkFrame):
         ).pack(fill="x", pady=(0, 14))
 
         # Steps
-        steps_frame = ctk.CTkFrame(self.content_area, fg_color=theme.MAIN_BG, corner_radius=10)
+        steps_frame = ctk.CTkFrame(self.content_area, fg_color=theme.MAIN_BG, corner_radius=theme.RADIUS_SM)
         steps_frame.pack(fill="x", pady=4, padx=2)
 
         for step in data.get("steps", []):
@@ -292,7 +293,7 @@ class DetailDrawer(ctk.CTkFrame):
         )
         desc.pack(fill="x", pady=(4, 16))
 
-        info_card = ctk.CTkFrame(self.content_area, fg_color=theme.MAIN_BG, corner_radius=10)
+        info_card = ctk.CTkFrame(self.content_area, fg_color=theme.MAIN_BG, corner_radius=theme.RADIUS_SM)
         info_card.pack(fill="x", pady=4, padx=2)
 
         items = [
@@ -315,7 +316,7 @@ class DetailDrawer(ctk.CTkFrame):
             fg_color=theme.WARNING_LIGHT,
             border_width=1,
             border_color=theme.WARNING_BORDER,
-            corner_radius=12,
+            corner_radius=theme.RADIUS,
         )
         card.pack(fill="x", pady=8, padx=2)
 

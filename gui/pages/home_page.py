@@ -92,7 +92,7 @@ class HomePage(ctk.CTkScrollableFrame):
             font=theme.font(11),
             text_color=theme.TEXT_MUTED,
             fg_color=theme.CARD_BG,
-            corner_radius=12,
+            corner_radius=theme.RADIUS,
             padx=12,
             pady=6,
         )
@@ -102,7 +102,7 @@ class HomePage(ctk.CTkScrollableFrame):
         cmd_card = ctk.CTkFrame(
             self,
             fg_color=theme.CARD_BG,
-            corner_radius=16,
+            corner_radius=theme.RADIUS,
             border_width=1,
             border_color=theme.CARD_BORDER,
         )
@@ -319,7 +319,7 @@ class HomePage(ctk.CTkScrollableFrame):
         self.task_card = ctk.CTkFrame(
             self,
             fg_color=theme.CARD_BG,
-            corner_radius=16,
+            corner_radius=theme.RADIUS,
             border_width=1,
             border_color=theme.CARD_BORDER,
         )
@@ -380,7 +380,7 @@ class HomePage(ctk.CTkScrollableFrame):
             text_color=theme.TEXT_PRIMARY,
             border_width=1,
             border_color=theme.CARD_BORDER,
-            corner_radius=10,
+            corner_radius=theme.RADIUS_SM,
             width=90,
             height=28,
             command=lambda: store.open_drawer("task", store.current_task),
@@ -449,7 +449,7 @@ class HomePage(ctk.CTkScrollableFrame):
                 fg_color=theme.CARD_BG,
                 border_width=1,
                 border_color=theme.CARD_BORDER,
-                corner_radius=14,
+                corner_radius=theme.RADIUS,
                 height=82,
             )
             card.grid(row=0, column=idx, padx=4, sticky="nsew")
@@ -510,7 +510,7 @@ class HomePage(ctk.CTkScrollableFrame):
         bar = ctk.CTkFrame(
             self,
             fg_color=theme.SURFACE_SUBTLE,
-            corner_radius=14,
+            corner_radius=theme.RADIUS,
         )
         bar.pack(fill="x", padx=16, pady=(0, 20))
 

@@ -73,7 +73,8 @@ class TopBar(ctk.CTkFrame):
 
         # Center: Command Search Box Trigger
         center_frame = ctk.CTkFrame(self, fg_color="transparent")
-        center_frame.pack(side="right", expand=True, fill="x", padx=(30, 20), pady=8)
+        center_frame.pack(side="right", expand=True, fill="x",
+                          padx=(theme.SPACE_LG, theme.SPACE_MD), pady=8)
 
         self.search_image = icons.image("search", theme.ICON_SM, theme.TEXT_MUTED)
         self.search_btn = ctk.CTkButton(
@@ -92,7 +93,10 @@ class TopBar(ctk.CTkFrame):
             compound="left",
             command=self.on_open_command_palette,
         )
-        self.search_btn.pack(fill="x")
+        # A search field the full width of a wide monitor reads as a banner
+        # rather than a control, so it stops growing at a usable width.
+        self.search_btn.pack(side="left", fill="x", expand=True)
+        self.search_btn.configure(width=460)
 
     def set_title(self, title: str):
         self.title_lbl.configure(text=title)

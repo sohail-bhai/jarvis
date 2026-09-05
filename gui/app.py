@@ -22,7 +22,7 @@ from assistant.events import (
     set_global_event_bus,
 )
 from assistant import logging_setup
-from gui import theme, ui_queue
+from gui import icons, scrolling, theme, ui_queue
 from gui.store import store
 from gui.widgets.sidebar import Sidebar
 from gui.widgets.topbar import TopBar
@@ -80,6 +80,12 @@ class VaveDashboardApp(ctk.CTk):
         self.listener_thread = None
         self.listening_active = False
 
+        # Icons are drawn from SVG on first use; warming the common ones in
+        # the background keeps the first visit to a page from stuttering.
+        icons.prewarm(colors=(theme.TEXT_SECONDARY, theme.TEXT_MUTED,
+                              theme.ACCENT_DEEP, theme.SIDEBAR_TEXT_MUTED,
+                              theme.ON_ACCENT))
+
         # 2. Build Core Window Layout
         self._build_layout()
 
@@ -114,7 +120,7 @@ class VaveDashboardApp(ctk.CTk):
         # Center Column: TopBar + Dynamic Page Content
         center_frame = ctk.CTkFrame(self, fg_color="transparent")
         center_frame.grid(row=0, column=1, sticky="nsew")
-        center_frame.grid_rowconfigure(1, weight=1)
+        center_frame.grid_rowconfigure(2, weight=1)
         center_frame.grid_columnconfigure(0, weight=1)
 
         self.topbar = TopBar(
@@ -124,9 +130,20 @@ class VaveDashboardApp(ctk.CTk):
         )
         self.topbar.grid(row=0, column=0, sticky="ew", padx=14, pady=(8, 0))
 
+        # A hairline keeps the top bar from floating against the page.
+        separator = ctk.CTkFrame(center_frame, height=1, corner_radius=0,
+                                 fg_color=theme.CARD_BORDER)
+        separator.grid(row=1, column=0, sticky="ew", padx=14)
+
         # Dynamic Content Container
         self.page_container = ctk.CTkFrame(center_frame, fg_color="transparent")
-        self.page_container.grid(row=1, column=0, sticky="nsew", padx=14, pady=8)
+        self.page_container.grid(row=2, column=0, sticky="nsew", padx=14,
+                                 pady=(8, 8))
+
+        # Text that runs the full width of a wide monitor is tiring to read,
+        # so the column is centred once it passes a comfortable width.
+        self._content_pad = 14
+        center_frame.bind("<Configure>", self._fit_content_width)
         self.page_container.grid_rowconfigure(0, weight=1)
         self.page_container.grid_columnconfigure(0, weight=1)
 
@@ -163,11 +180,21 @@ class VaveDashboardApp(ctk.CTk):
         self.detail_drawer = DetailDrawer(right_container, on_close=self.close_drawer)
         # detail_drawer initially hidden
 
+    def _fit_content_width(self, event):
+        """Keep the page column at a readable width on a large screen."""
+        extra = max(0, event.width - theme.CONTENT_MAX_WIDTH)
+        pad = 14 + extra // 2
+        if pad == self._content_pad:
+            return
+        self._content_pad = pad
+        self.page_container.grid_configure(padx=pad)
+
     def _page(self, page_id: str):
         """The page widget, built on first use and kept afterwards."""
         page = self.pages.get(page_id)
         if page is None:
             page = self.page_factories[page_id]()
+            scrolling.tune(page)
             self.pages[page_id] = page
         return page
 
