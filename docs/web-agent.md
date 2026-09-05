@@ -1,11 +1,11 @@
 # Doing work on the internet
 
-JARVIS drives a real browser, calls any service that has an API, and remembers
+VAVE drives a real browser, calls any service that has an API, and remembers
 what it learned about a site for next time. GitLab has a module of its own
 because a code fix deserves exact operations, but nothing else does - and
 nothing else needs one.
 
-JARVIS drives a real browser and talks to GitLab's API. This is what makes
+VAVE drives a real browser and talks to GitLab's API. This is what makes
 "go and look at the issues on that repo" or "ask ChatGPT where to eat" real
 work rather than a canned answer.
 
@@ -44,7 +44,7 @@ home server, your own backend - anything with HTTP and a token.
 ## The browser
 
 One Chromium window, kept between tasks, with a persistent profile in
-`data/browser_profile/`. A site you log into once stays logged in, so JARVIS
+`data/browser_profile/`. A site you log into once stays logged in, so VAVE
 never handles your password for GitLab, ChatGPT or anything else.
 
 ```python
@@ -115,7 +115,7 @@ after the page itself has loaded.
 
 ### Signing in
 
-JARVIS never types a password and never reads one. When a page asks for a
+VAVE never types a password and never reads one. When a page asks for a
 sign-in, `browse` says so and the model calls `browser_wait_for_login`, which
 waits for the page to stop asking - which is what a person signing in
 themselves looks like from here. The profile remembers it afterwards, so it
@@ -148,7 +148,7 @@ bare, that is why.
 
 ## GitLab
 
-The browser is how JARVIS reads a page. GitLab has a real API, so a fix lands
+The browser is how VAVE reads a page. GitLab has a real API, so a fix lands
 as a real commit on a real branch rather than as clicks that might have gone
 wrong.
 
@@ -175,7 +175,7 @@ gitlab_merge("group/repo", 12)            → only when you ask
 
 `gitlab_propose_fix` takes the **complete new contents** of the file, not a
 patch - small models produce unusable diffs, and a whole file either applies or
-obviously does not. It creates `jarvis/issue-<n>`, commits, and opens a merge
+obviously does not. It creates `vave/issue-<n>`, commits, and opens a merge
 request that says `Closes #7`. It never merges.
 
 ### Why proposing and merging are separate
@@ -210,7 +210,7 @@ mid-way.
   reach its API today, which covers issues, comments, pull requests and
   reviews. Only GitLab has purpose-built tools, for the propose-a-fix flow.
 - **Login is manual, on purpose.** The first time a site needs a password, log
-  in yourself in the window JARVIS opened. The profile remembers it after that.
+  in yourself in the window VAVE opened. The profile remembers it after that.
 - **Site notes are written by the model,** so they are as good as the model
   that wrote them. They are plain text in `data/site_notes.json`, and easy to
   correct or delete by hand.

@@ -50,7 +50,7 @@ def configure_logging(event_bus=None, *, level=None, console=True, bridge_level=
         logging.getLogger(noisy).setLevel(logging.WARNING)
         
     file_handler = RotatingFileHandler(
-        LOG_DIR / "jarvis.log",
+        LOG_DIR / "vave.log",
         maxBytes=2_000_000,
         backupCount=5,
         encoding="utf-8",

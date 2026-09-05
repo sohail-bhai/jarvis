@@ -102,7 +102,7 @@ class RequestTests(unittest.TestCase):
 
 class CredentialTests(unittest.TestCase):
     def setUp(self):
-        self.tempdir = tempfile.mkdtemp(prefix="jarvis-webapi-test-")
+        self.tempdir = tempfile.mkdtemp(prefix="vave-webapi-test-")
         self.store = ControlStore(Path(self.tempdir) / "control.db")
         self.plane = ControlPlane(store=self.store)
         self.plane.secrets.put("github_token", "ghp_realtoken")

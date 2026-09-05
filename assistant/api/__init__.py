@@ -1,4 +1,4 @@
-"""HTTP and WebSocket boundary for the JARVIS control plane."""
+"""HTTP and WebSocket boundary for the VAVE control plane."""
 
 from assistant.api.app import API_VERSION, create_app, main
 

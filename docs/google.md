@@ -1,6 +1,6 @@
 # Connecting Google
 
-JARVIS reaches Drive, Gmail, Calendar, Docs, Sheets and Slides through one
+VAVE reaches Drive, Gmail, Calendar, Docs, Sheets and Slides through one
 Google account. The token lives on your computer and nowhere else: the phone
 never holds it, and it is never put in a prompt or written to the timeline.
 
@@ -47,7 +47,7 @@ JSON.
 **5. Put it in the project.** Rename it and place it beside `main.py`:
 
 ```
-/home/rav/Projects/jarvis/jarvis/credentials.json
+/home/rav/Projects/vave/vave/credentials.json
 ```
 
 That file is your client secret. It is listed in `.gitignore`, along with
@@ -62,13 +62,13 @@ reaches the repository. Do not paste its contents into a chat or an issue.
 - from a shell: `python -c "from assistant.workspace import auth; print(auth.authorize())"`
 
 A browser opens, you sign in, and Google shows the access being requested.
-Approve it once. JARVIS writes `token_workspace.json` next to
+Approve it once. VAVE writes `token_workspace.json` next to
 `credentials.json` and refreshes it on its own after that.
 
 > Google will warn that the app is not verified. That is expected for an app
 > you made for yourself. Choose **Advanced → Go to (your app name)**.
 
-## What JARVIS asks for, and why
+## What VAVE asks for, and why
 
 | Scope | Why it is needed |
 | --- | --- |
@@ -106,7 +106,7 @@ python -c "from assistant.workspace.gateway import gateway; print(gateway.get_st
 | Desktop → Google → Calendar | See what is coming up |
 | Desktop → Google → Docs | Create a document or a Slides deck in your Drive |
 | Phone → Google Workspace | The same reads, and the connect flow |
-| Ask JARVIS | "summarize my unread emails", "put this in a doc", "make a deck about X" |
+| Ask VAVE | "summarize my unread emails", "put this in a doc", "make a deck about X" |
 
 ## The endpoints behind it
 

@@ -14,8 +14,8 @@ def _wakeword_worker():
     global _wakeword_active
     try:
         from openwakeword.model import Model
-        logger.info("[JARVIS] Loading Wake Word model ('hey_jarvis')...")
-        owwModel = Model(wakeword_models=["hey_jarvis"], inference_framework="onnx")
+        logger.info("[VAVE] Loading Wake Word model ('hey_vave')...")
+        owwModel = Model(wakeword_models=["hey_vave"], inference_framework="onnx")
         
         audio = pyaudio.PyAudio()
         FORMAT = pyaudio.paInt16
@@ -30,16 +30,16 @@ def _wakeword_worker():
                 
             try:
                 mic_stream = audio.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK)
-                logger.info("[JARVIS] Wake word listening started. Say 'Hey Jarvis'...")
+                logger.info("[VAVE] Wake word listening started. Say 'Hey Vave'...")
                 
                 while _wakeword_active:
                     data = np.frombuffer(mic_stream.read(CHUNK, exception_on_overflow=False), dtype=np.int16)
                     prediction = owwModel.predict(data)
                     
-                    # Check if 'hey_jarvis' was detected above a threshold
-                    score = prediction.get('hey_jarvis', 0.0)
+                    # Check if 'hey_vave' was detected above a threshold
+                    score = prediction.get('hey_vave', 0.0)
                     if score > 0.6:
-                        logger.info(f"\n[JARVIS] Wake word detected! (Score: {score})")
+                        logger.info(f"\n[VAVE] Wake word detected! (Score: {score})")
                         if _wakeword_callback:
                             # We MUST close stream before callback so the main microphone can be used by speech_recognition
                             mic_stream.stop_stream()
@@ -61,9 +61,9 @@ def _wakeword_worker():
                 time.sleep(2)
                 
     except ImportError:
-        logger.info("[JARVIS] openwakeword not installed. Hands-free mode disabled.")
+        logger.info("[VAVE] openwakeword not installed. Hands-free mode disabled.")
     except Exception as e:
-        logger.info(f"[JARVIS] Failed to start wake word engine: {e}")
+        logger.info(f"[VAVE] Failed to start wake word engine: {e}")
 
 def start_wakeword_engine(callback):
     global _wakeword_thread, _wakeword_active, _wakeword_callback

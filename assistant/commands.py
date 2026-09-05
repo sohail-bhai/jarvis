@@ -84,7 +84,7 @@ def handle_settings_command(command):
         return True
 
     if "what is your name" in command:
-        speak(f"My name is {get_setting('assistant_name', 'Jarvis')}.")
+        speak(f"My name is {get_setting('assistant_name', 'Vave')}.")
         return True
 
     return False
@@ -398,7 +398,7 @@ def handle_line_write_command(command: str) -> bool:
 
 def execute_command(command, auto_confirm=False):
     """
-    Main command router for JARVIS Version 1.2.
+    Main command router for VAVE Version 1.2.
     Routes simple commands to fast-paths, and compound/multi-step commands directly to the AI brain.
     """
     if any(word in command for word in ["stop", "exit", "quit", "goodbye"]):
@@ -408,7 +408,7 @@ def execute_command(command, auto_confirm=False):
     c = command.lower()
     # Route multi-step instructions straight to the AI brain for intelligent orchestration
     if " and " in c or " then " in c or " after " in c:
-        logger.info(f"[JARVIS] Routing compound command to AI brain: '{command}'")
+        logger.info(f"[VAVE] Routing compound command to AI brain: '{command}'")
         ask_ai(command, auto_confirm=auto_confirm)
         return True
 

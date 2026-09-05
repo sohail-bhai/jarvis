@@ -128,7 +128,7 @@ def _get_piper_voice():
             
             voice_model_path = Path(__file__).resolve().parent.parent / "data" / "voices" / "en_US-ryan-medium.onnx"
             if voice_model_path.exists():
-                logger.info("[JARVIS] Loading Offline Piper TTS Voice Model...")
+                logger.info("[VAVE] Loading Offline Piper TTS Voice Model...")
                 _piper_voice = PiperVoice.load(str(voice_model_path))
         except ImportError:
             pass
@@ -179,7 +179,7 @@ def _audio_worker():
                 pass
                 
         except Exception as e:
-            logger.info(f"[JARVIS] Cloud voice unreachable ({e}). Falling back to offline voice...")
+            logger.info(f"[VAVE] Cloud voice unreachable ({e}). Falling back to offline voice...")
             try:
                 voice = _get_piper_voice()
                 if voice:
@@ -197,7 +197,7 @@ def _audio_worker():
                 else:
                     # Hard fallback to built-in Windows pyttsx3
                     from assistant.config import get_setting
-                    logger.info("[JARVIS] High-quality offline voice missing. Falling back to pyttsx3...")
+                    logger.info("[VAVE] High-quality offline voice missing. Falling back to pyttsx3...")
                     import pyttsx3
                     engine = pyttsx3.init()
                     engine.setProperty('rate', get_setting("voice_rate", 170))
@@ -232,10 +232,10 @@ def interrupt_speech():
     except Exception:
         pass
     
-    logger.info("\n[JARVIS] Audio Interrupted!\n")
+    logger.info("\n[VAVE] Audio Interrupted!\n")
 
 def speak(text):
-    assistant_name = get_setting("assistant_name", "JARVIS")
+    assistant_name = get_setting("assistant_name", "VAVE")
     try:
         logger.info(f"{assistant_name.upper()}: {text}")
     except UnicodeEncodeError:

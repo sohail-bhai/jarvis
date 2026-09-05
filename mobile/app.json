@@ -1,17 +1,17 @@
 {
   "expo": {
-    "name": "JARVIS",
-    "slug": "jarvis",
+    "name": "VAVE",
+    "slug": "vave",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "jarvis",
+    "scheme": "vave",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true
     },
     "android": {
-      "package": "com.jarvis.app",
+      "package": "com.vave.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

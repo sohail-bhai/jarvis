@@ -1,24 +1,24 @@
-# ⚡ JARVIS: The Personal AI Control Plane
+# ⚡ VAVE: The Personal AI Control Plane
 
 <div align="center">
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![Control Plane](https://img.shields.io/badge/Architecture-Control%20Plane-indigo.svg?style=for-the-badge)](https://github.com/sohail-bhai/jarvis)
-[![Zero-Trust](https://img.shields.io/badge/Security-Zero--Trust%20Gate-emerald.svg?style=for-the-badge)](https://github.com/sohail-bhai/jarvis)
+[![Control Plane](https://img.shields.io/badge/Architecture-Control%20Plane-indigo.svg?style=for-the-badge)](https://github.com/sohail-bhai/vave)
+[![Zero-Trust](https://img.shields.io/badge/Security-Zero--Trust%20Gate-emerald.svg?style=for-the-badge)](https://github.com/sohail-bhai/vave)
 [![Local LLM](https://img.shields.io/badge/AI-Ollama%20%7C%20Local%20First-orange.svg?style=for-the-badge&logo=ollama&logoColor=white)](https://ollama.ai)
-[![Framework Agnostic](https://img.shields.io/badge/Ecosystem-Framework%20Agnostic-cyan.svg?style=for-the-badge)](https://github.com/sohail-bhai/jarvis)
+[![Framework Agnostic](https://img.shields.io/badge/Ecosystem-Framework%20Agnostic-cyan.svg?style=for-the-badge)](https://github.com/sohail-bhai/vave)
 
 <p align="center">
   <b>The Unified Operating Layer for AI Helpers, Multi-Device Execution, Google Workspace, and Autonomous Web Workflows.</b>
 </p>
 
-> *"The user thinks in goals. JARVIS handles agents, devices, tools, permissions, services, and execution."*
+> *"The user thinks in goals. VAVE handles agents, devices, tools, permissions, services, and execution."*
 
 [Explore Architecture](#-system-architecture) • [Key Capabilities](#-core-capabilities) • [Live Demo Workflow](#-the-3-minute-demo-workflow) • [Zero-Trust Security](#-zero-trust-safety--human-in-the-loop) • [Quickstart](#-quickstart-guide)
 
 ---
 
-![JARVIS AI Control Plane Dashboard](assets/jarvis_dashboard_mockup.jpg)    
+![VAVE AI Control Plane Dashboard](assets/vave_dashboard_mockup.jpg)    
 
 </div>
 
@@ -28,9 +28,9 @@
 
 Most existing AI tools force users to act as **infrastructure managers**: switching between isolated chat windows, pasting API keys, managing Python environments, running separate agent frameworks, and manually synchronizing files across computers, phones, and Google Drive.
 
-**JARVIS fundamentally flips this paradigm.** 
+**VAVE fundamentally flips this paradigm.** 
 
-JARVIS is not merely a voice chatbot, a script runner, or an OpenClaw frontend. It is a **Personal AI Control Plane**—a single, elegant, and secure command interface that translates high-level human intent into coordinated, multi-agent execution across every machine, service, and data source you own.
+VAVE is not merely a voice chatbot, a script runner, or an OpenClaw frontend. It is a **Personal AI Control Plane**—a single, elegant, and secure command interface that translates high-level human intent into coordinated, multi-agent execution across every machine, service, and data source you own.
 
 ```
                   ┌─────────────────────────────────────────────────┐
@@ -40,7 +40,7 @@ JARVIS is not merely a voice chatbot, a script runner, or an OpenClaw frontend. 
                                            │
                                            ▼
                   ┌─────────────────────────────────────────────────┐
-                  │           ⚡ JARVIS AI CONTROL CORE             │
+                  │           ⚡ VAVE AI CONTROL CORE             │
                   │   • Intent Resolution  • Task Decomposition    │
                   │   • Shared Semantic RAG • Zero-Trust Gate       │
                   └──────┬─────────────────┬─────────────────┬──────┘
@@ -58,11 +58,11 @@ JARVIS is not merely a voice chatbot, a script runner, or an OpenClaw frontend. 
 
 ## 🏛️ System Architecture
 
-JARVIS is architected as a modular, resilient, and framework-agnostic control fabric:
+VAVE is architected as a modular, resilient, and framework-agnostic control fabric:
 
 <div align="center">
 
-![JARVIS Technical Architecture Diagram](assets/jarvis_architecture_diagram.jpg)
+![VAVE Technical Architecture Diagram](assets/vave_architecture_diagram.jpg)
 
 </div>
 
@@ -83,8 +83,8 @@ JARVIS is architected as a modular, resilient, and framework-agnostic control fa
 ## 🚀 Core Capabilities
 
 ### 1. 🤖 Framework-Agnostic AI Helper Mesh
-Never be locked into a single AI agent ecosystem. JARVIS abstracts agent frameworks into a unified **AI Helper Registry**:
-- **Capability-Based Discovery**: Don't pick servers or protocols—tell JARVIS *"Train this model"*, and it automatically discovers and assigns the ML Helper.
+Never be locked into a single AI agent ecosystem. VAVE abstracts agent frameworks into a unified **AI Helper Registry**:
+- **Capability-Based Discovery**: Don't pick servers or protocols—tell VAVE *"Train this model"*, and it automatically discovers and assigns the ML Helper.
 - **Inter-Helper Handoff**: A coding helper needing a GPU passes context to an ML Helper on a remote machine, collects the output, and continues its task.
 - **Actor-Critic Research Swarms**: Spawns concurrent research, review, and verification sub-agents that autonomously critique and refine deliverables.
 
@@ -97,7 +97,7 @@ Autonomous agents should never have blanket access to your life or filesystem.
 
 <div align="center">
 
-![Zero-Trust Human Approval Modal](assets/jarvis_approval_flow.jpg)
+![Zero-Trust Human Approval Modal](assets/vave_approval_flow.jpg)
 
 </div>
 
@@ -120,26 +120,26 @@ Say goodbye to cryptic terminal outputs and dangerous hallucinated hidden reason
   [12:34:03] [INFO]   Found 3 matching project documents.
   [12:34:04] [INFO]   Searching connected Google Drive for supplementary slides...
   [12:34:06] [TOOL]   Activating Web Research Helper for latest market data...
-  [12:34:10] [WARN]   JARVIS needs your approval: Ready to commit 14 modified files.
+  [12:34:10] [WARN]   VAVE needs your approval: Ready to commit 14 modified files.
   ```
 
 ### 5. 🎨 Minimalist Control Dashboard
 A completely redesigned, true dark-mode CustomTkinter interface inspired by premium tools like ChatGPT and Linear.
 - **Dynamic Conversational UI**: Starts as an ultra-minimal void. Upon interaction, morphs into an auto-scrolling chat window with clean right/left aligned message bubbles.
 - **Native In-App Overlays**: Popups like Notifications, Command Palettes, and Approval Modals render natively as floating frames inside the app, avoiding cluttered OS windows.
-- **Live System Log Dual-View**: Your natural conversation stays centered in the chat view, while JARVIS's internal background thoughts and actions stream independently into the right-hand System Log.
+- **Live System Log Dual-View**: Your natural conversation stays centered in the chat view, while VAVE's internal background thoughts and actions stream independently into the right-hand System Log.
 
 ---
 
 ## ⏱️ The 3-Minute Demo Workflow
 
-Experience how JARVIS turns a high-level goal into reality:
+Experience how VAVE turns a high-level goal into reality:
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor User as 👤 User
-    participant J as ⚡ JARVIS Control Core
+    participant J as ⚡ VAVE Control Core
     participant W as 🤖 AI Helpers (Coder/Researcher)
     participant D as 💻 Device & Google Workspace
     participant S as 🛡️ Zero-Trust Gate
@@ -160,9 +160,9 @@ sequenceDiagram
 
 ---
 
-## 🕹️ Comparison: Why JARVIS Wins
+## 🕹️ Comparison: Why VAVE Wins
 
-| Capability | Traditional Chatbots | Single-Agent Tools | OpenClaw Alone | ⚡ JARVIS Control Plane |
+| Capability | Traditional Chatbots | Single-Agent Tools | OpenClaw Alone | ⚡ VAVE Control Plane |
 | :--- | :---: | :---: | :---: | :---: |
 | **Paradigm** | Question / Answer | Single Task Execution | Gateway / Node Transport | **Goal-Oriented Control Plane** |
 | **Framework Independence** | ❌ None | ❌ Framework Locked | ❌ Custom Protocol | **✅ Agnostic (OpenClaw/CrewAI/MCP)** |
@@ -185,8 +185,8 @@ sequenceDiagram
 
 ```bash
 # Clone the repository
-git clone https://github.com/sohail-bhai/jarvis.git
-cd jarvis
+git clone https://github.com/sohail-bhai/vave.git
+cd vave
 
 # Create and activate a clean virtual environment
 python -m venv venv
@@ -203,7 +203,7 @@ Personalize names, models, and safety levels directly in `config.json`:
 ```json
 {
   "user_name": "Sohail",
-  "assistant_name": "Jarvis",
+  "assistant_name": "Vave",
   "llm_model": "qwen2.5:3b",
   "wake_word_enabled": true,
   "safety": {
@@ -221,11 +221,11 @@ Personalize names, models, and safety levels directly in `config.json`:
 }
 ```
 
-### 3. Launching JARVIS
+### 3. Launching VAVE
 
 #### 🖥️ Launch the Modern Desktop Control Dashboard
 ```bash
-python jarvis_gui.py
+python vave_gui.py
 ```
 *Access the ultra-minimalist, dark-mode ChatGPT-style interface with native in-app overlays, a dynamic conversational chat layout, Live System Log, and single-click task approvals.*
 
@@ -254,7 +254,7 @@ installed. Calling `python -m assistant.api` from a shell that has not run
        -H 'Content-Type: application/json' \
        -d '{"goal": "Summarize my notes and check battery", "autoplan": true, "run": true}'
   ```
-  `autoplan` lets JARVIS break the goal into steps; independent steps run at
+  `autoplan` lets VAVE break the goal into steps; independent steps run at
   the same time, and a running step can be stopped mid-flight.
 - Full API data model and endpoint reference: [`docs/control-plane.md`](docs/control-plane.md).
 
@@ -271,7 +271,7 @@ Only the SHA-256 hash of a token is stored, and `DELETE /api/devices/{id}/token`
 revokes one device without disturbing the others.
 
 #### 📱 Phone to Desktop Agent Work
-Run JARVIS on the desktop or server that owns the model, browser, files and OS tools:
+Run VAVE on the desktop or server that owns the model, browser, files and OS tools:
 ```bash
 python main.py --server --host 0.0.0.0 --port 8765
 ```
@@ -307,7 +307,7 @@ moment a tool runs:
 curl -X POST localhost:8765/api/secrets/import-config   # move existing ones
 ```
 The encryption key lives outside the database (`data/secret.key`, or
-`JARVIS_SECRET_KEY`), so a copied `control.db` is not a copied set of
+`VAVE_SECRET_KEY`), so a copied `control.db` is not a copied set of
 credentials. Back it up separately.
 
 
@@ -326,7 +326,7 @@ python main.py --text "what time is it" --no-speech
 
 | Shortcut | Action | Scope |
 | :--- | :--- | :--- |
-| <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd> | **Interrupt Speech** | Instantly silences JARVIS TTS speech output. |
+| <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd> | **Interrupt Speech** | Instantly silences VAVE TTS speech output. |
 | <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>K</kbd> | **GLOBAL KILL-SWITCH** | Freezes all active tasks, revokes temporary tokens, and blocks all tool calls. |
 
 ---

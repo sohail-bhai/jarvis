@@ -5,11 +5,11 @@ HAS_TKINTER = importlib.util.find_spec("tkinter") is not None
 
 if HAS_TKINTER:
     from gui.store import AppStore
-    from gui.app import JarvisDashboardApp
+    from gui.app import VaveDashboardApp
 
 
 @unittest.skipUnless(HAS_TKINTER, "tkinter is not installed on this machine")
-class TestJarvisGUI(unittest.TestCase):
+class TestVaveGUI(unittest.TestCase):
     def test_store_operations(self):
         store = AppStore()
         self.assertEqual(store.current_page, "home")
@@ -39,7 +39,7 @@ class TestJarvisGUI(unittest.TestCase):
 
     def test_app_lifecycle_and_page_switching(self):
         # Instantiate full CustomTkinter dashboard
-        app = JarvisDashboardApp()
+        app = VaveDashboardApp()
         
         # Verify initial layout and widgets
         self.assertIsNotNone(app.sidebar)

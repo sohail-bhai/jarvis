@@ -12,7 +12,7 @@ COMMAND_START_WORDS = {
     "exit",
     "goodbye",
     "google",
-    "jarvis",
+    "vave",
     "lock",
     "mute",
     "open",

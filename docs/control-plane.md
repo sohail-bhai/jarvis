@@ -1,6 +1,6 @@
-# JARVIS Control Plane
+# VAVE Control Plane
 
-The control plane is the part of JARVIS that coordinates work. It accepts a
+The control plane is the part of VAVE that coordinates work. It accepts a
 goal in plain language, breaks it into observable steps, picks an AI helper by
 what that helper can do, grants narrow and time-limited access, holds
 consequential actions until the user approves them, and records a readable
@@ -97,7 +97,7 @@ something that never spoke proves nothing. Devices work the same way with a
 five-minute window, and this computer is never swept offline.
 
 **Adapters** — an agent is a capability and an address, not a framework.
-`NativeAdapter` runs the step in this process through the JARVIS agent loop;
+`NativeAdapter` runs the step in this process through the VAVE agent loop;
 `HttpAdapter` posts `{"instruction", "context"}` to the agent's endpoint and
 reads `{"output"}` back. An unknown framework falls back to running locally, so
 MCP, LangGraph or a containerised agent can join later without the
@@ -337,7 +337,7 @@ There is no endpoint that returns a value - not for a client, not for an
 agent. `plane.secrets.reveal()` exists for the control plane alone.
 
 Values are encrypted with a key that lives outside the database: the
-`JARVIS_SECRET_KEY` environment variable if set, otherwise `data/secret.key`,
+`VAVE_SECRET_KEY` environment variable if set, otherwise `data/secret.key`,
 created `0600` on first use. Copying `control.db` does not copy the ability to
 read what is in it. Back the key up separately - without it the stored
 credentials cannot be recovered.
@@ -465,7 +465,7 @@ carries `fields`, naming what was wrong.
 | `GET` | `/api/activity` | Timeline, newest first. `?types=` filters, comma separated. |
 | `GET` | `/api/event-types` | Every event type a client can filter or subscribe to. |
 | `GET` | `/api/notifications` | Recent notifications, newest first. |
-| `GET` | `/api/secrets` | What JARVIS holds, by name. Never the values. |
+| `GET` | `/api/secrets` | What VAVE holds, by name. Never the values. |
 | `PUT` | `/api/secrets/{name}` | Store or replace a credential. |
 | `DELETE` | `/api/secrets/{name}` | Forget a credential. |
 | `POST` | `/api/secrets/import-config` | Move credentials out of `config.json`. |
@@ -559,7 +559,7 @@ These are known gaps, not oversights:
   ask for one yet.
 - **Secrets are not capability-scoped.** Any step that can call a tool can use
   any stored secret; there is no per-secret policy rule.
-- **Enforcement covers the tools JARVIS knows.** A tool missing from
+- **Enforcement covers the tools VAVE knows.** A tool missing from
   `TOOL_CAPABILITIES` is treated as needing no capability, so new tools must be
   added there as they are written.
 - **Agent selection is a first match, not a scheduler.** It prefers idle then

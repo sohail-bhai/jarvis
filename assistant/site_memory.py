@@ -1,4 +1,4 @@
-"""What JARVIS learned about a website last time.
+"""What VAVE learned about a website last time.
 
 The second visit to a site should not start from nothing. When a flow works -
 "the issues list is under /-/issues", "the search box is element 3", "this one

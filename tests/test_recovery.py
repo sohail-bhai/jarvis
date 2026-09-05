@@ -19,7 +19,7 @@ from assistant.control.store import ControlStore
 
 class RecoveryTestCase(unittest.TestCase):
     def setUp(self):
-        self.tempdir = tempfile.mkdtemp(prefix="jarvis-recovery-test-")
+        self.tempdir = tempfile.mkdtemp(prefix="vave-recovery-test-")
         self.path = Path(self.tempdir) / "control.db"
         self.store = ControlStore(self.path)
         self.plane = ControlPlane(store=self.store)

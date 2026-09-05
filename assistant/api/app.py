@@ -1,6 +1,6 @@
-"""HTTP and WebSocket boundary for the JARVIS control plane.
+"""HTTP and WebSocket boundary for the VAVE control plane.
 
-This is the seam between the JARVIS core and any client: the desktop app on
+This is the seam between the VAVE core and any client: the desktop app on
 Windows, macOS or Linux, and the mobile interface. Clients hold no logic of
 their own - they read state here and post user decisions back, so every client
 sees the same tasks, approvals and activity.
@@ -58,7 +58,7 @@ API_VERSION = "1"
 # -- request bodies ---------------------------------------------------------
 
 class PlannedStep(BaseModel):
-    label: str = Field(..., min_length=1, description="What JARVIS will do.")
+    label: str = Field(..., min_length=1, description="What VAVE will do.")
     depends_on: list[int] = Field(default_factory=list,
                                   description="Positions that must finish first.")
     agent_id: str = Field("", description="Which agent should do it.")
@@ -76,7 +76,7 @@ class CreateTaskRequest(BaseModel):
     run: bool = Field(False,
                       description="Start working the steps immediately.")
     autoplan: bool = Field(False,
-                           description="Let JARVIS break the goal into steps.")
+                           description="Let VAVE break the goal into steps.")
 
 
 class ResolveApprovalRequest(BaseModel):
@@ -224,7 +224,7 @@ def create_app(control=None, executor=None, security=None, notifier=None):
     shared ones.
     """
     app = FastAPI(
-        title="JARVIS Control Plane",
+        title="VAVE Control Plane",
         version=API_VERSION,
         description="Goals, helpers, devices, permissions and activity.",
     )
@@ -287,7 +287,7 @@ def create_app(control=None, executor=None, security=None, notifier=None):
     def root():
         """Point a browser at something useful instead of a bare 404."""
         return {
-            "name": "JARVIS Control Plane",
+            "name": "VAVE Control Plane",
             "version": API_VERSION,
             "documentation": "/docs",
             "endpoints": {
@@ -388,7 +388,7 @@ def create_app(control=None, executor=None, security=None, notifier=None):
         """
         if plane.is_stopped:
             raise HTTPException(status_code=409,
-                                detail="JARVIS is stopped. Resume before starting work.")
+                                detail="VAVE is stopped. Resume before starting work.")
 
         task = plane.get_task(task_id)
         if task is None:
@@ -445,7 +445,7 @@ def create_app(control=None, executor=None, security=None, notifier=None):
 
     @app.post("/api/tasks/resume", tags=["tasks"])
     def resume_interrupted():
-        """Pick up tasks that were running when JARVIS last stopped."""
+        """Pick up tasks that were running when VAVE last stopped."""
         return [task.to_dict() for task in runner.resume_interrupted()]
 
     @app.post("/api/tasks/plan", tags=["tasks"])
@@ -800,7 +800,7 @@ def create_app(control=None, executor=None, security=None, notifier=None):
 
     @app.get("/api/secrets", tags=["security"])
     def list_secrets():
-        """What JARVIS holds, by name. Never the values."""
+        """What VAVE holds, by name. Never the values."""
         return plane.secrets.list()
 
     @app.put("/api/secrets/{name}", status_code=201, tags=["security"])
@@ -971,7 +971,7 @@ def create_app(control=None, executor=None, security=None, notifier=None):
 
     @app.get("/api/notifications", tags=["activity"])
     def list_notifications(limit: int = 20):
-        """What JARVIS would have sent to your phone, newest first."""
+        """What VAVE would have sent to your phone, newest first."""
         return alerts.recent(limit=limit)
 
     # -- emergency stop ----------------------------------------------------
@@ -1169,12 +1169,12 @@ def request_pairing_code(port):
         if status == 404:
             print(
                 f"Something is listening on port {port}, but it is not the current "
-                "JARVIS pairing API.\n"
+                "VAVE pairing API.\n"
                 "Stop that process, then start this server again:\n\n"
                 f"    python main.py --server --host 0.0.0.0 --port {port}"
             )
             return 1
-        print(f"Could not reach JARVIS on port {port}. Is it running?  ({error})")
+        print(f"Could not reach VAVE on port {port}. Is it running?  ({error})")
         return 1
 
     body = response.json()
@@ -1190,7 +1190,7 @@ def request_pairing_code(port):
 def _print_welcome(host, port):
     """Tell the user what to type on the phone, since only they can see this."""
     print()
-    print("  JARVIS is listening.")
+    print("  VAVE is listening.")
     print()
     if host in ("127.0.0.1", "localhost"):
         print(f"  This computer only:      http://127.0.0.1:{port}")
@@ -1220,13 +1220,13 @@ def _port_available(host, port):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Run the JARVIS control plane API.")
+    parser = argparse.ArgumentParser(description="Run the VAVE control plane API.")
     parser.add_argument("--host", default="127.0.0.1",
                         help="Bind address. Use 0.0.0.0 to allow phone access.")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--pair", action="store_true",
                         help="Show a code for a new phone, then exit. "
-                             "JARVIS must already be running.")
+                             "VAVE must already be running.")
     args = parser.parse_args(argv)
 
     if args.pair:

@@ -1,6 +1,6 @@
 # Your files, from anywhere
 
-The phone is not just a remote control for JARVIS. It is also a way into the
+The phone is not just a remote control for VAVE. It is also a way into the
 files on the computer: browse them, pull one down, push one up, from a train
 or another country.
 
@@ -60,7 +60,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 An upload never silently replaces something: a name that already exists gets a
 timestamp added, unless `overwrite=true` says otherwise.
 
-## JARVIS can reach them too
+## VAVE can reach them too
 
 The same access is a set of tools, so the assistant can answer "where did I put
 the Q3 report?" without you opening anything:

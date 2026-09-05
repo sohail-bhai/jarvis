@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds a standalone JARVIS APK.
+# Builds a standalone VAVE APK.
 #
 # Release, not debug, and that is the whole point: the debug variant is listed
 # in `debuggableVariants`, so Gradle skips bundling the JavaScript into it and
@@ -13,7 +13,7 @@
 set -euo pipefail
 
 echo "=========================================="
-echo " Building JARVIS Standalone Android APK   "
+echo " Building VAVE Standalone Android APK   "
 echo "=========================================="
 
 MOBILE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -34,7 +34,7 @@ chmod +x gradlew
 ./gradlew assembleRelease
 
 BUILT_APK="$MOBILE_DIR/android/app/build/outputs/apk/release/app-release.apk"
-OUTPUT_APK="$MOBILE_DIR/JARVIS.apk"
+OUTPUT_APK="$MOBILE_DIR/VAVE.apk"
 
 if [ -f "$BUILT_APK" ]; then
     cp "$BUILT_APK" "$OUTPUT_APK"
@@ -42,7 +42,7 @@ if [ -f "$BUILT_APK" ]; then
     echo -e "\033[32m SUCCESS! Standalone APK built.\033[0m"
     echo -e "\033[32m APK: $OUTPUT_APK\033[0m"
     echo "=========================================="
-    echo -e "\nCopy JARVIS.apk to any Android phone and install it. No USB"
+    echo -e "\nCopy VAVE.apk to any Android phone and install it. No USB"
     echo "debugging, no Expo Go, no dev server. The phone only needs to reach"
     echo "your computer's address on the same Wi-Fi."
 else

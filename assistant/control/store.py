@@ -660,7 +660,7 @@ def _to_event(row):
 
     return ActivityEvent(id=row["id"], task_id=row["task_id"] or "",
                          type=EventType(row["type"]), message=row["message"],
-                         actor=row["actor"] or "JARVIS",
+                         actor=row["actor"] or "VAVE",
                          device_id=row["device_id"] or "",
                          timestamp=row["timestamp"],
                          metadata=loads(row["metadata"], {}),

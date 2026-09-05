@@ -21,7 +21,7 @@ class ControlPlaneTestCase(unittest.TestCase):
     """Each test gets its own database so nothing leaks between them."""
 
     def setUp(self):
-        self.tempdir = tempfile.mkdtemp(prefix="jarvis-test-")
+        self.tempdir = tempfile.mkdtemp(prefix="vave-test-")
         self.store = ControlStore(Path(self.tempdir) / "control.db")
         self.plane = ControlPlane(store=self.store)
 

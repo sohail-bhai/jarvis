@@ -22,7 +22,7 @@ PLANNING_PROMPT = """Break this goal into at most {limit} steps.
 Goal: {goal}
 
 Rules:
-- Each label is what JARVIS will DO, phrased for a person watching:
+- Each label is what VAVE will DO, phrased for a person watching:
   "Finding the relevant files", not "file_search()".
 - List `depends_on` as the indexes of steps that must finish first. Steps with
   no dependencies run at the same time, so leave it empty where work really is

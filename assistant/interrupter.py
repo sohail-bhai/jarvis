@@ -15,12 +15,12 @@ def setup_interrupter():
             def trigger_kill_switch():
                 from assistant import guard
                 guard.set_kill_switch(True)
-                logger.info("[JARVIS] KILL SWITCH ACTIVATED VIA HOTKEY")
+                logger.info("[VAVE] KILL SWITCH ACTIVATED VIA HOTKEY")
                 
             keyboard.add_hotkey('ctrl+alt+shift+k', trigger_kill_switch)
             
             _listener_started = True
-            logger.info("[JARVIS] Interrupter Hotkey (Ctrl+Shift+Space) registered.")
-            logger.info("[JARVIS] Kill Switch Hotkey (Ctrl+Alt+Shift+K) registered.")
+            logger.info("[VAVE] Interrupter Hotkey (Ctrl+Shift+Space) registered.")
+            logger.info("[VAVE] Kill Switch Hotkey (Ctrl+Alt+Shift+K) registered.")
         except Exception as e:
-            logger.info(f"[JARVIS] Failed to register interrupter hotkey: {e}")
+            logger.info(f"[VAVE] Failed to register interrupter hotkey: {e}")

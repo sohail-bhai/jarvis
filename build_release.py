@@ -14,7 +14,7 @@ call venv\\Scripts\\activate.bat
 echo Installing dependencies...
 pip install -r requirements.txt >nul 2>&1
 echo Launching VAVE...
-python jarvis_gui.py
+python vave_gui.py
 """
 with open('Start_VAVE.bat', 'w') as f:
     f.write(start_bat_content)

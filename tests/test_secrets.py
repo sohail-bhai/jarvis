@@ -26,7 +26,7 @@ from assistant.control.store import ControlStore
 
 class SecretTestCase(unittest.TestCase):
     def setUp(self):
-        self.tempdir = tempfile.mkdtemp(prefix="jarvis-secret-test-")
+        self.tempdir = tempfile.mkdtemp(prefix="vave-secret-test-")
         self.store = ControlStore(Path(self.tempdir) / "control.db")
         self.key = Fernet.generate_key()
         self.secrets = SecretStore(self.store, key=self.key)

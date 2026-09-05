@@ -1,4 +1,4 @@
-"""JARVIS control plane: tasks, helpers, devices, permissions and activity."""
+"""VAVE control plane: tasks, helpers, devices, permissions and activity."""
 
 from assistant.control.models import (
     ActivityEvent,

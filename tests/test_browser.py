@@ -1,7 +1,7 @@
 """Tests for driving the browser.
 
 The session is stood in for, so these run with no Chromium, no network and no
-model. What they check is the loop JARVIS actually relies on: act, look at
+model. What they check is the loop VAVE actually relies on: act, look at
 what the page became, decide again.
 """
 
@@ -145,7 +145,7 @@ class BrowserTestCase(unittest.TestCase):
         self.session = FakeSession(self.pages, "https://example.com")
         set_session(self.session)
 
-        self.notes_dir = tempfile.mkdtemp(prefix="jarvis-browser-notes-")
+        self.notes_dir = tempfile.mkdtemp(prefix="vave-browser-notes-")
         self.notes = SiteMemory(Path(self.notes_dir) / "site_notes.json")
         set_site_memory(self.notes)
 

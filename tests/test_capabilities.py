@@ -47,7 +47,7 @@ class CatalogTests(unittest.TestCase):
         names = [entry["capability"] for entry in capabilities.catalog("google.gmail.*")]
         self.assertEqual(["google.gmail.read", "google.gmail.send"], names)
 
-    def test_jarvis_tools_map_onto_catalog_names(self):
+    def test_vave_tools_map_onto_catalog_names(self):
         for tool, capability in capabilities.TOOL_CAPABILITIES.items():
             self.assertTrue(capabilities.is_known(capability),
                             f"{tool} maps to unknown capability {capability}")
@@ -60,7 +60,7 @@ class CatalogTests(unittest.TestCase):
 
 class PolicyTestCase(unittest.TestCase):
     def setUp(self):
-        self.tempdir = tempfile.mkdtemp(prefix="jarvis-policy-test-")
+        self.tempdir = tempfile.mkdtemp(prefix="vave-policy-test-")
         self.store = ControlStore(Path(self.tempdir) / "control.db")
         self.policy = PolicyEngine(self.store)
 
@@ -166,7 +166,7 @@ class PolicyRuleTests(PolicyTestCase):
 
 class BrokerTestCase(unittest.TestCase):
     def setUp(self):
-        self.tempdir = tempfile.mkdtemp(prefix="jarvis-broker-test-")
+        self.tempdir = tempfile.mkdtemp(prefix="vave-broker-test-")
         self.store = ControlStore(Path(self.tempdir) / "control.db")
         self.plane = ControlPlane(store=self.store)
 

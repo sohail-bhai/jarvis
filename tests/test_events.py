@@ -19,7 +19,7 @@ from assistant.control.models import now
 
 class EventTestCase(unittest.TestCase):
     def setUp(self):
-        self.tempdir = tempfile.mkdtemp(prefix="jarvis-event-test-")
+        self.tempdir = tempfile.mkdtemp(prefix="vave-event-test-")
         self.store = ControlStore(Path(self.tempdir) / "control.db")
         self.plane = ControlPlane(store=self.store)
 

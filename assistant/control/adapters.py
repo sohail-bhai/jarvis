@@ -25,7 +25,7 @@ class AgentUnavailable(Exception):
 
 
 class NativeAdapter:
-    """Runs the step in this process, through the JARVIS agent loop.
+    """Runs the step in this process, through the VAVE agent loop.
 
     `token` lets the step stop between tool calls, and `authorize` decides per
     tool whether the capability behind it was actually granted.

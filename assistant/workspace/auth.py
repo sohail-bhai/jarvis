@@ -38,7 +38,7 @@ _lock = threading.Lock()
 
 
 def get_project_root() -> str:
-    """Returns root directory of the JARVIS assistant project."""
+    """Returns root directory of the VAVE assistant project."""
     # current file is assistant/workspace/auth.py -> parent of parent of parent
     return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -146,7 +146,7 @@ def connection_state() -> Dict[str, str]:
         return {
             "state": NOT_CONFIGURED,
             "detail": "Add credentials.json from the Google Cloud Console to "
-                      "the JARVIS folder, then connect.",
+                      "the VAVE folder, then connect.",
         }
 
     if load_saved_credentials() is not None:

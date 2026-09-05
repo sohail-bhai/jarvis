@@ -21,7 +21,7 @@ from assistant.control.store import ControlStore
 
 class SecurityTestCase(unittest.TestCase):
     def setUp(self):
-        self.tempdir = tempfile.mkdtemp(prefix="jarvis-auth-test-")
+        self.tempdir = tempfile.mkdtemp(prefix="vave-auth-test-")
         self.store = ControlStore(Path(self.tempdir) / "control.db")
         self.plane = ControlPlane(store=self.store)
         self.executor = TaskExecutor(plane=self.plane,

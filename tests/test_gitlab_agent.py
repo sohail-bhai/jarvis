@@ -156,7 +156,7 @@ class ProposingTests(unittest.TestCase):
 
         branch_call = next(call for call in self.fake.calls
                            if call["url"].endswith("/repository/branches"))
-        self.assertEqual("jarvis/issue-7", branch_call["payload"]["branch"])
+        self.assertEqual("vave/issue-7", branch_call["payload"]["branch"])
         self.assertEqual("main", branch_call["payload"]["ref"])
 
     def test_the_commit_carries_the_whole_new_file(self):
@@ -165,7 +165,7 @@ class ProposingTests(unittest.TestCase):
 
         commit = next(call for call in self.fake.calls
                       if call["url"].endswith("/repository/commits"))
-        self.assertEqual("jarvis/issue-7", commit["payload"]["branch"])
+        self.assertEqual("vave/issue-7", commit["payload"]["branch"])
         self.assertEqual([{"action": "update", "file_path": "app/login.py",
                            "content": "fixed code"}], commit["payload"]["actions"])
 
@@ -175,7 +175,7 @@ class ProposingTests(unittest.TestCase):
 
         request = next(call for call in self.fake.calls
                        if call["url"].endswith("/merge_requests"))
-        self.assertEqual("jarvis/issue-7", request["payload"]["source_branch"])
+        self.assertEqual("vave/issue-7", request["payload"]["source_branch"])
         self.assertEqual("main", request["payload"]["target_branch"])
         self.assertIn("handle the Safari case", request["payload"]["title"])
         self.assertIn("Closes #7", request["payload"]["description"])

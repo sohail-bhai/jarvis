@@ -132,7 +132,7 @@ def run_smoke_tests():
     passed = 0
     failed = []
 
-    logger.info("Running safe JARVIS smoke tests...")
+    logger.info("Running safe VAVE smoke tests...")
 
     try:
         for command_text, assertion in test_cases:

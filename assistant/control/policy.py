@@ -1,4 +1,4 @@
-"""What JARVIS and its agents are allowed to do.
+"""What VAVE and its agents are allowed to do.
 
 The policy engine answers one question: given this capability, this agent and
 this task, does the work run, does it wait for the user, or is it refused?
@@ -98,7 +98,7 @@ class PolicyEngine:
         if not is_known(capability):
             return Judgement(
                 capability, Decision.REQUIRE_APPROVAL, risk,
-                "JARVIS does not recognise this capability, so it asks first.")
+                "VAVE does not recognise this capability, so it asks first.")
 
         decision = RISK_DEFAULTS[risk]
         reason = (f"{describe(capability)} is {risk.value} risk."

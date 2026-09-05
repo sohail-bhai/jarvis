@@ -587,35 +587,35 @@ LLM_TOOLS = WEB_TOOLS + [
         "type": "function",
         "function": {
             "name": "stop_overwatch",
-            "description": "Deactivates Overwatch Mode. JARVIS will stop constantly scanning the screen in the background."
+            "description": "Deactivates Overwatch Mode. VAVE will stop constantly scanning the screen in the background."
         }
     },
     {
         "type": "function",
         "function": {
             "name": "disable_speech_output",
-            "description": "Mutes JARVIS's Text-to-Speech voice so he stops speaking out loud. He will only reply via text. Use this if the user wants quiet time."
+            "description": "Mutes VAVE's Text-to-Speech voice so he stops speaking out loud. He will only reply via text. Use this if the user wants quiet time."
         }
     },
     {
         "type": "function",
         "function": {
             "name": "enable_speech_output",
-            "description": "Unmutes JARVIS's Text-to-Speech voice so he can speak out loud again."
+            "description": "Unmutes VAVE's Text-to-Speech voice so he can speak out loud again."
         }
     },
     {
         "type": "function",
         "function": {
             "name": "disable_voice_input",
-            "description": "Temporarily turns off JARVIS's microphone, stopping him from listening to the user's voice or wake words. Useful if the user wants quiet time or wants to type instead."
+            "description": "Temporarily turns off VAVE's microphone, stopping him from listening to the user's voice or wake words. Useful if the user wants quiet time or wants to type instead."
         }
     },
     {
         "type": "function",
         "function": {
             "name": "enable_voice_input",
-            "description": "Turns the microphone and wake word detection back on so JARVIS can hear the user again."
+            "description": "Turns the microphone and wake word detection back on so VAVE can hear the user again."
         }
     },
     {
@@ -1036,7 +1036,7 @@ LLM_TOOLS = WEB_TOOLS + [
         "type": "function",
         "function": {
             "name": "update_setting",
-            "description": "Dynamically change JARVIS settings (like voice speed/volume).",
+            "description": "Dynamically change VAVE settings (like voice speed/volume).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -1126,7 +1126,7 @@ LLM_TOOLS = WEB_TOOLS + [
 # Short-term Memory (Conversation History)
 def get_system_prompt():
     return (
-        "You are JARVIS, a highly intelligent AI desktop assistant. "
+        "You are VAVE, a highly intelligent AI desktop assistant. "
         "Your personality is a friendly buddy who has the user's back. You make funny jokes and use casual, conversational language instead of being a robotic servant. "
         "Keep your text answers brief and to the point (no markdown).\n\n"
         "CRITICAL RULE: NEVER ask for permission to use tools. When the user asks you to do something, IMMEDIATELY output the JSON tool call to execute it! Do NOT ask 'shall I proceed?' or 'should I pull the trigger?'. Just DO IT.\n\n"
@@ -1163,7 +1163,7 @@ def get_system_prompt():
         "SERVICES WITH AN API: prefer `web_api_get` and `web_api_call` over "
         "clicking whenever the service has an API - GitHub, Jira, Linear, "
         "Notion, Slack, a home server, anything. Name the credential with "
-        "`auth_secret` (for example 'github_token') and JARVIS resolves it; you "
+        "`auth_secret` (for example 'github_token') and VAVE resolves it; you "
         "never see or send the value itself. If the credential is missing, say "
         "which one to store rather than trying the browser instead.\n\n"
         "GOOGLE WORKSPACE: If the user asks you to create a Google Doc, Google Calendar event, or draft an email, you MUST use the provided workspace tools (`create_google_doc`, `create_google_calendar_event`, `draft_gmail_message`). NEVER pretend you did it. NEVER output a fake URL. You must emit the JSON tool call.\n\n"
@@ -1336,7 +1336,7 @@ def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps
         if "tool_calls" in message and message["tool_calls"]:
             current_tool_calls_repr = str(message["tool_calls"])
             if current_tool_calls_repr == previous_tool_calls_repr:
-                logger.info("[JARVIS] Caught LLM in an infinite loop! Breaking out.")
+                logger.info("[VAVE] Caught LLM in an infinite loop! Breaking out.")
                 conversation.append({
                     "role": "system",
                     "content": "You are repeating the same tool call. It failed or wasn't helpful. Give up and tell the user."
@@ -1363,7 +1363,7 @@ def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps
 
                 if func_name in AVAILABLE_FUNCTIONS:
                     func_to_call = AVAILABLE_FUNCTIONS[func_name]
-                    logger.info(f"[JARVIS Executing] {func_name}({args_dict})")
+                    logger.info(f"[VAVE Executing] {func_name}({args_dict})")
 
                     try:
                         if resolve_secrets is not None:

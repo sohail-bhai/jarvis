@@ -1,4 +1,4 @@
-"""Data model for the JARVIS control plane.
+"""Data model for the VAVE control plane.
 
 These are the concepts the whole system coordinates around: the user's goals
 (Task) broken into observable steps (TaskStep), the machines and AI helpers
@@ -123,7 +123,7 @@ class EventType(str, Enum):
 
 @dataclass
 class Device:
-    """A machine JARVIS can work on."""
+    """A machine VAVE can work on."""
     id: str = field(default_factory=new_id)
     name: str = ""
     kind: str = "computer"          # computer, phone, server, nas, cloud
@@ -348,7 +348,7 @@ class Approval:
     id: str = field(default_factory=new_id)
     task_id: str = ""
     action: str = ""                # short label: "Send email"
-    question: str = ""              # what JARVIS is about to do
+    question: str = ""              # what VAVE is about to do
     reason: str = ""                # why
     impact: str = ""                # what changes
     status: ApprovalStatus = ApprovalStatus.PENDING
@@ -428,7 +428,7 @@ class ActivityEvent:
     task_id: str = ""
     type: EventType = EventType.NOTE
     message: str = ""
-    actor: str = "JARVIS"
+    actor: str = "VAVE"
     device_id: str = ""
     timestamp: float = field(default_factory=now)
     metadata: dict = field(default_factory=dict)

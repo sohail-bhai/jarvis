@@ -114,7 +114,7 @@ def browser_switch_tab(index):
 def browser_wait_for_login(seconds=180):
     """Hand the window to the user to sign in, then carry on.
 
-    JARVIS never types a password. This waits for the page to stop asking for
+    VAVE never types a password. This waits for the page to stop asking for
     one, which is what a person doing it themselves looks like from here.
     """
     def run():
