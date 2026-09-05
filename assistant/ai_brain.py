@@ -409,6 +409,93 @@ _COMPILED_GROUPS = {
 }
 
 
+# Services people name by brand rather than by address. Asked to "open
+# netflix", a small model reaches for the Run dialog and win+r, which on a
+# machine with no Netflix app leaves it clicking around the desktop forever.
+# Knowing these are websites is what puts it in the browser instead.
+WEB_SERVICES = {
+    "netflix": "https://www.netflix.com",
+    "youtube": "https://www.youtube.com",
+    "prime video": "https://www.primevideo.com",
+    "hotstar": "https://www.hotstar.com",
+    "spotify": "https://open.spotify.com",
+    "gmail": "https://mail.google.com",
+    "google drive": "https://drive.google.com",
+    "google": "https://www.google.com",
+    "chatgpt": "https://chatgpt.com",
+    "perplexity": "https://www.perplexity.ai",
+    "github": "https://github.com",
+    "gitlab": "https://gitlab.com",
+    "linkedin": "https://www.linkedin.com",
+    "instagram": "https://www.instagram.com",
+    "reddit": "https://www.reddit.com",
+    "twitter": "https://x.com",
+    "whatsapp": "https://web.whatsapp.com",
+    "amazon": "https://www.amazon.in",
+    "flipkart": "https://www.flipkart.com",
+    "wikipedia": "https://www.wikipedia.org",
+}
+
+
+def _site_for(text):
+    """The address behind a site the request names, or None."""
+    lowered = str(text or "").lower()
+
+    # A site the user configured wins over the built-in guess.
+    for name, url in (get_setting("websites", {}) or {}).items():
+        if re.search(r"\b" + re.escape(str(name).lower()) + r"\b", lowered):
+            return str(name), str(url)
+
+    for name, url in WEB_SERVICES.items():
+        if re.search(r"\b" + re.escape(name) + r"\b", lowered):
+            return name, url
+
+    match = re.search(r"\b((?:www\.)?[a-z0-9-]+\.(?:com|org|net|io|in|co))\b",
+                      lowered)
+    if match:
+        host = match.group(1)
+        return host, f"https://{host}" if not host.startswith("www.") else f"https://{host}"
+    return None
+
+
+def _site_hint(text):
+    """A system message pointing a website request at the browser tools."""
+    found = _site_for(text)
+    if not found:
+        return None
+    name, url = found
+    return {
+        "role": "system",
+        "content": (
+            f"{name} is a website, not an installed app. Work it in the real "
+            f"browser: `browse('{url}')`, then `browser_elements()` to see what "
+            "is on the page, then `browser_click(target)` using the number or "
+            "the words shown. Do not use win+r, open_app, focus_window or "
+            "click_at for this."
+        ),
+    }
+
+
+def _names_tool(tool_name, text):
+    """True when the request says every word of this tool's own name.
+
+    "tell me the battery level" names `tell_battery`. "save the document open
+    in notepad" does not name `create_google_doc`: it never says create or
+    google, and matching is whole-word so "doc" does not hide inside
+    "document".
+    """
+    words = [word for word in tool_name.split("_") if len(word) > 2]
+    if not words:
+        return False
+    return all(re.search(r"\b" + re.escape(word) + r"\b", text)
+               for word in words)
+
+
+def _named_tools(candidates, text):
+    """The candidates the request named outright, in their original order."""
+    return [name for name in candidates if _names_tool(name, text)]
+
+
 def select_tools(instruction, tools=None):
     """The tools worth offering for this request, plus the atomic ones always."""
     catalogue = tools if tools is not None else LLM_TOOLS
@@ -429,6 +516,15 @@ def select_tools(instruction, tools=None):
 
     if not wanted:
         wanted = list(DEFAULT_TOOL_NAMES)
+
+    # A tool the request spells out goes first, whatever the budget. Asked to
+    # "take a screenshot and tell me the battery level", tell_battery sat last
+    # in a group of 24 against a budget of 22 and was dropped - the one thing
+    # named out loud - so the model went hunting for the battery with
+    # screenshots. Only an exact naming counts: every word of the tool's name
+    # has to be in the request, which is why "save the document" does not drag
+    # in create_google_doc.
+    wanted = _named_tools(wanted, text) + wanted
 
     chosen, seen = [], set()
 
@@ -1339,8 +1435,8 @@ def get_system_prompt():
         "The correct web flow is ALWAYS:\n"
         "  Step 1: Call `browse(url)` OR `search_youtube(query)` OR `search_google(query)` to open the page.\n"
         "  Step 2: Call `browser_elements()` to get a numbered list of everything clickable on the page.\n"
-        "  Step 3: Call `browser_click(index)` with the number of the element you want.\n"
-        "  Step 4: If needed, call `browser_type(index, text)` to type into a field.\n"
+        "  Step 3: Call `browser_click(target)` where target is the element's number OR the words shown on it.\n"
+        "  Step 4: If needed, call `browser_type(target, text)` to type into a field, with submit=true to press Enter.\n"
         "ANTI-HALLUCINATION RULE: Never claim 'the video is playing' or 'the task is done' without actually calling browser_click. If browser_elements shows nothing useful, call browse(url) again to reload.\n\n"
         "CRITICAL MULTI-STEP SEQUENCING: Execute actions one at a time. After each tool call, read the result and decide the next step. NEVER output just conversational text if there are remaining actions to take.\n\n"
         "CRITICAL READING RULE: When asked to read a specific line, call `read_screen(line_number=N)` immediately.\n\n"
@@ -1494,6 +1590,40 @@ def query_local_llm_chat(messages, model="qwen2.5:3b", tools=None):
 # timeout before it falls back.
 _unavailable_models = set()
 
+# What Ollama actually has, asked for once. A model named in config but never
+# pulled - qwen3.5:9b is the current default and does not exist - otherwise
+# costs a full generation timeout on the first escalated request before the
+# fallback notices.
+_installed_models = None
+
+
+def installed_models(refresh=False):
+    """The model names Ollama reports, or None when it cannot be asked."""
+    global _installed_models
+    if _installed_models is not None and not refresh:
+        return _installed_models
+
+    url = str(get_setting("ollama_url", "http://localhost:11434")).rstrip("/") + "/api/tags"
+    try:
+        with urllib.request.urlopen(url, timeout=3) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        _installed_models = {str(item.get("name", "")) for item in
+                             payload.get("models", [])}
+    except Exception:
+        # No answer is not the same as "not installed", so nothing is ruled out.
+        _installed_models = None
+    return _installed_models
+
+
+def _is_installed(name):
+    """False only when Ollama answered and did not list this model."""
+    if not name:
+        return False
+    present = installed_models()
+    if present is None:
+        return True
+    return name in present or f"{name}:latest" in present
+
 # Words that mark work worth a bigger model: several moving parts, a judgement
 # to make, prose to write. Deliberately not the atomic desktop actions - the
 # small model was measured handling click/type/press/close well, and it answers
@@ -1536,6 +1666,11 @@ def select_model(instruction=""):
 
     if (not smart or smart in _unavailable_models
             or not get_setting("model_escalation_enabled", True)):
+        return fast
+
+    if not _is_installed(smart):
+        logger.info("[VAVE] %s is not installed; staying on %s.", smart, fast)
+        _unavailable_models.add(smart)
         return fast
 
     text = str(instruction or "").lower()
@@ -1745,6 +1880,10 @@ def _agent_loop(conversation, extra_messages=None, auto_confirm=False, max_steps
     # to this request only, and short-term memory should not carry it into the
     # next one.
     injected = list(extra_messages or [])
+    if tools is not False:
+        site_hint = _site_hint(latest_request)
+        if site_hint:
+            injected.append(site_hint)
     if len(planned_steps) > 1:
         injected.append({
             "role": "system",

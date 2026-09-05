@@ -162,6 +162,70 @@ class ChainedTaskTests(unittest.TestCase):
         self.assertIn("2. type hello", checklist[0])
 
 
+class ToolBudgetTests(unittest.TestCase):
+    """A capability the user names must survive the per-request tool budget."""
+
+    def test_a_named_tool_is_not_cut_by_the_budget(self):
+        from assistant.ai_brain import select_tools
+
+        # tell_battery sits last in a group of 24 with a budget of 22, so it
+        # used to be dropped from the one request that asked for it by name -
+        # and the model went looking for the battery with screenshots.
+        names = [tool["function"]["name"]
+                 for tool in select_tools(
+                     "take a screenshot and tell me the battery level")]
+        self.assertIn("tell_battery", names)
+        self.assertIn("take_screenshot", names)
+
+    def test_the_web_tools_survive_a_website_request(self):
+        from assistant.ai_brain import select_tools
+
+        names = [tool["function"]["name"]
+                 for tool in select_tools("open netflix and open any profile")]
+        for tool in ("browse", "browser_elements", "browser_click"):
+            self.assertIn(tool, names)
+
+
+class WebsiteRoutingTests(unittest.TestCase):
+    """A brand name is a website, not an app to hunt for in the Run dialog."""
+
+    def test_known_services_resolve_to_their_address(self):
+        from assistant.ai_brain import _site_for
+
+        self.assertEqual(_site_for("open netflix and pick a profile"),
+                         ("netflix", "https://www.netflix.com"))
+        self.assertEqual(_site_for("go to example.com and log in")[1],
+                         "https://example.com")
+
+    def test_a_desktop_request_gets_no_website_hint(self):
+        from assistant.ai_brain import _site_hint
+
+        self.assertIsNone(_site_hint("open notepad and type hello"))
+
+    def test_the_hint_names_the_browser_flow(self):
+        from assistant.ai_brain import _site_hint
+
+        hint = _site_hint("open netflix")["content"]
+        self.assertIn("browse('https://www.netflix.com')", hint)
+        self.assertIn("browser_click", hint)
+        self.assertIn("Do not use win+r", hint)
+
+
+class PromptContractTests(unittest.TestCase):
+    """The prompt must teach the parameters the tools actually take."""
+
+    def test_the_browser_flow_uses_the_real_parameter_names(self):
+        from assistant.ai_brain import LLM_TOOLS, get_system_prompt
+
+        prompt = get_system_prompt()
+        self.assertIn("browser_click(target)", prompt)
+        self.assertNotIn("browser_click(index)", prompt)
+
+        schema = next(tool["function"] for tool in LLM_TOOLS
+                      if tool["function"]["name"] == "browser_click")
+        self.assertEqual(schema["parameters"]["required"], ["target"])
+
+
 class StepSplittingTests(unittest.TestCase):
     def test_requests_split_on_the_words_people_actually_use(self):
         from assistant.ai_brain import split_steps
